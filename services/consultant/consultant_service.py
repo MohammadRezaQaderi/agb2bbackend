@@ -1,5 +1,4 @@
 import json
-import uuid
 from datetime import datetime
 
 import helper.db.db_helper as db_helper
@@ -16,7 +15,7 @@ def select_consultant_info(conn, cursor, user_id):
         else:
             query_ins = 'SELECT name, logo FROM sch WHERE user_id = ?'
             res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.ins_id)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         response_info = {"phone": res.phone, "user_id": user_id, "id": res.con_id, "first_name": res.first_name,
                          "last_name": res.last_name, "role": 'con', "name": res_ins.name, "pic": res_ins.logo,
                          "ins_id": res.ins_id}
@@ -167,7 +166,7 @@ def select_con_dashboard(conn, cursor, request_data, info):
             "quiz_report": quiz_report
         }
 
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, cons_info, notifications
 
     except Exception as e:
@@ -194,7 +193,7 @@ def select_con_report(conn, cursor, request_data, info):
                         "access": access_data, "full_name": stu.first_name + " " + stu.last_name,
                         "consultant_comment": stu.comment, "report_id": stu.user_id}
                 report_info.append(info)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, report_info
     except Exception as e:
         conn.rollback()
@@ -286,7 +285,7 @@ def select_con_management_report(conn, cursor, request_data, info):
                     "access_state": access_state,
                 }
                 report_info.append(info_response)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, report_info
     except Exception as e:
         conn.rollback()
@@ -329,7 +328,7 @@ def select_con_student(conn, cursor, request_data, info):
                         "con_id": info["user_id"], "password": func_helper.decrypt_password(stu.password), "sex": stu.sex,
                         "city": stu.city, "birth_date": stu.birth_date, "access": json.loads(stu.access)}
                 stu_info.append(info)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, stu_info
     except Exception as e:
         conn.rollback()
@@ -347,7 +346,7 @@ def update_con_student(conn, cursor, request_data, info):
                                  request_data["city"], info["user_id"],
                                  request_data["birth_date"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(request_data["student_id"])])
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
@@ -362,7 +361,7 @@ def update_con_comment(conn, cursor, request_data, info):
                                 [request_data["consultant_comment"], request_data["user_id"],
                                  datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(request_data["student_id"])])
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
@@ -377,7 +376,7 @@ def update_con_user_profile(conn, cursor, request_data, info):
                                 [request_data["first_name"], request_data["last_name"],
                                  datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(info["user_id"])])
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}
     except Exception as e:
         conn.rollback()

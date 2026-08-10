@@ -1,7 +1,7 @@
 import json
-import uuid
 from datetime import datetime
 
+import config
 import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
 
@@ -10,7 +10,7 @@ def select_school_info(conn, cursor, user_id):
     try:
         query = 'SELECT sch_id, name, logo, phone FROM sch WHERE user_id = ?'
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         info_response = {"phone": res.phone, "user_id": user_id, "id": res.sch_id, "name": res.name, "role": "sch",
                          "pic": res.logo}
         return token, info_response
@@ -155,7 +155,7 @@ def select_sch_dashboard(conn, cursor, request_data, info):
             "quiz_report": quiz_report
         }
 
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, sch_info, notifications
 
     except Exception as e:
@@ -172,7 +172,7 @@ def insert_school(conn, cursor, request_data, user_id):
         db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
                                values=values)
         func_helper.add_capacity_signup(conn, cursor, user_id, request_data["phone"])
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
@@ -205,7 +205,7 @@ def select_sch_report(conn, cursor, request_data, info):
                                  "access": access_data, "full_name": stu.first_name + " " + stu.last_name,
                                  "consultant_comment": stu.comment, "report_id": stu.user_id}
                 report_info.append(info_response)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, report_info
     except Exception as e:
         conn.rollback()
@@ -305,7 +305,7 @@ def select_sch_management_report(conn, cursor, request_data, info):
                     "access_state": access_state,
                 }
                 report_info.append(info_response)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, report_info
     except Exception as e:
         conn.rollback()
@@ -326,7 +326,7 @@ def insert_sch_consultant(conn, cursor, request_data, con_user_id, info):
             con_user_id, info["user_id"], info["user_id"], "sch", request_data["sex"])
         db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
                                values=values)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, "مشاور شما با موفقیت ثبت شد."
     except Exception as e:
         conn.rollback()
@@ -342,7 +342,7 @@ def update_sch_consultant(conn, cursor, request_data, info):
                                 [request_data["first_name"], request_data["last_name"], request_data["sex"],
                                  request_data["user_id"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(request_data["consultant_id"])])
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, "اطلاعات مشاور شما با موفقیت تغییر کرد."
     except Exception as e:
         conn.rollback()
@@ -363,7 +363,7 @@ def select_sch_consultant(conn, cursor, request_data, info):
                                  "full_name": con.first_name + " " + con.last_name,
                                  "last_name": con.last_name, "password": func_helper.decrypt_password(con.password)}
                 cons_info.append(info_response)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, cons_info
     except Exception as e:
         conn.rollback()
@@ -383,7 +383,7 @@ def insert_sch_student(conn, cursor, request_data, stu_user_id, info):
             request_data["con_id"], stu_user_id, info["user_id"], info["user_id"], request_data["birth_date"], "sch",)
         db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
                                values=values)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
@@ -401,7 +401,7 @@ def update_sch_student(conn, cursor, request_data, info):
                                  request_data["city"], request_data["con_id"], info["user_id"],
                                  request_data["birth_date"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(request_data["student_id"])])
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
@@ -443,7 +443,7 @@ def select_sch_student(conn, cursor, request_data, info):
                                  "city": stu.city,
                                  "birth_date": stu.birth_date, "access": json.loads(stu.access)}
                 stu_info.append(info_response)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, stu_info
     except Exception as e:
         conn.rollback()
@@ -453,12 +453,26 @@ def select_sch_student(conn, cursor, request_data, info):
 
 def update_sch_user_profile(conn, cursor, request_data, info):
     try:
+        update_fields = ['name', 'edited_time']
+        update_values = [request_data["name"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")]
+        pic = func_helper.save_base64_image(
+            request_data.get("pic"),
+            request_data.get("last_pic"),
+            config.INS_PIC_DIR,
+        )
+        if pic is not None:
+            update_fields.insert(1, 'logo')
+            update_values.insert(1, pic)
+
         db_helper.update_record(conn, cursor, 'sch',
-                                ['name', 'edited_time'],
-                                [request_data["name"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
+                                update_fields,
+                                update_values,
                                 'user_id = ?', [str(info["user_id"])])
-        token = str(uuid.uuid4())
-        return token, {"name": request_data["name"]}
+        token = func_helper.get_tracking_code()
+        response = {"name": request_data["name"]}
+        if pic is not None:
+            response["pic"] = pic
+        return token, response
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "update_sch_user_profile", str(e), request_data,
@@ -474,7 +488,7 @@ def update_user_sch_pic(conn, cursor, request_data, info):
                                 [request_data["name"], request_data["pic"],
                                  datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(request_data["user_id"])])
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": {"name": request_data["name"], "pic": request_data["pic"]},
                              "message": "اطلاعات شما با موفقیت تغییر یافت."}}
@@ -490,7 +504,7 @@ def update_user_sch_pic(conn, cursor, request_data, info):
 def update_user_sch_voice(conn, cursor, request_data, info):
     try:
         method_type = "UPDATE"
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         if request_data["setting_id"] == "no setting":
             table = "setting"
             field = '([user_id], [description], [voice], [quiz_id])'
@@ -524,14 +538,14 @@ def update_sch_setting(conn, cursor, request_data, info):
                 request_data["user_id"], request_data["description"], request_data["voice"], request_data["quiz_id"],)
             db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
                                    values=values)
-            token = str(uuid.uuid4())
+            token = func_helper.get_tracking_code()
             return token
         else:
             db_helper.update_record(conn, cursor, 'setting',
                                     ['description', 'edited_time'],
                                     [request_data["description"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                     'setting_id = ?', [str(request_data["setting_id"])])
-            token = str(uuid.uuid4())
+            token = func_helper.get_tracking_code()
             return token
     except Exception as e:
         conn.rollback()
@@ -545,7 +559,7 @@ def update_sch_verify(conn, cursor, user_id):
                                 ['verify', 'edited_time'],
                                 [1, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(user_id)])
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         query = 'SELECT sch_id, name, logo, phone FROM sch WHERE user_id = ?'
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
         info = {"phone": res.phone, "user_id": user_id, "id": res.sch_id, "name": res.name, "role": "sch",

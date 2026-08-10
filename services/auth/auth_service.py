@@ -1,4 +1,3 @@
-import uuid
 import json
 
 from config import REDIS_CACHE_OTP
@@ -17,7 +16,7 @@ def create_token(conn, cursor, info):
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=info[0])
         if res is None:
             while True:
-                token = str(uuid.uuid4())
+                token = func_helper.get_tracking_code()
                 token_check_query = "SELECT token FROM tokens WHERE token = ?"
                 token_exists = db_helper.search_table(conn=conn, cursor=cursor, query=token_check_query, field=token)
                 if not token_exists:
@@ -68,7 +67,7 @@ def check_signin(conn, cursor, request_data):
                 token_remove(conn=conn, cursor=cursor, request_data={"user_id": res.user_id},
                              info={"user_id": res.user_id, "phone": phone})
                 return None, "شما هنوز احراز هویت انجام نداده‌اید.", None
-            token, info = institute_service.select_institute_info(conn=conn, cursor=cursor, user_id=res.user_id)
+            ـ, info = institute_service.select_institute_info(conn=conn, cursor=cursor, user_id=res.user_id)
         elif res.role == "sch":
             query = 'SELECT verify FROM sch WHERE phone = ?'
             res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
@@ -76,7 +75,7 @@ def check_signin(conn, cursor, request_data):
                 token_remove(conn=conn, cursor=cursor, request_data={"user_id": res.user_id},
                              info={"user_id": res.user_id, "phone": phone})
                 return None, "شما هنوز احراز هویت انجام نداده‌اید.", None
-            token, info = school_service.select_school_info(conn=conn, cursor=cursor, user_id=res.user_id)
+            ـ, info = school_service.select_school_info(conn=conn, cursor=cursor, user_id=res.user_id)
         elif res.role == "wCon":
             query = 'SELECT verify FROM wCon WHERE phone = ?'
             res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
@@ -84,10 +83,10 @@ def check_signin(conn, cursor, request_data):
                 token_remove(conn=conn, cursor=cursor, request_data={"user_id": res.user_id},
                              info={"user_id": res.user_id, "phone": phone})
                 return None, "شما هنوز احراز هویت انجام نداده‌اید.", None
-            token, info = owner_consultant_service.select_wcon_info(conn=conn, cursor=cursor, user_id=res.user_id)
+            ـ, info = owner_consultant_service.select_wcon_info(conn=conn, cursor=cursor, user_id=res.user_id)
 
         elif res.role == "con":
-            token, info = consultant_service.select_consultant_info(conn=conn, cursor=cursor, user_id=res.user_id)
+            ـ, info = consultant_service.select_consultant_info(conn=conn, cursor=cursor, user_id=res.user_id)
         elif res.role == "stu":
             return None, "متاسفانه شما از این سامانه اجازه ورود ندارید.", None
         return token_user, "", info
@@ -201,7 +200,7 @@ def check_send_sms(conn, cursor, redis_db, request_data):
         code = func_helper.random_generate_otp_code(5)
         res_otp = otp_helper.send_otp_message(conn=conn, cursor=cursor, code=code, phone=phone, type=type_otp.upper())
         cache.set(res.phone, json.dumps({"code": code}), 60 * 60 * 24 * 100)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, "", phone
     except Exception as e:
         conn.rollback()
@@ -238,24 +237,24 @@ def check_sms_verify(conn, cursor, redis_db, request_data):
         if type_otp == "otp":
 
             if res.role == "ins":
-                token, info = institute_service.select_institute_info(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, info = institute_service.select_institute_info(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "sch":
-                token, info = school_service.select_school_info(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, info = school_service.select_school_info(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "wCon":
-                token, info = owner_consultant_service.select_wcon_info(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, info = owner_consultant_service.select_wcon_info(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "con":
-                token, info = consultant_service.select_consultant_info(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, info = consultant_service.select_consultant_info(conn=conn, cursor=cursor, user_id=res.user_id)
             else:
                 return None, "شما به این سرویس دسترسی ندارید.", None
             return token_user, "", info
 
         else:
             if res.role == "ins":
-                token, info = institute_service.update_ins_verify(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, info = institute_service.update_ins_verify(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "sch":
-                token, info = school_service.update_sch_verify(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, info = school_service.update_sch_verify(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "wCon":
-                token, info = owner_consultant_service.update_wcon_verify(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, info = owner_consultant_service.update_wcon_verify(conn=conn, cursor=cursor, user_id=res.user_id)
             else:
                 return None, "شما به این سرویس دسترسی ندارید.", None
             return token_user, "", info

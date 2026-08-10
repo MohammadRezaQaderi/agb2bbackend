@@ -1,5 +1,4 @@
 import json
-import uuid
 from datetime import datetime
 
 import helper.db.db_helper as db_helper
@@ -154,7 +153,7 @@ def update_capacity(conn, cursor, request_data):
                 capacity_result[pkg_name] = pkg.get("allowed", 0) if isinstance(pkg, dict) else getattr(pkg, "allowed",
                                                                                                         0)
 
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, {
             "phone": phone,
             "capacity": capacity_result
@@ -301,7 +300,7 @@ def get_user_info(conn, cursor, request_data):
                         access_data = {}
                     user_info["access"] = access_data
 
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, user_info
 
     except Exception as e:
@@ -388,7 +387,7 @@ def check_student_quiz_answer(conn, cursor, request_data):
             "access": access_data
         }
 
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, result
 
     except Exception as e:

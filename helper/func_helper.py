@@ -1,3 +1,5 @@
+import base64
+import os
 import pyodbc
 import string
 import random
@@ -16,6 +18,42 @@ from config import PASSWORD_SECRET_KEY, DB_DRIVER, DB_SERVER, DB_DATABASE, DB_UI
     REDIS_PORT, REDIS_DB, REDIS_PASSWORD
 
 _PASSWORD_FERNET: Optional[Fernet] = None
+
+
+def get_tracking_code() -> str:
+    return str(uuid.uuid4())
+
+
+def save_base64_image(pic_value: str | None, last_pic: str | None, storage_dir: str) -> str | None:
+    if not pic_value:
+        return None
+
+    if not pic_value.startswith("data:image") and "," not in pic_value:
+        return pic_value
+
+    if "," in pic_value:
+        header, encoded_data = pic_value.split(",", 1)
+        ext = header.split(";")[0].split("/")[-1] if "/" in header else "jpg"
+    else:
+        encoded_data = pic_value
+        ext = "jpg"
+
+    if ext == "jpeg":
+        ext = "jpg"
+
+    os.makedirs(storage_dir, exist_ok=True)
+    new_file_name = f"{get_tracking_code()}.{ext}"
+    file_path = os.path.join(storage_dir, new_file_name)
+
+    with open(file_path, "wb") as fh:
+        fh.write(base64.b64decode(encoded_data))
+
+    if last_pic:
+        last_path = os.path.join(storage_dir, os.path.basename(last_pic))
+        if os.path.exists(last_path):
+            os.remove(last_path)
+
+    return new_file_name
 
 AG_QUIZ_NAME_TITLE = [
     "کتل", "گاردنر", "نئو", "کلیفتون", "هالند",
@@ -708,7 +746,7 @@ def update_user_and_role_password(
             'user_id = ?', [user_id]
         )
 
-        token = str(uuid.uuid4())
+        token = get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
@@ -894,7 +932,7 @@ def update_student_access_and_capacity(
             [str(stu_id)]
         )
 
-        token = str(uuid.uuid4())
+        token = get_tracking_code()
         return token, "دسترسی دانش‌آموز با موفقیت به‌روزرسانی شد."
 
     except Exception as e:

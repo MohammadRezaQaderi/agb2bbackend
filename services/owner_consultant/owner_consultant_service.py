@@ -1,18 +1,18 @@
 import json
-import uuid
 from datetime import datetime
 
+import config
 import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
 
 
 def select_wcon_info(conn, cursor, user_id):
     try:
-        query = 'SELECT wCon_id, phone, first_name, last_name FROM wCon WHERE user_id = ?'
+        query = 'SELECT wCon_id, phone, first_name, last_name, logo FROM wCon WHERE user_id = ?'
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         info = {"phone": res.phone, "user_id": user_id, "id": res.wCon_id, "first_name": res.first_name, "role": "wCon",
-                "last_name": res.last_name}
+                "last_name": res.last_name, "pic": res.logo}
         return token, info
     except Exception as e:
         conn.rollback()
@@ -142,7 +142,7 @@ def select_wcon_dashboard(conn, cursor, request_data, info):
         columns = [col[0] for col in cursor.description]
         notifications = [dict(zip(columns, row)) for row in cursor.fetchall()]
 
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         cons_info = {
             "capacity": capacity_info,
             "stu_count": stu_count,
@@ -173,7 +173,7 @@ def insert_owner_consultant(conn, cursor, request_data, user_id):
         db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
                                values=values)
         func_helper.add_capacity_signup(conn, cursor, user_id, request_data["phone"])
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
@@ -200,7 +200,7 @@ def select_wcon_report(conn, cursor, request_data, info):
                         "access": access_data, "full_name": stu.first_name + " " + stu.last_name,
                         "consultant_comment": stu.comment, "report_id": stu.user_id}
                 report_info.append(info)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, report_info
     except Exception as e:
         conn.rollback()
@@ -287,7 +287,7 @@ def select_wcon_management_report(conn, cursor, request_data, info):
                     "access_state": access_state,
                 }
                 report_info.append(info_response)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, report_info
     except Exception as e:
         conn.rollback()
@@ -307,7 +307,7 @@ def insert_wcon_student(conn, cursor, request_data, stu_user_id, info):
             info["user_id"], info["user_id"], info["user_id"], request_data["birth_date"], "wCon",)
         db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
                                values=values)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
@@ -324,7 +324,7 @@ def update_wcon_student(conn, cursor, request_data, info):
                                  request_data["city"], info["user_id"],
                                  request_data["birth_date"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(request_data["student_id"])])
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
@@ -339,7 +339,7 @@ def update_wcon_comment(conn, cursor, request_data, info):
                                 [request_data["consultant_comment"], info["user_id"],
                                  datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(request_data["student_id"])])
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
@@ -349,13 +349,30 @@ def update_wcon_comment(conn, cursor, request_data, info):
 
 def update_wcon_user_profile(conn, cursor, request_data, info):
     try:
+        update_fields = ['first_name', 'last_name', 'edited_time']
+        update_values = [
+            request_data["first_name"],
+            request_data["last_name"],
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ]
+        pic = func_helper.save_base64_image(
+            request_data.get("pic"),
+            request_data.get("last_pic"),
+            config.INS_PIC_DIR,
+        )
+        if pic is not None:
+            update_fields.insert(2, 'logo')
+            update_values.insert(2, pic)
+
         db_helper.update_record(conn, cursor, 'wCon',
-                                ['first_name', 'last_name', 'edited_time'],
-                                [request_data["first_name"], request_data["last_name"],
-                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
+                                update_fields,
+                                update_values,
                                 'user_id = ?', [str(info["user_id"])])
-        token = str(uuid.uuid4())
-        return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}
+        token = func_helper.get_tracking_code()
+        response = {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}
+        if pic is not None:
+            response["pic"] = pic
+        return token, response
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "update_wcon_user_profile", str(e), request_data,
@@ -381,7 +398,7 @@ def select_wcon_student(conn, cursor, request_data, info):
                         "city": stu.city, "full_name": stu.first_name + " " + stu.last_name,
                         "birth_date": stu.birth_date, "access": json.loads(stu.access)}
                 stu_info.append(info)
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, stu_info
     except Exception as e:
         conn.rollback()
@@ -392,7 +409,7 @@ def select_wcon_student(conn, cursor, request_data, info):
 def update_user_wcon_voice(conn, cursor, request_data, info):
     try:
         method_type = "UPDATE"
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         if request_data["setting_id"] == "no setting":
             table = "setting"
             field = '([user_id], [description], [voice], [quiz_id])'
@@ -427,14 +444,14 @@ def update_wcon_setting(conn, cursor, request_data, info):
                 request_data["user_id"], request_data["description"], request_data["voice"], request_data["quiz_id"],)
             db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
                                    values=values)
-            token = str(uuid.uuid4())
+            token = func_helper.get_tracking_code()
             return token
         else:
             db_helper.update_record(conn, cursor, 'setting',
                                     ['description', 'edited_time'],
                                     [request_data["description"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                     'setting_id = ?', [str(request_data["setting_id"])])
-            token = str(uuid.uuid4())
+            token = func_helper.get_tracking_code()
             return token
     except Exception as e:
         conn.rollback()
@@ -448,11 +465,11 @@ def update_wcon_verify(conn, cursor, user_id):
                                 ['verify', 'edited_time'],
                                 [1, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(user_id)])
-        token = str(uuid.uuid4())
-        query = 'SELECT wCon_id, phone, first_name, last_name FROM wCon WHERE user_id = ?'
+        token = func_helper.get_tracking_code()
+        query = 'SELECT wCon_id, phone, first_name, last_name, logo FROM wCon WHERE user_id = ?'
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
         info = {"phone": res.phone, "user_id": user_id, "id": res.wCon_id, "first_name": res.first_name, "role": "wCon",
-                "last_name": res.last_name}
+                "last_name": res.last_name, "pic": res.logo}
         return token, info
     except Exception as e:
         conn.rollback()

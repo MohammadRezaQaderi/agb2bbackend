@@ -48,6 +48,7 @@ TABLE_DEFINITIONS = {
             phone NVARCHAR(12),
             first_name NVARCHAR(50),
             last_name NVARCHAR(50),
+            logo VARCHAR(MAX),
             password NVARCHAR(255),
             sex INT DEFAULT 1,
             verify INT DEFAULT 0,
@@ -522,8 +523,8 @@ def migrate():
                 fields.extend(['name', 'logo'])
                 values.extend([data['name'], data['logo']])
             else:  # wCon
-                fields.extend(['first_name', 'last_name'])
-                values.extend([data['first_name'], data['last_name']])
+                fields.extend(['first_name', 'last_name', 'logo'])
+                values.extend([data['first_name'], data['last_name'], data.get('logo')])
 
             placeholders = ", ".join(["?"] * len(values))
             try:

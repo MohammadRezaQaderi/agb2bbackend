@@ -58,6 +58,7 @@ TABLE_DEFINITIONS = {
             phone NVARCHAR(12),
             first_name NVARCHAR(50),
             last_name NVARCHAR(50),
+            logo VARCHAR(MAX),
             password NVARCHAR(255),
             sex INT DEFAULT 1,
             verify INT DEFAULT 0,

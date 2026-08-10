@@ -1,4 +1,4 @@
-import uuid, json, httpx
+import json, httpx
 from datetime import datetime
 
 import helper.db.db_helper as db_helper
@@ -69,7 +69,7 @@ def select_all_products(conn, cursor):
         }
         for p in res
     ]
-    token = str(uuid.uuid4())
+    token = func_helper.get_tracking_code()
     return token, products_info
 
 
@@ -126,7 +126,7 @@ def select_users_transactions(conn, cursor, request_data, info):
                     "result": p[4],
                     "date": p[5]
                 })
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, transactions_info
     except Exception as e:
         print(e)
@@ -164,7 +164,7 @@ def get_order_status(conn, cursor, data, info):
         else:
             status = "UNDIFINE"
             transactions_info = {}
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, transactions_info, status
     except Exception as e:
         print(e)
@@ -436,7 +436,7 @@ def get_report_data(conn, cursor, request_data, info):
                 "brain_categories": brain_categories_data
             }
             
-            token = str(uuid.uuid4())
+            token = func_helper.get_tracking_code()
             return token, report_data
         elif kind == "SCL":
             # Fetch scl_date from scl_scores table
@@ -471,10 +471,10 @@ def get_report_data(conn, cursor, request_data, info):
                 "scl_date": scl_date_data
             }
             
-            token = str(uuid.uuid4())
+            token = func_helper.get_tracking_code()
             return token, report_data
         else:
-            token = str(uuid.uuid4())
+            token = func_helper.get_tracking_code()
             return token, {}
     except Exception as e:
         print(e)

@@ -40,6 +40,7 @@ LAST_TABLE_DEFINITIONS = {
             phone NVARCHAR(12),
             first_name NVARCHAR(50),
             last_name NVARCHAR(50),
+            logo VARCHAR(MAX),
             password nvarchar(50),
             DC_Created_Time DATETIME,
             DC_Edited_Time DATETIME

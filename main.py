@@ -516,42 +516,23 @@ async def admin_api(request: Request):
             await func_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
-# todo here should get the token and redesign here
 @app.post("/ag_api/update_user_file_image")
-async def update_user_file_image(
-        pic: UploadFile = Form(...),
-        name: str = Form(...),
-        user_id: int = Form(...),
-        last_pic: str = Form(...),
-        token: str = Form(...),
-):
+async def update_user_file_image(request: Request):
     method_type = "UPDATE"
     conn, cursor = None, None
     try:
+        request_data = await request.json()
+        data = request_data.get("data", request_data)
+        user_id = data["user_id"]
+        token = data["token"]
         conn, cursor = await func_helper.db_connection()
         state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor,
                                                       request_data={"user_id": int(user_id), "token": token})
         if not state:
             return func_helper.not_auth_return(message=state_message)
-        generate_random_name = str(uuid.uuid4())
-        new_file_name = generate_random_name + "." + pic.filename.split(".")[1]
-        pic.filename = new_file_name
-        file_path = os.path.join(INS_PIC_DIR, pic.filename)
-        last_path = os.path.join(INS_PIC_DIR, last_pic)
-        if os.path.exists(last_path):
-            os.remove(last_path)
-        else:
-            print("The file does not exist")
-        data = {"name": name, "user_id": user_id, "pic": pic.filename}
-        with open(file_path, "wb") as file_object:
-            file_object.write(pic.file.read())
-        if info["role"] in ["sch", "ins"]:
-            if info["role"] == "ins":
-                res_request = institute_service.update_user_ins_pic(conn=conn, cursor=cursor, request_data=data, info=info)
-            else:
-                res_request = school_service.update_user_sch_pic(conn=conn, cursor=cursor, request_data=data, info=info)
-            return res_request
-
+        return service.update_user(conn=conn, cursor=cursor, request_data=data, info=info)
+    except KeyError as e:
+        return await func_helper.key_error_logging("ag_api", "update_user_file_image", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ag_api", "update_user_file_image", str(e), method_type)
     finally:
@@ -579,7 +560,7 @@ async def update_user_voice(
                                                       request_data={"user_id": int(user_id), "token": token})
         if not state:
             return func_helper.not_auth_return(message=state_message)
-        generate_random_name = str(uuid.uuid4())
+        generate_random_name = func_helper.get_tracking_code()
         new_file_name = generate_random_name + "." + voice.filename.split(".")[1]
         voice.filename = new_file_name
         file_path = os.path.join(VOICES_DIR, voice.filename)

@@ -1,4 +1,3 @@
-import uuid
 from datetime import datetime
 
 import helper.db.db_helper as db_helper
@@ -15,7 +14,7 @@ import services.school.school_service as school_service
 
 def delete_token(conn, cursor, request_data, info):
     method_type = "DELETE"
-    token = str(uuid.uuid4())
+    token = func_helper.get_tracking_code()
     res = auth_service.token_remove(conn=conn, cursor=cursor, request_data=request_data, info=info)
     if res == 0:
         return {"status": 200, "tracking_code": token, "method_type": method_type,
@@ -544,7 +543,7 @@ def select_quiz_setting(conn, cursor, request_data, info):
     cursor.execute(query_select_setting)
     res = cursor.fetchone()
     conn.commit()
-    token = str(uuid.uuid4())
+    token = func_helper.get_tracking_code()
     if res is None:
         quiz_info = quiz_data_extractor.get_quiz_info(quiz_id=quiz_id)
         info_data = {"voice": quiz_info["voice"], "description": quiz_info["description"], "setting_id": "no setting"}
@@ -617,7 +616,7 @@ def select_quiz_info(conn, cursor, request_data, info):
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "متاسفانه شما از این سامانه به این سرویس دسترسی ندارید."}
     else:
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         quiz_info = quiz_data_extractor.get_quiz_table_info()
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": quiz_info}}
@@ -673,7 +672,7 @@ def apply_discount(conn, cursor, request_data, info):
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 ], "id = ?", [res.id]
             )
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         new_total = (round(int(request_data["total_value"]) * (1 - res.discount_percentage)))/100
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"new_total": new_total}}
@@ -724,7 +723,7 @@ def select_comments(conn, cursor):
         }
         for p in res
     ]
-    token = str(uuid.uuid4())
+    token = func_helper.get_tracking_code()
     return {
         "status": 200,
         "tracking_code": token,
@@ -782,7 +781,7 @@ def insert_comment(conn, cursor, request_data):
         request_data["phone"], name, user_role,)
     db_helper.insert_value(conn=conn, cursor=cursor, table_name='comments', fields=field,
                            values=values)
-    token = str(uuid.uuid4())
+    token = func_helper.get_tracking_code()
     return {
         "status": 200,
         "tracking_code": token,
