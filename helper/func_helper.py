@@ -546,13 +546,13 @@ def service_exception_error_logging(
         func_name: str,
         error_message: str,
         data: Mapping[str, Any],
-        info: Mapping[str, Any],
+        user_info: Mapping[str, Any],
 ) -> None:
     """Log service-level exceptions using an existing connection."""
     try:
         field_log = '([user_id], [phone], [end_point], [func_name], [data], [error_p])'
         values_log = (
-            info.get("user_id"), info.get("phone"), end_point, func_name,
+            user_info.get("user_id"), user_info.get("phone"), end_point, func_name,
             json.dumps(data, ensure_ascii=False), str(error_message))
         db_helper.insert_value(conn=conn, cursor=cursor, table_name='api_logs', fields=field_log,
                                values=values_log)
@@ -633,7 +633,7 @@ def insert_user(
         conn: pyodbc.Connection,
         cursor: pyodbc.Cursor,
         request_data: Mapping[str, Any],
-        info: Mapping[str, Any],
+        user_info: Mapping[str, Any],
 ) -> Tuple[Optional[int], Optional[str], str]:
     """Insert a new consultant user into the database with a randomly generated password."""
     try:
@@ -653,7 +653,7 @@ def insert_user(
         conn.rollback()
         field_log = '([user_id], [phone], [end_point], [func_name], [data], [error_p])'
         values_log = (
-            info.get("user_id"), info.get("phone"), "ag_api/func_helper", "insert_user",
+            user_info.get("user_id"), user_info.get("phone"), "ag_api/func_helper", "insert_user",
             json.dumps(request_data), str(e))
         db_helper.insert_value(conn=conn, cursor=cursor, table_name='api_logs', fields=field_log,
                                values=values_log)
@@ -663,7 +663,7 @@ def insert_user(
 def insert_user_student(
         conn: pyodbc.Connection,
         cursor: pyodbc.Cursor,
-        info: Mapping[str, Any],
+        user_info: Mapping[str, Any],
 ) -> Tuple[Optional[int], Optional[str], Optional[str], str]:
     """Insert a new student user with a randomly generated phone number and password."""
     try:
@@ -679,7 +679,7 @@ def insert_user_student(
         conn.rollback()
         field_log = '([user_id], [phone], [end_point], [func_name], [data], [error_p])'
         values_log = (
-            info.get("user_id"), info.get("phone"), "ag_api/func_helper", "insert_user",
+            user_info.get("user_id"), user_info.get("phone"), "ag_api/func_helper", "insert_user",
             None, str(e))
         db_helper.insert_value(conn=conn, cursor=cursor, table_name='api_logs', fields=field_log,
                                values=values_log)
@@ -771,7 +771,7 @@ def update_user_and_role_password(
         conn: pyodbc.Connection,
         cursor: pyodbc.Cursor,
         request_data: Mapping[str, Any],
-        info: Mapping[str, Any],
+        user_info: Mapping[str, Any],
         role_table: str,
 ) -> Optional[str]:
     """
@@ -787,7 +787,7 @@ def update_user_and_role_password(
         conn: Active database connection.
         cursor: Active database cursor.
         request_data: Request payload containing at least the new 'password'.
-        info: Context information containing 'user_id'.
+        user_info: Context information containing 'user_id'.
         role_table: Name of the role-specific table ('ins', 'sch', 'wCon', 'con').
 
     Returns:
@@ -795,7 +795,7 @@ def update_user_and_role_password(
     """
     try:
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        user_id = str(info["user_id"])
+        user_id = str(user_info["user_id"])
         encrypted_password = encrypt_password(request_data["password"])
         # Update main users table
         db_helper.update_record(
@@ -819,7 +819,7 @@ def update_user_and_role_password(
         conn.rollback()
         service_exception_error_logging(
             conn, cursor, "ag_api/password", f"update_{role_table}_password",
-            str(e), request_data, info
+            str(e), request_data, user_info
         )
         return None
 
@@ -846,7 +846,7 @@ def update_student_access_and_capacity(
         conn: pyodbc.Connection,
         cursor: pyodbc.Cursor,
         request_data: Mapping[str, Any],
-        info: Mapping[str, Any],
+        user_info: Mapping[str, Any],
         role_type: str,
         id_field: str,
         end_point: str,
@@ -864,7 +864,7 @@ def update_student_access_and_capacity(
             - kind: Package name (key from PACKAGES_DATA, e.g., "AG", "SCL")
             - permission: Permission flag (1 or 0) indicating grant/revoke access
             - limit: Limit flag (1 or 0) for the package
-        info: Context info containing user_id
+        user_info: Context user_info containing user_id
         role_type: Role type ("ins", "sch", or "wCon") for error logging
         id_field: Field name to check ownership ("ins_id" for all three)
         end_point: API endpoint for error logging
@@ -878,7 +878,7 @@ def update_student_access_and_capacity(
         If kind doesn't exist, it's added with both permission and limit.
     """
     try:
-        user_id = info["user_id"]
+        user_id = user_info["user_id"]
         stu_id = request_data.get("stu_id")
 
         if not stu_id:
@@ -1007,7 +1007,7 @@ def update_student_access_and_capacity(
         service_exception_error_logging(
             conn, cursor, end_point,
             f"update_student_access_and_capacity_{role_type}",
-            str(e), request_data, info
+            str(e), request_data, user_info
         )
         return None, "مشکلی در به‌روزرسانی دسترسی دانش‌آموز رخ داده است."
 

@@ -10,10 +10,10 @@ import services.owner_consultant.owner_consultant_service as owner_consultant_se
 import services.school.school_service as school_service
 
 
-def create_token(conn, cursor, info):
+def create_token(conn, cursor, user_info):
     try:
         query = "SELECT token FROM tokens WHERE user_id = ?"
-        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=info[0])
+        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_info[0])
         if res is None:
             while True:
                 token = func_helper.get_tracking_code()
@@ -21,28 +21,28 @@ def create_token(conn, cursor, info):
                 token_exists = db_helper.search_table(conn=conn, cursor=cursor, query=token_check_query, field=token)
                 if not token_exists:
                     field = '([token], [user_id], [phone], [role])'
-                    values = (token, info[0], info[1], info[2])
+                    values = (token, user_info[0], user_info[1], user_info[2])
                     db_helper.insert_value(conn=conn, cursor=cursor, table_name="tokens", fields=field, values=values)
                     return token
         else:
             return res[0]
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/auth", "create_token", str(e), info, {})
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/auth", "create_token", str(e), user_info, {})
         return None
 
 
-def remove_token(conn, cursor, request_data, info):
+def remove_token(conn, cursor, request_data, user_info):
     try:
         res = db_helper.delete_record(
             conn, cursor, "tokens",
             ["user_id"],
-            [info["user_id"]]
+            [user_info["user_id"]]
         )
         return res
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/auth", "remove_token", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/auth", "remove_token", str(e), request_data, user_info)
         return None
 
 
@@ -56,8 +56,8 @@ def sign_in(conn, cursor, request_data):
             return None, " کاربری با این شماره تلفن موجود نمی‌باشد.", None
         db_password = res.password
         if func_helper.verify_password(plain_password=password, stored_password=db_password):
-            info = [res.user_id, phone, res.role]
-            token_user = create_token(conn=conn, cursor=cursor, info=info)
+            user_info = [res.user_id, phone, res.role]
+            token_user = create_token(conn=conn, cursor=cursor, user_info=user_info)
         else:
             return None, "رمز عبور شما درست نمی‌باشد.", None
         if res.role == "ins":
@@ -65,31 +65,31 @@ def sign_in(conn, cursor, request_data):
             res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
             if res_verify.verify == 0:
                 remove_token(conn=conn, cursor=cursor, request_data={"user_id": res.user_id},
-                             info={"user_id": res.user_id, "phone": phone})
+                             user_info={"user_id": res.user_id, "phone": phone})
                 return None, "شما هنوز احراز هویت انجام نداده‌اید.", None
-            ـ, info = institute_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
+            ـ, user_info = institute_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
         elif res.role == "sch":
             query = 'SELECT verify FROM sch WHERE phone = ?'
             res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
             if res_verify.verify == 0:
                 remove_token(conn=conn, cursor=cursor, request_data={"user_id": res.user_id},
-                             info={"user_id": res.user_id, "phone": phone})
+                             user_info={"user_id": res.user_id, "phone": phone})
                 return None, "شما هنوز احراز هویت انجام نداده‌اید.", None
-            ـ, info = school_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
+            ـ, user_info = school_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
         elif res.role == "wCon":
             query = 'SELECT verify FROM wCon WHERE phone = ?'
             res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
             if res_verify.verify == 0:
                 remove_token(conn=conn, cursor=cursor, request_data={"user_id": res.user_id},
-                             info={"user_id": res.user_id, "phone": phone})
+                             user_info={"user_id": res.user_id, "phone": phone})
                 return None, "شما هنوز احراز هویت انجام نداده‌اید.", None
-            ـ, info = owner_consultant_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
+            ـ, user_info = owner_consultant_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
 
         elif res.role == "con":
-            ـ, info = consultant_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
+            ـ, user_info = consultant_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
         elif res.role == "stu":
             return None, "متاسفانه شما از این سامانه اجازه ورود ندارید.", None
-        return token_user, "", info
+        return token_user, "", user_info
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/auth", "sign_in", str(e), request_data, {})
@@ -231,33 +231,33 @@ def check_otp(conn, cursor, redis_db, request_data):
         if int(code) != record["code"]:
             return None, "کد وارد شده صحیح نمی‌باشد.", None
 
-        info = [res.user_id, phone, res.role]
-        token_user = create_token(conn=conn, cursor=cursor, info=info)
+        user_info = [res.user_id, phone, res.role]
+        token_user = create_token(conn=conn, cursor=cursor, user_info=user_info)
 
         if type_otp == "otp":
 
             if res.role == "ins":
-                ـ, info = institute_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, user_info = institute_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "sch":
-                ـ, info = school_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, user_info = school_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "wCon":
-                ـ, info = owner_consultant_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, user_info = owner_consultant_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "con":
-                ـ, info = consultant_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, user_info = consultant_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
             else:
                 return None, "شما به این سرویس دسترسی ندارید.", None
-            return token_user, "", info
+            return token_user, "", user_info
 
         else:
             if res.role == "ins":
-                ـ, info = institute_service.verify_user(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, user_info = institute_service.verify_user(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "sch":
-                ـ, info = school_service.verify_user(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, user_info = school_service.verify_user(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "wCon":
-                ـ, info = owner_consultant_service.verify_user(conn=conn, cursor=cursor, user_id=res.user_id)
+                ـ, user_info = owner_consultant_service.verify_user(conn=conn, cursor=cursor, user_id=res.user_id)
             else:
                 return None, "شما به این سرویس دسترسی ندارید.", None
-            return token_user, "", info
+            return token_user, "", user_info
 
     except Exception as e:
         conn.rollback()

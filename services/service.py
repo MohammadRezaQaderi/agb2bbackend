@@ -12,10 +12,10 @@ import services.owner_consultant.owner_consultant_service as owner_consultant_se
 import services.school.school_service as school_service
 
 
-def remove_token(conn, cursor, request_data, info):
+def remove_token(conn, cursor, request_data, user_info):
     method_type = "DELETE"
     token = func_helper.get_tracking_code()
-    res = auth_service.remove_token(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    res = auth_service.remove_token(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
     if res == 0:
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "نشد"}}
@@ -96,36 +96,36 @@ def check_otp(conn, cursor, redis_db, request_data):
     if not is_valid:
         return error_response
 
-    tracking_code, message, info = auth_service.check_otp(conn=conn, cursor=cursor, redis_db=redis_db,
+    tracking_code, message, user_info = auth_service.check_otp(conn=conn, cursor=cursor, redis_db=redis_db,
                                                     request_data=request_data)
-    if info is None:
+    if user_info is None:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": message}
     elif tracking_code:
         return {"status": 200, "tracking_code": tracking_code, "method_type": method_type,
-                "response": info}
+                "response": user_info}
     else:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
 
 
-def change_user_info(conn, cursor, request_data, info):
+def change_user_info(conn, cursor, request_data, user_info):
     method_type = "UPDATE"
-    if info["role"] == "ins":
-        token, data = institute_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    if user_info["role"] == "ins":
+        token, data = institute_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data, "message": "اطلاعات شما با موفقیت تغییر یافت."}}
-    elif info["role"] == "sch":
-        token, data = school_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "sch":
+        token, data = school_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data, "message": "اطلاعات شما با موفقیت تغییر یافت."}}
-    elif info["role"] == "con":
-        token, data = consultant_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "con":
+        token, data = consultant_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data, "message": "اطلاعات شما با موفقیت تغییر یافت."}}
-    elif info["role"] == "wCon":
+    elif user_info["role"] == "wCon":
         token, data = owner_consultant_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data,
-                                               info=info)
+                                               user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data, "message": "اطلاعات شما با موفقیت تغییر یافت."}}
     else:
@@ -133,7 +133,7 @@ def change_user_info(conn, cursor, request_data, info):
                 "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
 
 
-def change_password(conn, cursor, request_data, info):
+def change_password(conn, cursor, request_data, user_info):
     method_type = "UPDATE"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -152,7 +152,7 @@ def change_password(conn, cursor, request_data, info):
     if not val:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": message}
-    role = info.get("role")
+    role = user_info.get("role")
     role_table_map = {
         "ins": "ins",
         "sch": "sch",
@@ -169,7 +169,7 @@ def change_password(conn, cursor, request_data, info):
         conn=conn,
         cursor=cursor,
         request_data=request_data,
-        info=info,
+        user_info=user_info,
         role_table=role_table,
     )
     if not token:
@@ -180,21 +180,21 @@ def change_password(conn, cursor, request_data, info):
             "response": {"message": "رمز عبور شما با موفقیت تغییر کرد."}}
 
 
-def change_setting(conn, cursor, request_data, info):
+def change_setting(conn, cursor, request_data, user_info):
     method_type = "UPDATE"
-    if info["role"] == "ins":
-        token = institute_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    if user_info["role"] == "ins":
+        token = institute_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "پیش اطلاعات اولیه آزمون شما تغییر یافت."}}
-    elif info["role"] == "sch":
-        token = school_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "sch":
+        token = school_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "پیش اطلاعات اولیه آزمون شما تغییر یافت."}}
-    elif info["role"] == "wCon":
-        token = owner_consultant_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "wCon":
+        token = owner_consultant_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "پیش اطلاعات اولیه آزمون شما تغییر یافت."}}
-    elif info["role"] in ["con"]:
+    elif user_info["role"] in ["con"]:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "شما به این سرویس دسترسی ندارید."}
     else:
@@ -202,7 +202,7 @@ def change_setting(conn, cursor, request_data, info):
                 "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
 
 
-def change_student_access(conn, cursor, request_data, info):
+def change_student_access(conn, cursor, request_data, user_info):
     method_type = "UPDATE"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -211,19 +211,19 @@ def change_student_access(conn, cursor, request_data, info):
     )
     if not is_valid:
         return error_response
-    if info["role"] == "ins":
-        token, message = institute_service.change_student_access(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    if user_info["role"] == "ins":
+        token, message = institute_service.change_student_access(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": message}}
-    elif info["role"] == "sch":
-        token, message = school_service.change_student_access(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "sch":
+        token, message = school_service.change_student_access(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": message}}
-    elif info["role"] == "wCon":
-        token, message = owner_consultant_service.change_student_access(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "wCon":
+        token, message = owner_consultant_service.change_student_access(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": message}}
-    elif info["role"] in ["con"]:
+    elif user_info["role"] in ["con"]:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "شما به این سرویس دسترسی ندارید."}
     else:
@@ -231,21 +231,21 @@ def change_student_access(conn, cursor, request_data, info):
                 "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
 
 
-def change_user_quiz_setting(conn, cursor, request_data, info):
+def change_user_quiz_setting(conn, cursor, request_data, user_info):
     method_type = "UPDATE"
-    if info["role"] == "ins":
-        token = institute_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    if user_info["role"] == "ins":
+        token = institute_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "پیش اطلاعات اولیه آزمون شما تغییر یافت."}}
-    elif info["role"] == "sch":
-        token = school_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "sch":
+        token = school_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "پیش اطلاعات اولیه آزمون شما تغییر یافت."}}
-    elif info["role"] == "wCon":
-        token = owner_consultant_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "wCon":
+        token = owner_consultant_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "پیش اطلاعات اولیه آزمون شما تغییر یافت."}}
-    elif info["role"] in ["con"]:
+    elif user_info["role"] in ["con"]:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "شما به این سرویس دسترسی ندارید."}
     else:
@@ -255,26 +255,26 @@ def change_user_quiz_setting(conn, cursor, request_data, info):
 
 # The users functionality
 
-def get_dashboard(conn, cursor, request_data, info):
+def get_dashboard(conn, cursor, request_data, user_info):
     method_type = "SELECT"
-    if info["role"] == "ins":
+    if user_info["role"] == "ins":
         token, dash_info, notifications = institute_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
-                                                               info=info)
+                                                               user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": dash_info, "notifications": notifications}}
-    elif info["role"] == "sch":
+    elif user_info["role"] == "sch":
         token, dash_info, notifications = school_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
-                                                               info=info)
+                                                               user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": dash_info, "notifications": notifications}}
-    elif info["role"] == "wCon":
+    elif user_info["role"] == "wCon":
         token, dash_info, notifications = owner_consultant_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
-                                                                info=info)
+                                                                user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": dash_info, "notifications": notifications}}
-    elif info["role"] == "con":
+    elif user_info["role"] == "con":
         token, dash_info, notifications = consultant_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
-                                                               info=info)
+                                                               user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": dash_info, "notifications": notifications}}
     else:
@@ -283,19 +283,19 @@ def get_dashboard(conn, cursor, request_data, info):
 
 
 # this gateway is for get the consultants list of roles
-def get_consultants(conn, cursor, request_data, info):
+def get_consultants(conn, cursor, request_data, user_info):
     method_type = "SELECT"
-    if info["role"] == "ins":
+    if user_info["role"] == "ins":
         token, cons_info = institute_service.get_consultants(conn=conn, cursor=cursor, request_data=request_data,
-                                                 info=info)
+                                                 user_info=user_info)
         if token is not None:
             return {"status": 200, "tracking_code": token, "method_type": method_type,
                     "response": {"data": cons_info}}
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "اطلاعات مشاورین مشکل دارد، با پشتیبانی در ارتباط باشید."}
-    elif info["role"] == "sch":
+    elif user_info["role"] == "sch":
         token, cons_info = school_service.get_consultants(conn=conn, cursor=cursor, request_data=request_data,
-                                                 info=info)
+                                                 user_info=user_info)
         if token is not None:
             return {"status": 200, "tracking_code": token, "method_type": method_type,
                     "response": {"data": cons_info}}
@@ -307,7 +307,7 @@ def get_consultants(conn, cursor, request_data, info):
 
 
 # this gateway for insert consultant for user role
-def add_consultant(conn, cursor, request_data, info):
+def add_consultant(conn, cursor, request_data, user_info):
     method_type = "INSERT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -317,22 +317,22 @@ def add_consultant(conn, cursor, request_data, info):
     if not is_valid:
         return error_response
 
-    con_user_id, password, error_message = func_helper.insert_user(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    con_user_id, password, error_message = func_helper.insert_user(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
     if not con_user_id:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": error_message}
     request_data["password"] = password
-    if info["role"] == "ins":
+    if user_info["role"] == "ins":
         token, message = institute_service.add_consultant(conn=conn, cursor=cursor, request_data=request_data,
-                                               con_user_id=con_user_id, info=info)
+                                               con_user_id=con_user_id, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": message}}
-    elif info["role"] == "sch":
+    elif user_info["role"] == "sch":
         token, message = school_service.add_consultant(conn=conn, cursor=cursor, request_data=request_data,
-                                               con_user_id=con_user_id, info=info)
+                                               con_user_id=con_user_id, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": message}}
-    elif info["role"] in ["con", "wCon"]:
+    elif user_info["role"] in ["con", "wCon"]:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "شما به این سرویس دسترسی ندارید."}
     else:
@@ -341,17 +341,17 @@ def add_consultant(conn, cursor, request_data, info):
 
 
 # this gateway for update the consultant information from user role
-def change_consultant(conn, cursor, request_data, info):
+def change_consultant(conn, cursor, request_data, user_info):
     method_type = "UPDATE"
-    if info["role"] == "ins":
-        token, message = institute_service.change_consultant(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    if user_info["role"] == "ins":
+        token, message = institute_service.change_consultant(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         if token is None:
             return {"status": 200, "tracking_code": None, "method_type": method_type,
                     "error": message}
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": message}}
-    elif info["role"] == "sch":
-        token, message = school_service.change_consultant(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "sch":
+        token, message = school_service.change_consultant(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         if token is None:
             return {"status": 200, "tracking_code": None, "method_type": method_type,
                     "error": message}
@@ -363,33 +363,33 @@ def change_consultant(conn, cursor, request_data, info):
 
 
 # this gateway for get list of student from user role
-def get_students(conn, cursor, request_data, info):
+def get_students(conn, cursor, request_data, user_info):
     method_type = "SELECT"
-    if info["role"] == "ins":
+    if user_info["role"] == "ins":
         token, stu_conf = institute_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
-                                             info=info)
+                                             user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": stu_conf}}
-    elif info["role"] == "sch":
+    elif user_info["role"] == "sch":
         token, stu_conf = school_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
-                                             info=info)
+                                             user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": stu_conf}}
-    if info["role"] == "con":
+    if user_info["role"] == "con":
         token, stu_conf = consultant_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
-                                             info=info)
+                                             user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": stu_conf}}
-    elif info["role"] == "wCon":
+    elif user_info["role"] == "wCon":
         token, stu_conf = owner_consultant_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
-                                              info=info)
+                                              user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": stu_conf}}
     else:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
 
-def check_student_access(conn, cursor, student_user_id, info):
+def check_student_access(conn, cursor, student_user_id, user_info):
     """
     Check if the current user has access to the specified student.
     For ins/sch roles: check if student's ins_id matches user_id
@@ -402,8 +402,8 @@ def check_student_access(conn, cursor, student_user_id, info):
         if not res:
             return False
         
-        role = info.get("role")
-        user_id = info.get("user_id")
+        role = user_info.get("role")
+        user_id = user_info.get("user_id")
         
         if role in ["ins", "sch"]:
             # For institute/school, check if student's ins_id matches user_id
@@ -418,7 +418,7 @@ def check_student_access(conn, cursor, student_user_id, info):
         return False
 
 
-def get_report_data(conn, cursor, request_data, info):
+def get_report_data(conn, cursor, request_data, user_info):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -428,15 +428,15 @@ def get_report_data(conn, cursor, request_data, info):
     if not is_valid:
         return error_response
     
-    if info["role"] in ["ins", "sch", "con", "wCon"]:
+    if user_info["role"] in ["ins", "sch", "con", "wCon"]:
         student_id = request_data.get("student_id")
         # Check if user has access to this student
-        if not check_student_access(conn, cursor, student_id, info):
+        if not check_student_access(conn, cursor, student_id, user_info):
             return {"status": 200, "tracking_code": None, "method_type": method_type,
                     "error": "شما به این دانش‌آموز دسترسی ندارید."}
         
         token, stu_conf = other_service.get_report_data(conn=conn, cursor=cursor, request_data=request_data,
-                                             info=info)
+                                             user_info=user_info)
         if token is None:
             return {"status": 200, "tracking_code": None, "method_type": method_type,
                     "error": "خطا در دریافت اطلاعات گزارش."}
@@ -447,29 +447,29 @@ def get_report_data(conn, cursor, request_data, info):
                 "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
 
 # this gateway for insert student for user role
-def add_student(conn, cursor, request_data, info):
+def add_student(conn, cursor, request_data, user_info):
     method_type = "INSERT"
     # No strict required fields here because phone/password are generated,
     # but you can add validation for optional metadata if needed.
-    stu_user_id, password, phone, error_message = func_helper.insert_user_student(conn=conn, cursor=cursor, info=info)
+    stu_user_id, password, phone, error_message = func_helper.insert_user_student(conn=conn, cursor=cursor, user_info=user_info)
     if not stu_user_id:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": error_message}
     request_data["phone"] = phone
     request_data["password"] = password
-    if info["role"] == "ins":
+    if user_info["role"] == "ins":
         token = institute_service.add_student(conn=conn, cursor=cursor, request_data=request_data, stu_user_id=stu_user_id,
-                                   info=info)
+                                   user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "دانش‌آموز شما با موفقیت ثبت شد."}}
-    elif info["role"] == "sch":
+    elif user_info["role"] == "sch":
         token = school_service.add_student(conn=conn, cursor=cursor, request_data=request_data, stu_user_id=stu_user_id,
-                                   info=info)
+                                   user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "دانش‌آموز شما با موفقیت ثبت شد."}}
-    elif info["role"] == "wCon":
+    elif user_info["role"] == "wCon":
         token = owner_consultant_service.add_student(conn=conn, cursor=cursor, request_data=request_data, stu_user_id=stu_user_id,
-                                    info=info)
+                                    user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "دانش‌آموز شما با موفقیت ثبت شد."}}
     else:
@@ -478,10 +478,10 @@ def add_student(conn, cursor, request_data, info):
 
 
 # this gateway for update the student information from user role
-def change_student(conn, cursor, request_data, info):
+def change_student(conn, cursor, request_data, user_info):
     method_type = "UPDATE"
     required_fields = ["first_name", "last_name", "sex", "city", "birth_date", "student_id"]
-    if info["role"] in ["ins", "sch"]:
+    if user_info["role"] in ["ins", "sch"]:
         required_fields.append("con_id")
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -490,20 +490,20 @@ def change_student(conn, cursor, request_data, info):
     )
     if not is_valid:
         return error_response
-    if info["role"] == "ins":
-        token = institute_service.change_student(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    if user_info["role"] == "ins":
+        token = institute_service.change_student(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."}}
-    elif info["role"] == "sch":
-        token = school_service.change_student(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "sch":
+        token = school_service.change_student(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."}}
-    elif info["role"] == "wCon":
-        token = owner_consultant_service.change_student(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "wCon":
+        token = owner_consultant_service.change_student(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."}}
-    elif info["role"] == "con":
-        token = consultant_service.change_student(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "con":
+        token = consultant_service.change_student(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."}}
     else:
@@ -512,14 +512,14 @@ def change_student(conn, cursor, request_data, info):
 
 
 # this gateway is for make or update the comment of the student
-def change_comment(conn, cursor, request_data, info):
+def change_comment(conn, cursor, request_data, user_info):
     method_type = "UPDATE"
-    if info["role"] == "con":
-        token = consultant_service.change_comment(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    if user_info["role"] == "con":
+        token = consultant_service.change_comment(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."}}
-    elif info["role"] == "wCon":
-        token = owner_consultant_service.change_comment(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "wCon":
+        token = owner_consultant_service.change_comment(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."}}
     else:
@@ -527,7 +527,7 @@ def change_comment(conn, cursor, request_data, info):
                 "error": "متاسفانه شما از این سامانه به این سرویس دسترسی ندارید."}
 
 
-def get_quiz_setting(conn, cursor, request_data, info):
+def get_quiz_setting(conn, cursor, request_data, user_info):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -539,7 +539,7 @@ def get_quiz_setting(conn, cursor, request_data, info):
 
     quiz_id = request_data["quiz_id"]
     query_select_setting = "select * from setting where setting.user_id = '" + str(
-        info["user_id"]) + "' and setting.quiz_id = '" + str(quiz_id) + "' "
+        user_info["user_id"]) + "' and setting.quiz_id = '" + str(quiz_id) + "' "
     cursor.execute(query_select_setting)
     res = cursor.fetchone()
     conn.commit()
@@ -560,22 +560,22 @@ def get_quiz_setting(conn, cursor, request_data, info):
                 "response": {"data": info_data}}
 
 
-def get_report(conn, cursor, request_data, info):
+def get_report(conn, cursor, request_data, user_info):
     method_type = "SELECT"
-    if info["role"] == "ins":
-        token, data = institute_service.get_report(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    if user_info["role"] == "ins":
+        token, data = institute_service.get_report(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data}}
-    elif info["role"] == "sch":
-        token, data = school_service.get_report(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "sch":
+        token, data = school_service.get_report(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data}}
-    elif info["role"] == "wCon":
-        token, data = owner_consultant_service.get_report(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "wCon":
+        token, data = owner_consultant_service.get_report(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data}}
-    elif info["role"] == "con":
-        token, data = consultant_service.get_report(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "con":
+        token, data = consultant_service.get_report(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data}}
     else:
@@ -583,25 +583,25 @@ def get_report(conn, cursor, request_data, info):
                 "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
 
 
-def get_management_report(conn, cursor, request_data, info):
+def get_management_report(conn, cursor, request_data, user_info):
     method_type = "SELECT"
-    if info["role"] == "ins":
-        token, data = institute_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    if user_info["role"] == "ins":
+        token, data = institute_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data}}
-    elif info["role"] == "sch":
-        token, data = school_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "sch":
+        token, data = school_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data}}
-    elif info["role"] == "wCon":
-        token, data = owner_consultant_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "wCon":
+        token, data = owner_consultant_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data}}
-    elif info["role"] == "con":
-        token, data = consultant_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    elif user_info["role"] == "con":
+        token, data = consultant_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data}}
-    elif info["role"] == "stu":
+    elif user_info["role"] == "stu":
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "متاسفانه شما از این سامانه به این سرویس دسترسی ندارید."}
     else:
@@ -610,9 +610,9 @@ def get_management_report(conn, cursor, request_data, info):
 
 
 # get the information of quiz (quiz id, quiz description, quiz voice, quiz sections, quiz name)
-def get_quiz_info(conn, cursor, request_data, info):
+def get_quiz_info(conn, cursor, request_data, user_info):
     method_type = "SELECT"
-    if info["role"] not in ["ins", "sch", "wCon", "con"]:
+    if user_info["role"] not in ["ins", "sch", "wCon", "con"]:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "متاسفانه شما از این سامانه به این سرویس دسترسی ندارید."}
     else:
@@ -623,10 +623,10 @@ def get_quiz_info(conn, cursor, request_data, info):
 
 
 # transactions and payments
-def get_transactions(conn, cursor, request_data, info):
+def get_transactions(conn, cursor, request_data, user_info):
     method_type = "SELECT"
-    if info["role"] in ["wCon", "ins", "sch"]:
-        token, transactions_info = other_service.get_transactions(conn, cursor, request_data, info)
+    if user_info["role"] in ["wCon", "ins", "sch"]:
+        token, transactions_info = other_service.get_transactions(conn, cursor, request_data, user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": transactions_info}}
     else:
@@ -634,7 +634,7 @@ def get_transactions(conn, cursor, request_data, info):
                 "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
 
 
-def apply_discount(conn, cursor, request_data, info):
+def apply_discount(conn, cursor, request_data, user_info):
     try:
         method_type = "SELECT"
         is_valid, error_response = func_helper.validate_request_data_fields(
@@ -663,7 +663,7 @@ def apply_discount(conn, cursor, request_data, info):
                 return {"status": 200, "tracking_code": None, "method_type": method_type,
                         "error": "متاسفانه کد تخفیف مدنظر اتمام یافته."}
             field = '([code], [status], [phone], [user_id])'
-            values = (request_data["discount_code"], "APPLY CODE", info["phone"], info["user_id"])
+            values = (request_data["discount_code"], "APPLY CODE", user_info["phone"], user_info["user_id"])
             db_helper.insert_value(conn=conn, cursor=cursor, table_name='using_discount', fields=field,
                                    values=values)
             db_helper.update_record(
@@ -681,7 +681,7 @@ def apply_discount(conn, cursor, request_data, info):
         return {"status": 200, "tracking_code": None, "method_type": None,
                 "error": "در پردازش کد تخفیف مشکلی پیش آمده"}
 
-def add_payment_order(conn, cursor, request_data, info):
+def add_payment_order(conn, cursor, request_data, user_info):
     method_type = "INSERT"
     # is_valid, error_response = func_helper.validate_request_data_fields(
     #     request_data=request_data,
@@ -690,8 +690,8 @@ def add_payment_order(conn, cursor, request_data, info):
     # )
     # if not is_valid:
     #     return error_response
-    if info["role"] in ["wCon", "ins", "sch"]:
-        token, ref_id, message, url = other_service.order_payment(conn=conn, cursor=cursor, request_data=request_data, info=info)
+    if user_info["role"] in ["wCon", "ins", "sch"]:
+        token, ref_id, message, url = other_service.order_payment(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": message, "url": url, "ref_id": ref_id}}
     else:

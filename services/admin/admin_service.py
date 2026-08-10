@@ -31,7 +31,7 @@ def change_capacity(conn, cursor, request_data):
         if count <= 0:
             return None, "تعداد باید یک عدد صحیح مثبت باشد."
 
-        # Get user info from users table
+        # Get user user_info from users table
         query_user = 'SELECT user_id, role FROM users WHERE phone = ?'
         # Assuming the field name in users is 'id'. In your original snippet, you queried user_id,
         # so make sure this matches your actual schema.
@@ -168,13 +168,13 @@ def change_capacity(conn, cursor, request_data):
 
 def get_user_info(conn, cursor, request_data):
     """
-    Get user info by phone number.
+    Get user user_info by phone number.
     
     Requirements:
     - Request data has phone
     - Get information from users and ins, sch, wCon, con, stu tables
     - For wcon, sch, ins return capacity
-    - Return user info
+    - Return user user_info
     """
     try:
         phone = request_data.get("phone")
@@ -182,7 +182,7 @@ def get_user_info(conn, cursor, request_data):
         if not phone:
             return None, "شماره تلفن الزامی است."
 
-        # Get user info from users table
+        # Get user user_info from users table
         query_user = 'SELECT user_id, role FROM users WHERE phone = ?'
         user_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_user, field=phone)
 
@@ -325,7 +325,7 @@ def check_student_quiz_answer(conn, cursor, request_data):
         if not phone:
             return None, "شماره تلفن الزامی است."
 
-        # Get student info
+        # Get student user_info
         query_stu = 'SELECT user_id, first_name, last_name, access FROM stu WHERE phone = ?'
         stu_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_stu, field=phone)
 

@@ -73,7 +73,7 @@ def get_all_products(conn, cursor):
     return token, products_info
 
 
-def get_transactions(conn, cursor, request_data, info):
+def get_transactions(conn, cursor, request_data, user_info):
     try:
         query = """
                 SELECT 
@@ -87,7 +87,7 @@ def get_transactions(conn, cursor, request_data, info):
                 WHERE user_id = ? 
                 ORDER BY created_time DESC
             """
-        res = db_helper.search_allin_table(conn, cursor, query, str(info["user_id"]))
+        res = db_helper.search_allin_table(conn, cursor, query, str(user_info["user_id"]))
         transactions_info = []
         for p in res:
             try:
@@ -133,7 +133,7 @@ def get_transactions(conn, cursor, request_data, info):
         return None, None
 
 
-def get_order_status(conn, cursor, data, info):
+def get_order_status(conn, cursor, data, user_info):
     try:
         query = """
                     SELECT 
@@ -149,7 +149,7 @@ def get_order_status(conn, cursor, data, info):
                     ORDER BY created_time DESC
                 """
 
-        res = db_helper.search_allin_table(conn, cursor, query, [str(info["user_id"]), str(data["payment_id"])])
+        res = db_helper.search_allin_table(conn, cursor, query, [str(user_info["user_id"]), str(data["payment_id"])])
         if len(res) != 0:
             status = res[0][2]
             transactions_info = {
@@ -171,13 +171,13 @@ def get_order_status(conn, cursor, data, info):
         return None, None, None
 
 
-def mellat_request_created(conn, cursor, data, info):
+def mellat_request_created(conn, cursor, data, user_info):
     try:
         token = 'eyJhbGciOiJIUzI1NiJ9.eyJSb2xlIjoiQWRtaW4iLCJJc3N1ZXIiOiIwMUZhcmRha2hlaWxpc2FieiIsIlVzZXJuYW1lIjoiTXJxMjciLCJleHAiOjE3NTMwODc5NzcsImlhdCI6MTc1MzA4Nzk3N30.mlcxgBMXIjmw04DPeMkSL5Ijqlg-ifZXQnw_d889qvM'
         endpoint = "b2b"
         try:
-            data["user_id"] = info.get("user_id")
-            data["phone"] = info.get("phone")
+            data["user_id"] = user_info.get("user_id")
+            data["phone"] = user_info.get("phone")
             with httpx.Client() as client:
                 request_data = {
                     "token": token,
@@ -207,8 +207,8 @@ def mellat_request_created(conn, cursor, data, info):
             field = '([payment_id], [user_id], [phone], [state], [status], [price], [discount_price], [track_id], [result], [discount_id], [message], [product_data], [token])'
             values = (
                 data["payment_id"],
-                info["user_id"],
-                info["phone"],
+                user_info["user_id"],
+                user_info["phone"],
                 "SendPaymentGateway",
                 "PEND",
                 data["price"],
@@ -228,7 +228,7 @@ def mellat_request_created(conn, cursor, data, info):
             message = result.get("message", "Unknown error from payment gateway")
             field = '([payment_id], [user_id], [phone], [state], [status], [price], [discount_price], [track_id], [result], [discount_id], [message], [product_data], [token])'
             values = (
-                data["payment_id"], info["user_id"], info["phone"], "NOTREFID", "Error", data["price"],
+                data["payment_id"], user_info["user_id"], user_info["phone"], "NOTREFID", "Error", data["price"],
                 data["discount_price"], None, "", data["discount_id"], message,
                 json.dumps(data, ensure_ascii=False), None)
             db_helper.insert_value(conn=conn, cursor=cursor, table_name='payment_log', fields=field,
@@ -238,7 +238,7 @@ def mellat_request_created(conn, cursor, data, info):
     except Exception as e:
         field = '([payment_id], [user_id], [phone], [state], [status], [price], [discount_price], [track_id], [result], [discount_id], [message], [product_data], [token])'
         values = (
-            data["payment_id"], info["user_id"], info["phone"], "MellatGatewayException", "Bug", data["price"],
+            data["payment_id"], user_info["user_id"], user_info["phone"], "MellatGatewayException", "Bug", data["price"],
             data["discount_price"], None, "مشکل در درگاه بانک ملت", data["discount_id"], str(e),
             json.dumps(data, ensure_ascii=False), None)
         db_helper.insert_value(conn=conn, cursor=cursor, table_name='payment_log', fields=field,
@@ -246,9 +246,9 @@ def mellat_request_created(conn, cursor, data, info):
         return None, str(e), None
 
 
-def order_payment(conn, cursor, request_data, info):
+def order_payment(conn, cursor, request_data, user_info):
     try:
-        phone = info["phone"]
+        phone = user_info["phone"]
 
         # Expected request_data example:
         # {
@@ -289,7 +289,7 @@ def order_payment(conn, cursor, request_data, info):
                     discount_id = res_discount.id
                     discount_percentage = res_discount.discount_percentage
                     field = '([code], [status], [phone], [user_id])'
-                    values = (request_data["discount_code"], "GOPAYMENT", info["phone"], info["user_id"])
+                    values = (request_data["discount_code"], "GOPAYMENT", user_info["phone"], user_info["user_id"])
                     res_cap = db_helper.insert_value(conn=conn, cursor=cursor, table_name='using_discount',
                                                      fields=field,
                                                      values=values)
@@ -331,14 +331,14 @@ def order_payment(conn, cursor, request_data, info):
             "discount_id": discount_id,
         }
         return None, None, "متاسفانه فعلا درگاه پرداخت در دسترس نیست", None
-        ref_id, message, url = mellat_request_created(conn, cursor, product_data, info)
+        ref_id, message, url = mellat_request_created(conn, cursor, product_data, user_info)
         return token, ref_id, message, url
     except Exception as e:
         print(e)
         return None, None, "خطا در دسترسی به پرداخت", None
 
 
-def get_report_data(conn, cursor, request_data, info):
+def get_report_data(conn, cursor, request_data, user_info):
     try:
         kind = request_data.get("report_type", "").upper()
         student_id = request_data.get("student_id")

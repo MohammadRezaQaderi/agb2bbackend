@@ -27,7 +27,7 @@ def get_info(conn, cursor, user_id):
         return None, {}
 
 
-def get_dashboard(conn, cursor, request_data, info):
+def get_dashboard(conn, cursor, request_data, user_info):
     """
     Fetches dashboard data for consultant users, including:
     - Student counts
@@ -36,7 +36,7 @@ def get_dashboard(conn, cursor, request_data, info):
     - Notifications
     """
     try:
-        user_id = info["user_id"]
+        user_id = user_info["user_id"]
 
         query = 'SELECT ins_id FROM con WHERE user_id = ?'
         res_info_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
@@ -171,14 +171,14 @@ def get_dashboard(conn, cursor, request_data, info):
 
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_dashboard", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_dashboard", str(e), request_data, user_info)
         return None, {}, []
 
 
-def get_report(conn, cursor, request_data, info):
+def get_report(conn, cursor, request_data, user_info):
     try:
         query = 'SELECT stu_id, user_id, phone, first_name, last_name, sex, city, access, comment, password FROM stu WHERE con_id = ?'
-        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
+        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
         report_info = []
         if res is not None:
             for stu in res:
@@ -187,25 +187,25 @@ def get_report(conn, cursor, request_data, info):
                     access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
                 except (json.JSONDecodeError, TypeError):
                     access_data = {}
-                info = {"id": stu.stu_id, "student_id": stu.user_id, "phone": stu.phone, "first_name": stu.first_name,
+                user_info = {"id": stu.stu_id, "student_id": stu.user_id, "phone": stu.phone, "first_name": stu.first_name,
                         "last_name": stu.last_name,
                         "password": func_helper.decrypt_password(stu.password), "sex": stu.sex, "city": stu.city,
                         "access": access_data, "full_name": stu.first_name + " " + stu.last_name,
                         "consultant_comment": stu.comment, "report_id": stu.user_id}
-                report_info.append(info)
+                report_info.append(user_info)
         token = func_helper.get_tracking_code()
         return token, report_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_report", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_report", str(e), request_data, user_info)
         return None, []
 
 
-def get_management_report(conn, cursor, request_data, info):
+def get_management_report(conn, cursor, request_data, user_info):
     try:
-        # Fetch basic student info for this consultant
+        # Fetch basic student user_info for this consultant
         query = 'SELECT stu_id, user_id, phone, first_name, last_name, sex, city, access, password FROM stu WHERE con_id = ?'
-        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
+        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
 
         report_info = []
 
@@ -290,20 +290,20 @@ def get_management_report(conn, cursor, request_data, info):
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_management_report", str(e),
-                                        request_data, info)
+                                        request_data, user_info)
         return None, None
 
 
 # this function use for get students of con for list of students
-def get_students(conn, cursor, request_data, info):
+def get_students(conn, cursor, request_data, user_info):
     try:
         query = 'SELECT first_name, last_name FROM con WHERE user_id = ?'
-        res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
+        res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
         con_name = ""
         if res_con and len(res_con) >= 2:
             con_name = f"{res_con.first_name} {res_con.last_name}"
         query = 'SELECT stu_id, user_id, phone, first_name, last_name, password, sex, city, birth_date, access FROM stu WHERE con_id = ?'
-        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
+        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
         stu_info = []
         if len(res) != 0:
             for stu in res:
@@ -322,39 +322,39 @@ def get_students(conn, cursor, request_data, info):
                 #             status = "آزمون‌ها به پایان رسیده است."
                 #         else:
                 #             status = "آزمون " + func_helper.AG_QUIZ_NAME_TITLE[quiz_answered - 1] + " به پایان رسیده است"
-                info = {"stu_id": stu.stu_id, "user_id": stu.user_id, "phone": stu.phone, "first_name": stu.first_name,
+                user_info = {"stu_id": stu.stu_id, "user_id": stu.user_id, "phone": stu.phone, "first_name": stu.first_name,
                         "last_name": stu.last_name, "con_name": con_name,
                         "full_name": stu.first_name + " " + stu.last_name,
-                        "con_id": info["user_id"], "password": func_helper.decrypt_password(stu.password), "sex": stu.sex,
+                        "con_id": user_info["user_id"], "password": func_helper.decrypt_password(stu.password), "sex": stu.sex,
                         "city": stu.city, "birth_date": stu.birth_date, "access": json.loads(stu.access)}
-                stu_info.append(info)
+                stu_info.append(user_info)
         token = func_helper.get_tracking_code()
         return token, stu_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_students", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_students", str(e), request_data, user_info)
         return None, []
 
 
 # this function is for update the information of consultant
-def change_student(conn, cursor, request_data, info):
+def change_student(conn, cursor, request_data, user_info):
     try:
         db_helper.update_record(conn, cursor, 'stu',
                                 ['first_name', 'last_name', 'sex', 'city', 'editor_id', 'birth_date',
                                  'edited_time'],
                                 [request_data["first_name"], request_data["last_name"], request_data["sex"],
-                                 request_data["city"], info["user_id"],
+                                 request_data["city"], user_info["user_id"],
                                  request_data["birth_date"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(request_data["student_id"])])
         token = func_helper.get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_student", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_student", str(e), request_data, user_info)
         return None
 
 
-def change_comment(conn, cursor, request_data, info):
+def change_comment(conn, cursor, request_data, user_info):
     try:
         db_helper.update_record(conn, cursor, 'stu',
                                 ['comment', 'editor_id', 'edited_time'],
@@ -365,23 +365,23 @@ def change_comment(conn, cursor, request_data, info):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_comment", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_comment", str(e), request_data, user_info)
         return None
 
 
-def change_user_info(conn, cursor, request_data, info):
+def change_user_info(conn, cursor, request_data, user_info):
     try:
         db_helper.update_record(conn, cursor, 'con',
                                 ['first_name', 'last_name', 'edited_time'],
                                 [request_data["first_name"], request_data["last_name"],
                                  datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                'user_id = ?', [str(info["user_id"])])
+                                'user_id = ?', [str(user_info["user_id"])])
         token = func_helper.get_tracking_code()
         return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_user_info", str(e), request_data,
-                                        info)
+                                        user_info)
         return None, {}
 
 

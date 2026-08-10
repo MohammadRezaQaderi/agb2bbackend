@@ -105,7 +105,7 @@ async def insert_api(request: Request):
         elif action == "ag_add_comment":
             return service.add_comment(conn=conn, cursor=cursor, request_data=request_data)
 
-        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
+        state, state_message, user_info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -119,7 +119,7 @@ async def insert_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=request_data, info=info)
+        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/insert_request", "insert_api", str(e), method_type)
@@ -159,7 +159,7 @@ async def select_api(request: Request):
         if action == "ag_get_comments":
             return service.get_comments(conn=conn, cursor=cursor)
 
-        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
+        state, state_message, user_info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -180,7 +180,7 @@ async def select_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=request_data, info=info)
+        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/select_request", "select_api", str(e), method_type)
@@ -209,7 +209,7 @@ async def update_api(request: Request):
             return func_helper.not_data_return(method_type=method_type)
 
         conn, cursor = await db_helper.db_connection()
-        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
+        state, state_message, user_info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -228,7 +228,7 @@ async def update_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=request_data, info=info)
+        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/update_request", "update_api", str(e), method_type)
@@ -257,7 +257,7 @@ async def delete_api(request: Request):
             return func_helper.not_data_return(method_type=method_type)
 
         conn, cursor = await db_helper.db_connection()
-        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
+        state, state_message, user_info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -269,7 +269,7 @@ async def delete_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=request_data, info=info)
+        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/delete_request", "delete_api", str(e), method_type)
@@ -344,11 +344,11 @@ async def update_user_file_image(request: Request):
         user_id = request_data["user_id"]
         token = request_data["token"]
         conn, cursor = await db_helper.db_connection()
-        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor,
+        state, state_message, user_info = await func_helper.authorizer(conn=conn, cursor=cursor,
                                                       request_data={"user_id": int(user_id), "token": token})
         if not state:
             return func_helper.not_auth_return(message=state_message)
-        return service.change_user_info(conn=conn, cursor=cursor, request_data=request_data, info=info)
+        return service.change_user_info(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api", "update_user_file_image", str(e), method_type)
     except Exception as e:
@@ -375,7 +375,7 @@ async def update_user_voice(
     conn, cursor = None, None
     try:
         conn, cursor = await db_helper.db_connection()
-        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor,
+        state, state_message, user_info = await func_helper.authorizer(conn=conn, cursor=cursor,
                                                       request_data={"user_id": int(user_id), "token": token})
         if not state:
             return func_helper.not_auth_return(message=state_message)
@@ -393,13 +393,13 @@ async def update_user_voice(
         with open(file_path, "wb") as file_object:
             file_object.write(voice.file.read())
         if role == "ins":
-            res_request = institute_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, info=info)
+            res_request = institute_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, user_info=user_info)
             return res_request
         elif role == "sch":
-            res_request = school_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, info=info)
+            res_request = school_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, user_info=user_info)
             return res_request
         elif role == "wCon":
-            res_request = owner_consultant_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, info=info)
+            res_request = owner_consultant_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, user_info=user_info)
             return res_request
         else:
             return {"status": 200, "tracking_code": None, "method_type": method_type,
