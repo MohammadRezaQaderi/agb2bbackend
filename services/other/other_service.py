@@ -47,7 +47,7 @@ def normalize_persian_text(text):
     text = text.replace("\u0643", "\u06A9")
     return text
 
-def select_all_products(conn, cursor):
+def get_all_products(conn, cursor):
     query = """
         SELECT 
             product_id AS id, 
@@ -73,7 +73,7 @@ def select_all_products(conn, cursor):
     return token, products_info
 
 
-def select_users_transactions(conn, cursor, request_data, info):
+def get_transactions(conn, cursor, request_data, info):
     try:
         query = """
                 SELECT 

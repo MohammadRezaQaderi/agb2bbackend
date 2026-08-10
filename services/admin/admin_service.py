@@ -5,7 +5,7 @@ import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
 
 
-def update_capacity(conn, cursor, request_data):
+def change_capacity(conn, cursor, request_data):
     """
     Update capacity with phone number of the user and log the changes.
     """
@@ -161,7 +161,7 @@ def update_capacity(conn, cursor, request_data):
 
     except Exception as e:
         func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/admin_request", "update_capacity", str(e), request_data, {}
+            conn, cursor, "ag_api/admin_request", "change_capacity", str(e), request_data, {}
         )
         return None, f"خطا در به‌روزرسانی ظرفیت: {str(e)}"
 

@@ -5,7 +5,7 @@ import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
 
 
-def select_consultant_info(conn, cursor, user_id):
+def get_info(conn, cursor, user_id):
     try:
         query = 'SELECT con_id, phone, first_name, last_name, ins_id, ins_role FROM con WHERE user_id = ?'
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
@@ -22,12 +22,12 @@ def select_consultant_info(conn, cursor, user_id):
         return token, response_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "select_consultant_info", str(e), {},
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_info", str(e), {},
                                         {"user_id": user_id})
         return None, {}
 
 
-def select_con_dashboard(conn, cursor, request_data, info):
+def get_dashboard(conn, cursor, request_data, info):
     """
     Fetches dashboard data for consultant users, including:
     - Student counts
@@ -171,11 +171,11 @@ def select_con_dashboard(conn, cursor, request_data, info):
 
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "select_con_dashboard", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_dashboard", str(e), request_data, info)
         return None, {}, []
 
 
-def select_con_report(conn, cursor, request_data, info):
+def get_report(conn, cursor, request_data, info):
     try:
         query = 'SELECT stu_id, user_id, phone, first_name, last_name, sex, city, access, comment, password FROM stu WHERE con_id = ?'
         res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
@@ -197,11 +197,11 @@ def select_con_report(conn, cursor, request_data, info):
         return token, report_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "select_con_report", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_report", str(e), request_data, info)
         return None, []
 
 
-def select_con_management_report(conn, cursor, request_data, info):
+def get_management_report(conn, cursor, request_data, info):
     try:
         # Fetch basic student info for this consultant
         query = 'SELECT stu_id, user_id, phone, first_name, last_name, sex, city, access, password FROM stu WHERE con_id = ?'
@@ -289,13 +289,13 @@ def select_con_management_report(conn, cursor, request_data, info):
         return token, report_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "select_con_management_report", str(e),
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_management_report", str(e),
                                         request_data, info)
         return None, None
 
 
 # this function use for get students of con for list of students
-def select_con_student(conn, cursor, request_data, info):
+def get_students(conn, cursor, request_data, info):
     try:
         query = 'SELECT first_name, last_name FROM con WHERE user_id = ?'
         res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
@@ -332,12 +332,12 @@ def select_con_student(conn, cursor, request_data, info):
         return token, stu_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "select_con_student", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_students", str(e), request_data, info)
         return None, []
 
 
 # this function is for update the information of consultant
-def update_con_student(conn, cursor, request_data, info):
+def change_student(conn, cursor, request_data, info):
     try:
         db_helper.update_record(conn, cursor, 'stu',
                                 ['first_name', 'last_name', 'sex', 'city', 'editor_id', 'birth_date',
@@ -350,11 +350,11 @@ def update_con_student(conn, cursor, request_data, info):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "update_con_student", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_student", str(e), request_data, info)
         return None
 
 
-def update_con_comment(conn, cursor, request_data, info):
+def change_comment(conn, cursor, request_data, info):
     try:
         db_helper.update_record(conn, cursor, 'stu',
                                 ['comment', 'editor_id', 'edited_time'],
@@ -365,11 +365,11 @@ def update_con_comment(conn, cursor, request_data, info):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "update_con_comment", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_comment", str(e), request_data, info)
         return None
 
 
-def update_con_user_profile(conn, cursor, request_data, info):
+def change_user_info(conn, cursor, request_data, info):
     try:
         db_helper.update_record(conn, cursor, 'con',
                                 ['first_name', 'last_name', 'edited_time'],
@@ -380,6 +380,8 @@ def update_con_user_profile(conn, cursor, request_data, info):
         return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "update_con_user_profile", str(e), request_data,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_user_info", str(e), request_data,
                                         info)
         return None, {}
+
+

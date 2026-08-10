@@ -47,7 +47,7 @@ async def signin_api(request: Request):
     try:
         data = await request.json()
 
-        action = data.get("action_type")
+        action = func_helper.normalize_action_type(data.get("action_type"))
         if not action:
             return func_helper.not_method_access_return()
 
@@ -55,12 +55,12 @@ async def signin_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        if action != "signin":
+        if action != "ag_sign_in":
             return func_helper.not_method_access_return()
 
         conn, cursor = await db_helper.db_connection()
 
-        return service.signin(conn=conn, cursor=cursor, request_data=request_data)
+        return service.sign_in(conn=conn, cursor=cursor, request_data=request_data)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/signin", "signin_api", str(e), method_type)
@@ -80,7 +80,7 @@ async def insert_api(request: Request):
     try:
         data = await request.json()
 
-        action = data.get("action_type")
+        action = func_helper.normalize_action_type(data.get("action_type"))
         if not action:
             return func_helper.not_method_access_return()
 
@@ -90,29 +90,29 @@ async def insert_api(request: Request):
 
         conn, cursor = await db_helper.db_connection()
 
-        if action == "signup":
+        if action == "ag_sign_up":
             redis_db = await db_helper.redis_connection()
             try:
-                return service.signup(conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data)
+                return service.sign_up(conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data)
             finally:
                 await db_helper.close_redis_connection(redis_db=redis_db)
-        elif action == "send_otp":
+        elif action == "ag_send_otp":
             redis_db = await db_helper.redis_connection()
             try:
                 return service.send_otp(conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data)
             finally:
                 await db_helper.close_redis_connection(redis_db=redis_db)
-        elif action == "insert_comment":
-            return service.insert_comment(conn=conn, cursor=cursor, request_data=request_data)
+        elif action == "ag_add_comment":
+            return service.add_comment(conn=conn, cursor=cursor, request_data=request_data)
 
         state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
         action_map = {
-            "insert_order_payment": service.insert_order_payment,
-            "insert_consultant": service.insert_consultant,
-            "insert_student": service.insert_student,
+            "ag_add_payment_order": service.add_payment_order,
+            "ag_add_consultant": service.add_consultant,
+            "ag_add_student": service.add_student,
         }
 
         handler = action_map.get(action)
@@ -139,7 +139,7 @@ async def select_api(request: Request):
     try:
         data = await request.json()
 
-        action = data.get("action_type")
+        action = func_helper.normalize_action_type(data.get("action_type"))
         if not action:
             return func_helper.not_method_access_return()
 
@@ -149,31 +149,31 @@ async def select_api(request: Request):
 
         conn, cursor = await db_helper.db_connection()
 
-        if action == "check_otp":
+        if action == "ag_check_otp":
             redis_db = await db_helper.redis_connection()
             try:
                 return service.check_otp(conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data)
             finally:
                 await db_helper.close_redis_connection(redis_db=redis_db)
 
-        if action == "select_comments":
-            return service.select_comments(conn=conn, cursor=cursor)
+        if action == "ag_get_comments":
+            return service.get_comments(conn=conn, cursor=cursor)
 
         state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
         action_map = {
-            "select_dashboard": service.select_dashboard,
-            "select_consultants": service.select_consultants,
-            "select_students": service.select_students,
-            "select_report": service.select_report,
-            "select_management_report": service.select_management_report,
-            "select_quiz_setting": service.select_quiz_setting,
-            "select_quiz_info": service.select_quiz_info,
-            "apply_discount": service.apply_discount,
-            "select_users_transactions": service.get_users_transactions,
-            "select_report_data": service.select_report_data,
+            "ag_get_dashboard": service.get_dashboard,
+            "ag_get_consultants": service.get_consultants,
+            "ag_get_students": service.get_students,
+            "ag_get_report": service.get_report,
+            "ag_get_management_report": service.get_management_report,
+            "ag_get_quiz_setting": service.get_quiz_setting,
+            "ag_get_quiz_info": service.get_quiz_info,
+            "ag_apply_discount": service.apply_discount,
+            "ag_get_transactions": service.get_transactions,
+            "ag_get_report_data": service.get_report_data,
         }
 
         handler = action_map.get(action)
@@ -200,7 +200,7 @@ async def update_api(request: Request):
     try:
         data = await request.json()
 
-        action = data.get("action_type")
+        action = func_helper.normalize_action_type(data.get("action_type"))
         if not action:
             return func_helper.not_method_access_return()
 
@@ -214,14 +214,14 @@ async def update_api(request: Request):
             return func_helper.not_auth_return(message=state_message)
 
         action_map = {
-            "update_user": service.update_user,
-            "update_password": service.update_password,
-            "update_setting": service.update_setting,
-            "update_consultant": service.update_consultant,
-            "update_student": service.update_student,
-            "update_comment": service.make_comment,
-            "update_user_quiz_setting": service.update_user_quiz_setting,
-            "update_student_access": service.update_student_access,
+            "ag_change_user_info": service.change_user_info,
+            "ag_change_password": service.change_password,
+            "ag_change_setting": service.change_setting,
+            "ag_change_consultant": service.change_consultant,
+            "ag_change_student": service.change_student,
+            "ag_change_comment": service.change_comment,
+            "ag_change_user_quiz_setting": service.change_user_quiz_setting,
+            "ag_change_student_access": service.change_student_access,
         }
 
         handler = action_map.get(action)
@@ -248,7 +248,7 @@ async def delete_api(request: Request):
     try:
         data = await request.json()
 
-        action = data.get("action_type")
+        action = func_helper.normalize_action_type(data.get("action_type"))
         if not action:
             return func_helper.not_method_access_return()
 
@@ -262,7 +262,7 @@ async def delete_api(request: Request):
             return func_helper.not_auth_return(message=state_message)
 
         action_map = {
-            "delete_token": service.delete_token,
+            "ag_remove_token": service.remove_token,
         }
 
         handler = action_map.get(action)
@@ -293,7 +293,7 @@ async def admin_api(request: Request):
         if not func_helper.authorize_admin(token=token):
             return func_helper.not_auth_return(message="شما به این سرویس دسترسی ندارید.", method_type=method_type)
 
-        action = data.get("action_type")
+        action = func_helper.normalize_action_type(data.get("action_type"))
         if not action:
             return func_helper.not_method_access_return()
 
@@ -304,9 +304,9 @@ async def admin_api(request: Request):
         conn, cursor = await db_helper.db_connection()
 
         action_map = {
-            "update_capacity": service.admin_update_capacity,
-            "get_user_info": service.admin_get_user_info,
-            "check_student_quiz_answer": service.admin_check_student_quiz_answer,
+            "ag_change_capacity": service.admin_change_capacity,
+            "ag_get_user_info": service.admin_get_user_info,
+            "ag_check_student_quiz_answer": service.admin_check_student_quiz_answer,
         }
 
         handler = action_map.get(action)
@@ -331,10 +331,10 @@ async def update_user_file_image(request: Request):
     conn, cursor = None, None
     try:
         data = await request.json()
-        action = data.get("action_type")
+        action = func_helper.normalize_action_type(data.get("action_type"))
         if not action:
             return func_helper.not_method_access_return()
-        if action not in ["update_user", "update_user_file_image"]:
+        if action not in ["ag_change_user_info", "ag_change_user_image"]:
             return func_helper.not_method_access_return()
 
         request_data = data.get("request_data")
@@ -348,7 +348,7 @@ async def update_user_file_image(request: Request):
                                                       request_data={"user_id": int(user_id), "token": token})
         if not state:
             return func_helper.not_auth_return(message=state_message)
-        return service.update_user(conn=conn, cursor=cursor, request_data=request_data, info=info)
+        return service.change_user_info(conn=conn, cursor=cursor, request_data=request_data, info=info)
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api", "update_user_file_image", str(e), method_type)
     except Exception as e:
@@ -393,13 +393,13 @@ async def update_user_voice(
         with open(file_path, "wb") as file_object:
             file_object.write(voice.file.read())
         if role == "ins":
-            res_request = institute_service.update_user_ins_voice(conn=conn, cursor=cursor, request_data=data, info=info)
+            res_request = institute_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, info=info)
             return res_request
         elif role == "sch":
-            res_request = school_service.update_user_sch_voice(conn=conn, cursor=cursor, request_data=data, info=info)
+            res_request = school_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, info=info)
             return res_request
         elif role == "wCon":
-            res_request = owner_consultant_service.update_user_wcon_voice(conn=conn, cursor=cursor, request_data=data, info=info)
+            res_request = owner_consultant_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, info=info)
             return res_request
         else:
             return {"status": 200, "tracking_code": None, "method_type": method_type,

@@ -6,7 +6,7 @@ import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
 
 
-def select_school_info(conn, cursor, user_id):
+def get_info(conn, cursor, user_id):
     try:
         query = 'SELECT sch_id, name, logo, phone FROM sch WHERE user_id = ?'
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
@@ -16,12 +16,12 @@ def select_school_info(conn, cursor, user_id):
         return token, info_response
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "select_school_info", str(e), None,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "get_info", str(e), None,
                                         {"user_id": user_id})
         return None, None
 
 
-def select_sch_dashboard(conn, cursor, request_data, info):
+def get_dashboard(conn, cursor, request_data, info):
     """
     Fetches dashboard data for school users, including capacity info,
     student/consultant counts, quiz progress, and notifications.
@@ -160,11 +160,11 @@ def select_sch_dashboard(conn, cursor, request_data, info):
 
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "select_sch_dashboard", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "get_dashboard", str(e), request_data, info)
         return None, {}, []
 
 
-def insert_school(conn, cursor, request_data, user_id):
+def add_school(conn, cursor, request_data, user_id):
     try:
         table = "sch"
         field = '([name], [phone], [password], [user_id])'
@@ -176,12 +176,12 @@ def insert_school(conn, cursor, request_data, user_id):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "insert_school", str(e), request_data,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "add_school", str(e), request_data,
                                         {"user_id": user_id, "phone": request_data["phone"]})
         return None
 
 
-def select_sch_report(conn, cursor, request_data, info):
+def get_report(conn, cursor, request_data, info):
     try:
         query = 'SELECT stu_id, user_id, phone, first_name, last_name, sex, city, access, comment, password, con_id FROM stu WHERE ins_id = ?'
         res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
@@ -209,11 +209,11 @@ def select_sch_report(conn, cursor, request_data, info):
         return token, report_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "select_sch_report", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "get_report", str(e), request_data, info)
         return None, []
 
 
-def select_sch_management_report(conn, cursor, request_data, info):
+def get_management_report(conn, cursor, request_data, info):
     try:
         # Fetch basic student info for this school
         query = 'SELECT stu_id, user_id, phone, first_name, last_name, sex, city, access, password, con_id FROM stu WHERE ins_id = ?'
@@ -309,14 +309,14 @@ def select_sch_management_report(conn, cursor, request_data, info):
         return token, report_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "select_sch_management_report", str(e),
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "get_management_report", str(e),
                                         request_data,
                                         info)
         return None, []
 
 
 # this function is add consultant in school
-def insert_sch_consultant(conn, cursor, request_data, con_user_id, info):
+def add_consultant(conn, cursor, request_data, con_user_id, info):
     try:
         table = "con"
         field = '([first_name], [last_name], [phone], [password], [user_id], [ins_id], [editor_id], [ins_role], [sex])'
@@ -330,12 +330,12 @@ def insert_sch_consultant(conn, cursor, request_data, con_user_id, info):
         return token, "مشاور شما با موفقیت ثبت شد."
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "insert_sch_consultant", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "add_consultant", str(e), request_data, info)
         return None, "مشکلی در ثبت نهایی اطلاعات مشاور رخ داده است لطفا با پیشیبانی در ارتباط باشید."
 
 
 # this function is for update the information of consultant
-def update_sch_consultant(conn, cursor, request_data, info):
+def change_consultant(conn, cursor, request_data, info):
     try:
         db_helper.update_record(conn, cursor, 'con',
                                 ['first_name', 'last_name', 'sex', 'editor_id', 'edited_time'],
@@ -346,12 +346,12 @@ def update_sch_consultant(conn, cursor, request_data, info):
         return token, "اطلاعات مشاور شما با موفقیت تغییر کرد."
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "update_sch_consultant", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "change_consultant", str(e), request_data, info)
         return None, "مشکلی در ثبت نهایی اطلاعات مشاور رخ داده است لطفا با پیشیبانی در ارتباط باشید."
 
 
 # this function use for get consultant of sch for list of consultants and add students cons pick filed
-def select_sch_consultant(conn, cursor, request_data, info):
+def get_consultants(conn, cursor, request_data, info):
     try:
         query = 'SELECT con_id, user_id, phone, first_name, last_name, password, sex FROM con WHERE ins_id = ?'
         res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
@@ -367,12 +367,12 @@ def select_sch_consultant(conn, cursor, request_data, info):
         return token, cons_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "select_sch_consultant", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "get_consultants", str(e), request_data, info)
         return None, []
 
 
 # this function for insert student to school
-def insert_sch_student(conn, cursor, request_data, stu_user_id, info):
+def add_student(conn, cursor, request_data, stu_user_id, info):
     try:
         table = "stu"
         field = '([first_name], [last_name], [phone], [password], [sex], [city], [con_id], [user_id], [ins_id], [adder_id], [birth_date], [ins_role])'
@@ -387,12 +387,12 @@ def insert_sch_student(conn, cursor, request_data, stu_user_id, info):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "insert_sch_student", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "add_student", str(e), request_data, info)
         return None
 
 
 # this function is for update the information of consultant
-def update_sch_student(conn, cursor, request_data, info):
+def change_student(conn, cursor, request_data, info):
     try:
         db_helper.update_record(conn, cursor, 'stu',
                                 ['first_name', 'last_name', 'sex', 'city', 'con_id', 'editor_id',
@@ -405,12 +405,12 @@ def update_sch_student(conn, cursor, request_data, info):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "update_sch_student", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "change_student", str(e), request_data, info)
         return None
 
 
 # this function use for get students of sch for list of students
-def select_sch_student(conn, cursor, request_data, info):
+def get_students(conn, cursor, request_data, info):
     try:
         query = 'SELECT stu_id, user_id, phone, first_name, last_name, password, sex, city, birth_date, access, con_id FROM stu WHERE ins_id = ?'
         res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
@@ -447,11 +447,11 @@ def select_sch_student(conn, cursor, request_data, info):
         return token, stu_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "select_sch_student", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "get_students", str(e), request_data, info)
         return None, []
 
 
-def update_sch_user_profile(conn, cursor, request_data, info):
+def change_user_info(conn, cursor, request_data, info):
     try:
         update_fields = ['name', 'edited_time']
         update_values = [request_data["name"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")]
@@ -475,12 +475,12 @@ def update_sch_user_profile(conn, cursor, request_data, info):
         return token, response
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "update_sch_user_profile", str(e), request_data,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "change_user_info", str(e), request_data,
                                         info)
         return None, {}
 
 
-def update_user_sch_pic(conn, cursor, request_data, info):
+def change_user_image(conn, cursor, request_data, info):
     try:
         method_type = "UPDATE"
         db_helper.update_record(conn, cursor, 'sch',
@@ -494,14 +494,14 @@ def update_user_sch_pic(conn, cursor, request_data, info):
                              "message": "اطلاعات شما با موفقیت تغییر یافت."}}
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "update_user_sch_pic", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "change_user_image", str(e), request_data, info)
 
         return {"status": 200, "tracking_code": None, "method_type": None,
                 "response": {"data": {"name": request_data["name"], "pic": request_data["pic"]},
                              "message": "اطلاعات شما با موفقیت تغییر نیافت."}}
 
 
-def update_user_sch_voice(conn, cursor, request_data, info):
+def change_user_voice(conn, cursor, request_data, info):
     try:
         method_type = "UPDATE"
         token = func_helper.get_tracking_code()
@@ -524,12 +524,12 @@ def update_user_sch_voice(conn, cursor, request_data, info):
                     "response": {"message": "اطلاعات شما با موفقیت تغییر یافت."}}
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "update_user_sch_voice", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "change_user_voice", str(e), request_data, info)
         return {"status": 200, "tracking_code": None, "method_type": None,
                 "response": {"message": "اطلاعات شما با موفقیت تغییر یافت."}}
 
 
-def update_sch_setting(conn, cursor, request_data, info):
+def change_setting(conn, cursor, request_data, info):
     try:
         if request_data["setting_id"] == "no setting":
             table = "setting"
@@ -549,11 +549,11 @@ def update_sch_setting(conn, cursor, request_data, info):
             return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "update_sch_setting", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "change_setting", str(e), request_data, info)
         return None
 
 
-def update_sch_verify(conn, cursor, user_id):
+def verify_user(conn, cursor, user_id):
     try:
         db_helper.update_record(conn, cursor, 'sch',
                                 ['verify', 'edited_time'],
@@ -567,12 +567,12 @@ def update_sch_verify(conn, cursor, user_id):
         return token, info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "update_sch_verify", str(e), None,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "verify_user", str(e), None,
                                         {"user_id": user_id})
         return None, None
 
 
-def update_sch_student_access(conn, cursor, request_data, info):
+def change_student_access(conn, cursor, request_data, info):
     """
     Update student access permissions and manage capacity tracking for school.
     
@@ -587,3 +587,5 @@ def update_sch_student_access(conn, cursor, request_data, info):
         id_field="ins_id",
         end_point="ag_api/sch"
     )
+
+

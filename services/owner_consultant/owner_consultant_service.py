@@ -6,7 +6,7 @@ import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
 
 
-def select_wcon_info(conn, cursor, user_id):
+def get_info(conn, cursor, user_id):
     try:
         query = 'SELECT wCon_id, phone, first_name, last_name, logo FROM wCon WHERE user_id = ?'
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
@@ -16,12 +16,12 @@ def select_wcon_info(conn, cursor, user_id):
         return token, info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "select_wcon_info", str(e), {},
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "get_info", str(e), {},
                                         {"user_id": user_id})
         return None, None
 
 
-def select_wcon_dashboard(conn, cursor, request_data, info):
+def get_dashboard(conn, cursor, request_data, info):
     """
     Fetches dashboard data for owner consultants, including:
     - Per-package capacity (AG, BK, etc.)
@@ -154,12 +154,12 @@ def select_wcon_dashboard(conn, cursor, request_data, info):
 
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "select_wcon_dashboard", str(e), request_data,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "get_dashboard", str(e), request_data,
                                         info)
         return None, {}, []
 
 
-def insert_owner_consultant(conn, cursor, request_data, user_id):
+def add_owner_consultant(conn, cursor, request_data, user_id):
     try:
         table = "wCon"
         sex = request_data.get("sex")
@@ -177,12 +177,12 @@ def insert_owner_consultant(conn, cursor, request_data, user_id):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "insert_owner_consultant", str(e), request_data,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "add_owner_consultant", str(e), request_data,
                                         {"user_id": user_id, "phone": request_data["phone"]})
         return None
 
 
-def select_wcon_report(conn, cursor, request_data, info):
+def get_report(conn, cursor, request_data, info):
     try:
         query = 'SELECT stu_id, user_id, phone, first_name, last_name, sex, city, access, comment, password FROM stu WHERE con_id = ?'
         res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
@@ -204,11 +204,11 @@ def select_wcon_report(conn, cursor, request_data, info):
         return token, report_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "select_wcon_report", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "get_report", str(e), request_data, info)
         return None, []
 
 
-def select_wcon_management_report(conn, cursor, request_data, info):
+def get_management_report(conn, cursor, request_data, info):
     try:
         query = 'SELECT stu_id, user_id, phone, first_name, last_name, sex, city, access, password FROM stu WHERE con_id = ?'
         res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
@@ -291,12 +291,12 @@ def select_wcon_management_report(conn, cursor, request_data, info):
         return token, report_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "select_wcon_management_report", str(e),
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "get_management_report", str(e),
                                         request_data, info)
         return None, None
 
 
-def insert_wcon_student(conn, cursor, request_data, stu_user_id, info):
+def add_student(conn, cursor, request_data, stu_user_id, info):
     try:
         table = "stu"
         field = '([user_id], [first_name], [last_name], [phone], [password], [sex], [city], [ins_id], [con_id], [adder_id], [editor_id], [birth_date], [ins_role])'
@@ -311,11 +311,11 @@ def insert_wcon_student(conn, cursor, request_data, stu_user_id, info):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "insert_wcon_student", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "add_student", str(e), request_data, info)
         return None
 
 
-def update_wcon_student(conn, cursor, request_data, info):
+def change_student(conn, cursor, request_data, info):
     try:
         db_helper.update_record(conn, cursor, 'stu',
                                 ['first_name', 'last_name', 'sex', 'city', 'editor_id', 'birth_date',
@@ -328,11 +328,11 @@ def update_wcon_student(conn, cursor, request_data, info):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "update_wcon_student", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "change_student", str(e), request_data, info)
         return None
 
 
-def update_wcon_comment(conn, cursor, request_data, info):
+def change_comment(conn, cursor, request_data, info):
     try:
         db_helper.update_record(conn, cursor, 'stu',
                                 ['comment', 'editor_id', 'edited_time'],
@@ -343,11 +343,11 @@ def update_wcon_comment(conn, cursor, request_data, info):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "update_wcon_comment", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "change_comment", str(e), request_data, info)
         return None
 
 
-def update_wcon_user_profile(conn, cursor, request_data, info):
+def change_user_info(conn, cursor, request_data, info):
     try:
         update_fields = ['first_name', 'last_name', 'edited_time']
         update_values = [
@@ -375,12 +375,12 @@ def update_wcon_user_profile(conn, cursor, request_data, info):
         return token, response
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "update_wcon_user_profile", str(e), request_data,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "change_user_info", str(e), request_data,
                                         info)
         return None, {}
 
 
-def select_wcon_student(conn, cursor, request_data, info):
+def get_students(conn, cursor, request_data, info):
     try:
         query = 'SELECT first_name, last_name FROM wCon WHERE user_id = ?'
         res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
@@ -402,11 +402,11 @@ def select_wcon_student(conn, cursor, request_data, info):
         return token, stu_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "select_wcon_student", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "get_students", str(e), request_data, info)
         return None, []
 
 
-def update_user_wcon_voice(conn, cursor, request_data, info):
+def change_user_voice(conn, cursor, request_data, info):
     try:
         method_type = "UPDATE"
         token = func_helper.get_tracking_code()
@@ -429,13 +429,13 @@ def update_user_wcon_voice(conn, cursor, request_data, info):
                     "response": {"message": "اطلاعات شما با موفقیت تغییر یافت."}}
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "update_user_wcon_voice", str(e), request_data,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "change_user_voice", str(e), request_data,
                                         info)
         return {"status": 200, "tracking_code": None, "method_type": None,
                 "response": {"message": "اطلاعات شما با موفقیت تغییر یافت."}}
 
 
-def update_wcon_setting(conn, cursor, request_data, info):
+def change_setting(conn, cursor, request_data, info):
     try:
         if request_data["setting_id"] == "no setting":
             table = "setting"
@@ -455,11 +455,11 @@ def update_wcon_setting(conn, cursor, request_data, info):
             return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "update_wcon_setting", str(e), request_data, info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "change_setting", str(e), request_data, info)
         return None
 
 
-def update_wcon_verify(conn, cursor, user_id):
+def verify_user(conn, cursor, user_id):
     try:
         db_helper.update_record(conn, cursor, 'wCon',
                                 ['verify', 'edited_time'],
@@ -473,12 +473,12 @@ def update_wcon_verify(conn, cursor, user_id):
         return token, info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "update_wcon_verify", str(e), None,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "verify_user", str(e), None,
                                         {"user_id": user_id})
         return None, None
 
 
-def update_wcon_student_access(conn, cursor, request_data, info):
+def change_student_access(conn, cursor, request_data, info):
     """
     Update student access permissions and manage capacity tracking for owner consultant.
 
@@ -493,3 +493,5 @@ def update_wcon_student_access(conn, cursor, request_data, info):
         id_field="ins_id",
         end_point="ag_api/wCon"
     )
+
+

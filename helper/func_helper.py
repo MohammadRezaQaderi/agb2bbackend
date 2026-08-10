@@ -19,9 +19,50 @@ from config import PASSWORD_SECRET_KEY, DB_DRIVER, DB_SERVER, DB_DATABASE, DB_UI
 
 _PASSWORD_FERNET: Optional[Fernet] = None
 
+ACTION_TYPE_ALIASES = {
+    "signin": "ag_sign_in",
+    "signup": "ag_sign_up",
+    "send_otp": "ag_send_otp",
+    "check_otp": "ag_check_otp",
+    "insert_comment": "ag_add_comment",
+    "insert_order_payment": "ag_add_payment_order",
+    "insert_consultant": "ag_add_consultant",
+    "insert_student": "ag_add_student",
+    "select_comments": "ag_get_comments",
+    "select_dashboard": "ag_get_dashboard",
+    "select_consultants": "ag_get_consultants",
+    "select_students": "ag_get_students",
+    "select_report": "ag_get_report",
+    "select_management_report": "ag_get_management_report",
+    "select_quiz_setting": "ag_get_quiz_setting",
+    "select_quiz_info": "ag_get_quiz_info",
+    "select_users_transactions": "ag_get_transactions",
+    "select_report_data": "ag_get_report_data",
+    "apply_discount": "ag_apply_discount",
+    "update_user": "ag_change_user_info",
+    "update_password": "ag_change_password",
+    "update_setting": "ag_change_setting",
+    "update_consultant": "ag_change_consultant",
+    "update_student": "ag_change_student",
+    "update_comment": "ag_change_comment",
+    "update_user_quiz_setting": "ag_change_user_quiz_setting",
+    "update_student_access": "ag_change_student_access",
+    "update_user_file_image": "ag_change_user_image",
+    "delete_token": "ag_remove_token",
+    "update_capacity": "ag_change_capacity",
+    "get_user_info": "ag_get_user_info",
+    "check_student_quiz_answer": "ag_check_student_quiz_answer",
+}
+
 
 def get_tracking_code() -> str:
     return str(uuid.uuid4())
+
+
+def normalize_action_type(action_type: str | None) -> str | None:
+    if action_type is None:
+        return None
+    return ACTION_TYPE_ALIASES.get(action_type, action_type)
 
 
 def save_base64_image(pic_value: str | None, last_pic: str | None, storage_dir: str) -> str | None:
