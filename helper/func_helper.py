@@ -15,7 +15,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 import helper.db.db_helper as db_helper
 from config import PASSWORD_SECRET_KEY, DB_DRIVER, DB_SERVER, DB_DATABASE, DB_UID, DB_PWD, DB_TRUST_CERT, REDIS_HOST, \
-    REDIS_PORT, REDIS_DB, REDIS_PASSWORD
+    REDIS_PORT, REDIS_DB, REDIS_PASSWORD, DEVELOP_TOKEN
 
 _PASSWORD_FERNET: Optional[Fernet] = None
 
@@ -54,6 +54,32 @@ def save_base64_image(pic_value: str | None, last_pic: str | None, storage_dir: 
             os.remove(last_path)
 
     return new_file_name
+
+
+def authorize_admin(token: str | None) -> bool:
+    return bool(token and token == DEVELOP_TOKEN)
+
+
+async def health_payload(service_name: str):
+    instance_name = os.getenv("INSTANCE_NAME", "unknown")
+    port = os.getenv("PORT", "unknown")
+
+    try:
+        conn, cursor = await db_helper.db_connection()
+        await db_helper.close_db_connection(conn=conn, cursor=cursor)
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+
+    return {
+        "status": "healthy" if db_status == "connected" else "degraded",
+        "timestamp": datetime.now().isoformat(),
+        "service": service_name,
+        "instance": instance_name,
+        "port": port,
+        "database": db_status,
+        "version": "1.0.0"
+    }
 
 AG_QUIZ_NAME_TITLE = [
     "کتل", "گاردنر", "نئو", "کلیفتون", "هالند",

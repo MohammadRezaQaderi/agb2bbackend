@@ -1,26 +1,17 @@
 import os
-import time
 import json
-from functools import wraps
 
 from fastapi import FastAPI, Request, Form, UploadFile, HTTPException
-from fastapi.responses import FileResponse, Response, JSONResponse
-from prometheus_client import (
-    Counter,
-    Histogram,
-    Gauge,
-    generate_latest,
-    CONTENT_TYPE_LATEST,
-)
+from fastapi.responses import FileResponse, JSONResponse
 
 import helper.db.db_helper as db_helper
+import helper.api_metrics as api_metrics
 import helper.func_helper as func_helper
 import services.institute.institute_service as institute_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
 import services.service as service
 from config import (
-    DEVELOP_TOKEN,
     INS_PIC_DIR,
     VOICES_DIR,
     REPORTS_DIR,
@@ -34,223 +25,42 @@ from config import (
 )
 
 app = FastAPI()
-
-# ---------------------------------------------------------------------------
-# Prometheus metrics
-# ---------------------------------------------------------------------------
-
-REQUEST_COUNT = Counter(
-    "ag_api_requests_total",
-    "Total count of requests by endpoint and method_type",
-    ["endpoint", "method_type", "status_code"],
-)
-
-REQUEST_LATENCY = Histogram(
-    "ag_api_request_duration_seconds",
-    "Histogram of request processing time by endpoint and method_type",
-    ["endpoint", "method_type", "status_code"],
-)
-
-REQUEST_ERRORS = Counter(
-    "ag_api_request_errors_total",
-    "Count of errors by endpoint and method_type",
-    ["endpoint", "method_type"],
-)
-
-HTTP_REQUESTS_TOTAL = Counter(
-    "ag_http_requests_total",
-    "Total HTTP requests",
-    ["method", "path", "status_code"],
-)
-
-HTTP_REQUEST_LATENCY_SECONDS = Histogram(
-    "ag_http_request_duration_seconds",
-    "HTTP request latency in seconds",
-    ["method", "path", "status_code"],
-)
-
-HTTP_REQUESTS_IN_PROGRESS = Gauge(
-    "ag_http_requests_in_progress",
-    "Number of HTTP requests in progress",
-    ["method", "path"],
-)
-
-
-def monitor_endpoint(endpoint_name: str):
-    """
-    Decorator to measure latency and basic counters per endpoint.
-
-    This keeps the existing behaviour (driven by request.json()['method_type'])
-    but extends the metrics with response status_code for richer dashboards.
-    """
-
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            start_time = time.perf_counter()
-            method_type = "UNKNOWN"
-            status_code = "200"
-            try:
-                request: Request | None = kwargs.get("request")
-                if request:
-                    try:
-                        body = await request.json()
-                        method_type = body.get("method_type", "UNKNOWN")
-                    except Exception as e:
-                        print(e)
-
-                response = await func(*args, **kwargs)
-
-                try:
-                    status_code = str(getattr(response, "status_code", 200))
-                except Exception as e:
-                    print(e)
-                    status_code = "200"
-
-                REQUEST_COUNT.labels(
-                    endpoint=endpoint_name,
-                    method_type=method_type,
-                    status_code=status_code,
-                ).inc()
-
-                return response
-            except Exception:
-                REQUEST_ERRORS.labels(
-                    endpoint=endpoint_name,
-                    method_type=method_type,
-                ).inc()
-                status_code = "500"
-                raise
-            finally:
-                elapsed = time.perf_counter() - start_time
-                REQUEST_LATENCY.labels(
-                    endpoint=endpoint_name,
-                    method_type=method_type,
-                    status_code=status_code,
-                ).observe(elapsed)
-
-        return wrapper
-
-    return decorator
-
-
-@app.middleware("http")
-async def prometheus_http_middleware(request: Request, call_next):
-    """
-    Lightweight middleware that exposes generic HTTP-level metrics.
-
-    It complements the explicit @monitor_endpoint decorator and covers:
-    - all HTTP methods
-    - all paths (except /ag_api/metrics and docs)
-    - in-progress requests
-    - latency and status codes
-    """
-
-    path = request.url.path
-
-    # Avoid self-scraping and skip docs by default
-    if path in {"/ag_api/metrics", "/docs", "/redoc", "/openapi.json"}:
-        return await call_next(request)
-
-    method = request.method
-    labels_in_progress = {"method": method, "path": path}
-    HTTP_REQUESTS_IN_PROGRESS.labels(**labels_in_progress).inc()
-
-    start_time = time.perf_counter()
-    status_code = "500"
-
-    try:
-        response = await call_next(request)
-        status_code = str(getattr(response, "status_code", 200))
-        return response
-    except Exception:
-        # Exceptions are turned into 500s by FastAPI; we still want to count them
-        status_code = "500"
-        raise
-    finally:
-        elapsed = time.perf_counter() - start_time
-        HTTP_REQUESTS_IN_PROGRESS.labels(**labels_in_progress).dec()
-
-        HTTP_REQUESTS_TOTAL.labels(
-            method=method,
-            path=path,
-            status_code=status_code,
-        ).inc()
-
-        HTTP_REQUEST_LATENCY_SECONDS.labels(
-            method=method,
-            path=path,
-            status_code=status_code,
-        ).observe(elapsed)
-
-
-def check_develop_token(token):
-    if token and token == DEVELOP_TOKEN:
-        return True
-    return False
+app.middleware("http")(api_metrics.prometheus_http_middleware)
 
 
 @app.get("/ag_api/metrics")
 async def metrics():
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    return api_metrics.metrics_response()
 
 
 @app.get("/ag_api/health")
-async def health_check(request: Request):
-    """
-    Health check endpoint for monitoring and load balancers.
-
-    Returns:
-        JSON response with health status, timestamp, and instance information.
-    """
-    import os
-    from datetime import datetime
-
-    instance_name = os.getenv("INSTANCE_NAME", "unknown")
-    port = os.getenv("PORT", "unknown")
-
-    # Basic health check - can be extended to check database, redis, etc.
-    try:
-        # Quick database connection test
-        conn, cursor = await func_helper.db_connection()
-        await func_helper.close_db_connection(conn, cursor)
-        db_status = "connected"
-    except Exception as e:
-        db_status = f"error: {str(e)}"
-
-    return {
-        "status": "healthy" if db_status == "connected" else "degraded",
-        "timestamp": datetime.now().isoformat(),
-        "instance": instance_name,
-        "port": port,
-        "database": db_status,
-        "version": "1.0.0"
-    }
+async def health_check():
+    return await func_helper.health_payload("ag_api")
 
 
 @app.post("/ag_api/signin")
-@monitor_endpoint("signin_api")
+@api_metrics.monitor_endpoint("ag_api/signin")
 async def signin_api(request: Request):
     method_type = "SIGNIN"
     conn, cursor = None, None
 
     try:
-        request_data = await request.json()
+        data = await request.json()
 
-        action = request_data.get("method_type")
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
 
-        data = request_data.get("data")
-        if data is None:
+        request_data = data.get("request_data")
+        if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
         if action != "signin":
             return func_helper.not_method_access_return()
 
-        conn, cursor = await func_helper.db_connection()
+        conn, cursor = await db_helper.db_connection()
 
-        return service.signin(conn=conn, cursor=cursor, request_data=data)
+        return service.signin(conn=conn, cursor=cursor, request_data=request_data)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/signin", "signin_api", str(e), method_type)
@@ -258,44 +68,44 @@ async def signin_api(request: Request):
         return await func_helper.exception_error_logging("ag_api/signin", "signin_api", str(e), method_type)
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/insert_request")
-@monitor_endpoint("insert_request")
+@api_metrics.monitor_endpoint("ag_api/insert_request")
 async def insert_api(request: Request):
     method_type = "INSERT"
     conn, cursor = None, None
 
     try:
-        request_data = await request.json()
+        data = await request.json()
 
-        action = request_data.get("method_type")
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
 
-        data = request_data.get("data")
-        if data is None:
+        request_data = data.get("request_data")
+        if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await func_helper.db_connection()
+        conn, cursor = await db_helper.db_connection()
 
         if action == "signup":
-            redis_db = await func_helper.redis_connection()
+            redis_db = await db_helper.redis_connection()
             try:
-                return service.signup(conn=conn, cursor=cursor, redis_db=redis_db, request_data=data)
+                return service.signup(conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data)
             finally:
-                await func_helper.close_redis_connection(redis_db=redis_db)
+                await db_helper.close_redis_connection(redis_db=redis_db)
         elif action == "send_otp":
-            redis_db = await func_helper.redis_connection()
+            redis_db = await db_helper.redis_connection()
             try:
-                return service.send_otp(conn=conn, cursor=cursor, redis_db=redis_db, request_data=data)
+                return service.send_otp(conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data)
             finally:
-                await func_helper.close_redis_connection(redis_db=redis_db)
+                await db_helper.close_redis_connection(redis_db=redis_db)
         elif action == "insert_comment":
-            return service.insert_comment(conn=conn, cursor=cursor, request_data=data)
+            return service.insert_comment(conn=conn, cursor=cursor, request_data=request_data)
 
-        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=data)
+        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -309,7 +119,7 @@ async def insert_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=data, info=info)
+        return handler(conn=conn, cursor=cursor, request_data=request_data, info=info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/insert_request", "insert_api", str(e), method_type)
@@ -317,39 +127,39 @@ async def insert_api(request: Request):
         return await func_helper.exception_error_logging("ag_api/insert_request", "insert_api", str(e), method_type)
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/select_request")
-@monitor_endpoint("select_request")
+@api_metrics.monitor_endpoint("ag_api/select_request")
 async def select_api(request: Request):
     method_type = "SELECT"
     conn, cursor = None, None
 
     try:
-        request_data = await request.json()
+        data = await request.json()
 
-        action = request_data.get("method_type")
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
 
-        data = request_data.get("data")
-        if data is None:
+        request_data = data.get("request_data")
+        if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await func_helper.db_connection()
+        conn, cursor = await db_helper.db_connection()
 
         if action == "check_otp":
-            redis_db = await func_helper.redis_connection()
+            redis_db = await db_helper.redis_connection()
             try:
-                return service.check_otp(conn=conn, cursor=cursor, redis_db=redis_db, request_data=data)
+                return service.check_otp(conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data)
             finally:
-                await func_helper.close_redis_connection(redis_db=redis_db)
+                await db_helper.close_redis_connection(redis_db=redis_db)
 
         if action == "select_comments":
             return service.select_comments(conn=conn, cursor=cursor)
 
-        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=data)
+        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -370,7 +180,7 @@ async def select_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=data, info=info)
+        return handler(conn=conn, cursor=cursor, request_data=request_data, info=info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/select_request", "select_api", str(e), method_type)
@@ -378,28 +188,28 @@ async def select_api(request: Request):
         return await func_helper.exception_error_logging("ag_api/select_request", "select_api", str(e), method_type)
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/update_request")
-@monitor_endpoint("update_request")
+@api_metrics.monitor_endpoint("ag_api/update_request")
 async def update_api(request: Request):
     method_type = "UPDATE"
     conn, cursor = None, None
 
     try:
-        request_data = await request.json()
+        data = await request.json()
 
-        action = request_data.get("method_type")
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
 
-        data = request_data.get("data")
-        if data is None:
+        request_data = data.get("request_data")
+        if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await func_helper.db_connection()
-        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=data)
+        conn, cursor = await db_helper.db_connection()
+        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -418,7 +228,7 @@ async def update_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=data, info=info)
+        return handler(conn=conn, cursor=cursor, request_data=request_data, info=info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/update_request", "update_api", str(e), method_type)
@@ -426,28 +236,28 @@ async def update_api(request: Request):
         return await func_helper.exception_error_logging("ag_api/update_request", "update_api", str(e), method_type)
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/delete_request")
-@monitor_endpoint("delete_request")
+@api_metrics.monitor_endpoint("ag_api/delete_request")
 async def delete_api(request: Request):
     method_type = "DELETE"
     conn, cursor = None, None
 
     try:
-        request_data = await request.json()
+        data = await request.json()
 
-        action = request_data.get("method_type")
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
 
-        data = request_data.get("data")
-        if data is None:
+        request_data = data.get("request_data")
+        if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await func_helper.db_connection()
-        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=data)
+        conn, cursor = await db_helper.db_connection()
+        state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -459,7 +269,7 @@ async def delete_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=data, info=info)
+        return handler(conn=conn, cursor=cursor, request_data=request_data, info=info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/delete_request", "delete_api", str(e), method_type)
@@ -467,33 +277,31 @@ async def delete_api(request: Request):
         return await func_helper.exception_error_logging("ag_api/delete_request", "delete_api", str(e), method_type)
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/admin_request")
-@monitor_endpoint("admin_request")
+@api_metrics.monitor_endpoint("ag_api/admin_request")
 async def admin_api(request: Request):
     method_type = "ADMIN"
     conn, cursor = None, None
 
     try:
-        request_data = await request.json()
+        data = await request.json()
 
-        # Check develop token
-        token = request_data.get("token")
-        if not check_develop_token(token):
-            return {"status": 200, "tracking_code": None, "method_type": method_type,
-                    "error": "شما به این سرویس دسترسی ندارید."}
+        token = data.get("token")
+        if not func_helper.authorize_admin(token=token):
+            return func_helper.not_auth_return(message="شما به این سرویس دسترسی ندارید.", method_type=method_type)
 
-        action = request_data.get("method_type")
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
 
-        data = request_data.get("data")
-        if data is None:
+        request_data = data.get("request_data")
+        if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await func_helper.db_connection()
+        conn, cursor = await db_helper.db_connection()
 
         action_map = {
             "update_capacity": service.admin_update_capacity,
@@ -505,7 +313,7 @@ async def admin_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=data)
+        return handler(conn=conn, cursor=cursor, request_data=request_data)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/admin_request", "admin_api", str(e), method_type)
@@ -513,34 +321,45 @@ async def admin_api(request: Request):
         return await func_helper.exception_error_logging("ag_api/admin_request", "admin_api", str(e), method_type)
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/update_user_file_image")
+@api_metrics.monitor_endpoint("ag_api/update_user_file_image")
 async def update_user_file_image(request: Request):
     method_type = "UPDATE"
     conn, cursor = None, None
     try:
-        request_data = await request.json()
-        data = request_data.get("data", request_data)
-        user_id = data["user_id"]
-        token = data["token"]
-        conn, cursor = await func_helper.db_connection()
+        data = await request.json()
+        action = data.get("action_type")
+        if not action:
+            return func_helper.not_method_access_return()
+        if action not in ["update_user", "update_user_file_image"]:
+            return func_helper.not_method_access_return()
+
+        request_data = data.get("request_data")
+        if request_data is None:
+            return func_helper.not_data_return(method_type=method_type)
+
+        user_id = request_data["user_id"]
+        token = request_data["token"]
+        conn, cursor = await db_helper.db_connection()
         state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor,
                                                       request_data={"user_id": int(user_id), "token": token})
         if not state:
             return func_helper.not_auth_return(message=state_message)
-        return service.update_user(conn=conn, cursor=cursor, request_data=data, info=info)
+        return service.update_user(conn=conn, cursor=cursor, request_data=request_data, info=info)
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api", "update_user_file_image", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ag_api", "update_user_file_image", str(e), method_type)
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/update_user_voice")
+@api_metrics.monitor_endpoint("ag_api/update_user_voice")
 async def update_user_voice(
         voice: UploadFile = Form(...),
         description: str = Form(...),
@@ -555,7 +374,7 @@ async def update_user_voice(
     method_type = "UPDATE"
     conn, cursor = None, None
     try:
-        conn, cursor = await func_helper.db_connection()
+        conn, cursor = await db_helper.db_connection()
         state, state_message, info = await func_helper.authorizer(conn=conn, cursor=cursor,
                                                       request_data={"user_id": int(user_id), "token": token})
         if not state:
@@ -589,7 +408,7 @@ async def update_user_voice(
         return await func_helper.exception_error_logging("ag_api", "update_user_voice", str(e), method_type)
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.get("/ag_api/get_ins_pic/{filename}")
@@ -612,7 +431,7 @@ async def get_ag_first_pdf(phone: str, kind: str):
                 content={"status": 321, "tracking_code": None, "method_type": "GET",
                          "error": "درخواست برای دریافت کارنامه نامعتبر است."}
             )
-        conn, cursor = await func_helper.db_connection()
+        conn, cursor = await db_helper.db_connection()
         # Check the access of the student for this kind - should have permission = 1
         query = 'SELECT user_id, access FROM stu WHERE phone = ?'
         stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
@@ -728,7 +547,7 @@ async def get_ag_first_pdf(phone: str, kind: str):
 
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.get("/ag_api/get_ag_second_pdf/{phone}/{kind}")
@@ -742,7 +561,7 @@ async def get_ag_second_pdf(phone: str, kind: str):
                 content={"status": 321, "tracking_code": None, "method_type": "GET",
                          "error": "درخواست برای دریافت کارنامه نامعتبر است."}
             )
-        conn, cursor = await func_helper.db_connection()
+        conn, cursor = await db_helper.db_connection()
         # Check the access of the student for this kind - should have permission = 1
         query = 'SELECT user_id, access FROM stu WHERE phone = ?'
         stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
@@ -858,7 +677,7 @@ async def get_ag_second_pdf(phone: str, kind: str):
 
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.get("/ag_api/get_scl_first_pdf/{phone}/{kind}")
@@ -872,7 +691,7 @@ async def get_scl_first_pdf(phone: str, kind: str):
                 content={"status": 321, "tracking_code": None, "method_type": "GET",
                          "error": "درخواست برای دریافت کارنامه نامعتبر است."}
             )
-        conn, cursor = await func_helper.db_connection()
+        conn, cursor = await db_helper.db_connection()
         # Check the access of the student for this kind - should have permission = 1
         query = 'SELECT user_id, access FROM stu WHERE phone = ?'
         stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
@@ -988,7 +807,7 @@ async def get_scl_first_pdf(phone: str, kind: str):
 
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.get("/ag_api/get_scl_second_pdf/{phone}/{kind}")
@@ -1002,7 +821,7 @@ async def get_scl_second_pdf(phone: str, kind: str):
                 content={"status": 321, "tracking_code": None, "method_type": "GET",
                          "error": "درخواست برای دریافت کارنامه نامعتبر است."}
             )
-        conn, cursor = await func_helper.db_connection()
+        conn, cursor = await db_helper.db_connection()
         # Check the access of the student for this kind - should have permission = 1
         query = 'SELECT user_id, access FROM stu WHERE phone = ?'
         stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
@@ -1118,7 +937,7 @@ async def get_scl_second_pdf(phone: str, kind: str):
 
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.get("/ag_api/get_scl_third_pdf/{phone}/{kind}")
@@ -1132,7 +951,7 @@ async def get_scl_third_pdf(phone: str, kind: str):
                 content={"status": 321, "tracking_code": None, "method_type": "GET",
                          "error": "درخواست برای دریافت کارنامه نامعتبر است."}
             )
-        conn, cursor = await func_helper.db_connection()
+        conn, cursor = await db_helper.db_connection()
         # Check the access of the student for this kind - should have permission = 1
         query = 'SELECT user_id, access FROM stu WHERE phone = ?'
         stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
@@ -1248,7 +1067,7 @@ async def get_scl_third_pdf(phone: str, kind: str):
 
     finally:
         if conn and cursor:
-            await func_helper.close_db_connection(conn=conn, cursor=cursor)
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.get("/ag_api/get_default/{reportname}")
