@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: "aguserbackend"
+    metrics_path: "/ag_api/metrics"
+    scrape_interval: 5s
+    static_configs:
+      - targets:
+          - "ent.yejooredigeh.com"
+
+

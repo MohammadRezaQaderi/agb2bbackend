@@ -1,0 +1,125 @@
+{
+	"info": {
+		"_postman_id": "admin-collection-001",
+		"name": "AG Admin API",
+		"description": "Admin API endpoints for AG User Backend",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Admin - Update Capacity",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"token\": \"{{token}}\",\n    \"method_type\": \"update_capacity\",\n    \"data\": {\n        \"phone\": \"09123456789\",\n        \"kind\": \"AG\",\n        \"count\": 10\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{url}}/ag_api/admin_request",
+					"host": [
+						"{{url}}"
+					],
+					"path": [
+						"ag_api",
+						"admin_request"
+					]
+				},
+				"description": "Update capacity for a user (ins, sch, wCon). Kind should be AG or SCL. Count must be a positive integer."
+			},
+			"response": []
+		},
+		{
+			"name": "Admin - Get User Info",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"token\": \"{{token}}\",\n    \"method_type\": \"get_user_info\",\n    \"data\": {\n        \"phone\": \"09123456789\"\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{url}}/ag_api/admin_request",
+					"host": [
+						"{{url}}"
+					],
+					"path": [
+						"ag_api",
+						"admin_request"
+					]
+				},
+				"description": "Get user information by phone number. Returns info from users, ins, sch, wCon, con, stu tables. For ins, sch, wCon also returns capacity."
+			},
+			"response": []
+		},
+		{
+			"name": "Admin - Check Student Quiz Answer",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"token\": \"{{token}}\",\n    \"method_type\": \"check_student_quiz_answer\",\n    \"data\": {\n        \"phone\": \"09123456789\"\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{url}}/ag_api/admin_request",
+					"host": [
+						"{{url}}"
+					],
+					"path": [
+						"ag_api",
+						"admin_request"
+					]
+				},
+				"description": "Check student quiz answers and state. Returns quiz answers from quiz_answer table and student state from stu table access field."
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "your-develop-token-here",
+			"type": "string"
+		}
+	]
+}
+

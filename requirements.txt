@@ -1,0 +1,11 @@
+fastapi==0.115.7
+kavenegar==1.1.2
+pyodbc==5.2.0
+walrus==0.9.4
+uvicorn==0.34.0
+python-multipart==0.0.20
+pandas
+openpyxl
+prometheus_client
+httpx
+cryptography

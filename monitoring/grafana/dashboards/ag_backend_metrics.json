@@ -1,0 +1,108 @@
+{
+  "id": null,
+  "uid": "ag-backend-metrics",
+  "title": "AG User Backend - Metrics",
+  "tags": ["ag", "backend", "prometheus"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Total HTTP Requests",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(increase(ag_http_requests_total[5m]))",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "5m total"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "HTTP Requests per Endpoint (rate)",
+      "gridPos": { "x": 6, "y": 0, "w": 18, "h": 8 },
+      "lines": true,
+      "targets": [
+        {
+          "expr": "rate(ag_http_requests_total[5m])",
+          "legendFormat": "{{method}} {{path}} {{status_code}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "HTTP Latency (p50 / p90 / p99)",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "lines": true,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(ag_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(ag_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p90"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ag_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Requests In Progress",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "lines": true,
+      "targets": [
+        {
+          "expr": "sum(ag_http_requests_in_progress) by (method, path)",
+          "legendFormat": "{{method}} {{path}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "API Endpoint Latency (decorated)",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+      "lines": true,
+      "targets": [
+        {
+          "expr": "rate(ag_api_request_duration_seconds_sum[5m]) / rate(ag_api_request_duration_seconds_count[5m])",
+          "legendFormat": "{{endpoint}} {{method_type}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "API Errors (decorated)",
+      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 8 },
+      "lines": true,
+      "targets": [
+        {
+          "expr": "rate(ag_api_request_errors_total[5m])",
+          "legendFormat": "{{endpoint}} {{method_type}}"
+        }
+      ]
+    }
+  ],
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ]
+  }
+}
+
+
