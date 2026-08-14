@@ -9,3 +9,4 @@ openpyxl
 prometheus_client
 httpx
 cryptography
+redis==5.2.1

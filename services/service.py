@@ -10,6 +10,7 @@ import services.institute.institute_service as institute_service
 import services.other.other_service as other_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
+import services.student.student_service as student_service
 
 
 def remove_token(conn, cursor, request_data, user_info):
@@ -43,6 +44,28 @@ def sign_in(conn, cursor, request_data):
     else:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
+
+
+def student_sign_in(conn, cursor, request_data):
+    method_type = "SIGNIN"
+    is_valid, error_response = func_helper.validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["phone", "password"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return error_response
+
+    tracking_code, message, response_info = auth_service.sign_in_student(
+        conn=conn, cursor=cursor, request_data=request_data
+    )
+    if response_info is None:
+        return {"status": 200, "tracking_code": None, "method_type": method_type, "error": message}
+    if tracking_code:
+        return {"status": 200, "tracking_code": tracking_code, "method_type": method_type,
+                "response": response_info}
+    return {"status": 200, "tracking_code": None, "method_type": method_type,
+            "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
 
 
 def sign_up(conn, cursor, redis_db, request_data):
@@ -178,6 +201,155 @@ def change_password(conn, cursor, request_data, user_info):
 
     return {"status": 200, "tracking_code": token, "method_type": method_type,
             "response": {"message": "رمز عبور شما با موفقیت تغییر کرد."}}
+
+
+def student_change_user_info(conn, cursor, request_data, user_info):
+    method_type = "UPDATE"
+    is_valid, error_response = func_helper.validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["first_name", "last_name"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return error_response
+    if user_info["role"] != "stu":
+        return func_helper.not_method_access_return()
+
+    token, data = student_service.update_stu_user_profile(
+        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+    )
+    return {"status": 200, "tracking_code": token, "method_type": method_type,
+            "response": {"data": data, "message": "اطلاعات شما با موفقیت تغییر یافت."}}
+
+
+def student_change_password(conn, cursor, request_data, user_info):
+    method_type = "UPDATE"
+    is_valid, error_response = func_helper.validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["password", "re_password"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return error_response
+
+    if request_data["password"] != request_data["re_password"]:
+        return {"status": 200, "tracking_code": None, "method_type": method_type,
+                "error": "رمز عبور و تکرار رمز عبور باهم تطابق ندارد."}
+
+    val, message = func_helper.password_format_check(password=request_data["password"])
+    if not val:
+        return {"status": 200, "tracking_code": None, "method_type": method_type, "error": message}
+
+    if user_info["role"] != "stu":
+        return func_helper.not_method_access_return()
+
+    token = student_service.update_stu_password(
+        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+    )
+    return {"status": 200, "tracking_code": token, "method_type": method_type,
+            "response": {"message": "رمز عبور شما با موفقیت تغییر کرد."}}
+
+
+def student_get_dashboard(conn, cursor, request_data, user_info):
+    method_type = "SELECT"
+    if user_info["role"] != "stu":
+        return func_helper.not_method_access_return()
+
+    token, data = student_service.select_stu_dashboard(
+        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+    )
+    return {"status": 200, "tracking_code": token, "method_type": method_type,
+            "response": {"data": data}}
+
+
+def student_get_quiz_setting(conn, cursor, request_data, user_info):
+    method_type = "SELECT"
+    is_valid, error_response = func_helper.validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["quiz_id"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return error_response
+    return get_quiz_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+
+
+def student_get_quiz_table_info(conn, cursor, request_data, user_info):
+    method_type = "SELECT"
+    is_valid, error_response = func_helper.validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["kind"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return error_response
+    if user_info["role"] != "stu":
+        return func_helper.not_method_access_return()
+
+    token, data = student_service.select_stu_quiz_table_info(
+        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+    )
+    if token is None:
+        return {"status": 200, "tracking_code": None, "method_type": method_type,
+                "error": "شما به این محصول دسترسی ندارید."}
+    return {"status": 200, "tracking_code": token, "method_type": method_type,
+            "response": {"data": data}}
+
+
+def student_get_quiz_info(conn, cursor, request_data, user_info):
+    method_type = "SELECT"
+    is_valid, error_response = func_helper.validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["quiz_id", "quiz_kind"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return error_response
+    if user_info["role"] != "stu":
+        return func_helper.not_method_access_return()
+
+    token, data, quiz_answers = student_service.select_stu_quiz_info(
+        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+    )
+    if not data:
+        return {"status": 200, "tracking_code": None, "method_type": method_type,
+                "error": "آزمون مورد نظر شما در دسترس شما نیست."}
+    return {"status": 200, "tracking_code": token, "method_type": method_type,
+            "response": {"data": data, "quizAnswers": quiz_answers}}
+
+
+def student_change_quiz_answer(conn, cursor, request_data, user_info):
+    method_type = "UPDATE"
+    is_valid, error_response = func_helper.validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["quiz_id", "question_Number", "question_Answer", "last_question_id", "user_id"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return error_response
+    if user_info["role"] != "stu":
+        return func_helper.not_method_access_return()
+
+    token, message = student_service.submit_quiz_answer(
+        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+    )
+    return {"status": 200, "tracking_code": token, "method_type": method_type,
+            "response": {"message": message}}
+
+
+def student_get_access_product(conn, cursor, request_data, user_info):
+    method_type = "SELECT"
+    if user_info["role"] != "stu":
+        return func_helper.not_method_access_return()
+
+    token, data = student_service.select_student_access_info(
+        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+    )
+    if not data:
+        return {"status": 200, "tracking_code": None, "method_type": method_type,
+                "error": "اطلاعات شما در دسترسی نیست."}
+    return {"status": 200, "tracking_code": token, "method_type": method_type,
+            "response": data}
 
 
 def change_setting(conn, cursor, request_data, user_info):
@@ -843,5 +1015,3 @@ def admin_check_student_quiz_answer(conn, cursor, request_data):
                 "error": result}
     return {"status": 200, "tracking_code": token, "method_type": method_type,
             "response": result}
-
-

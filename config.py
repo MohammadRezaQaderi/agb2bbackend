@@ -69,6 +69,7 @@ REDIS_PORT = int(os.getenv("AG_REDIS_PORT", "6379"))
 REDIS_PASSWORD = os.getenv("AG_REDIS_PASSWORD", "")
 REDIS_DB = int(os.getenv("AG_REDIS_DB", "1"))
 REDIS_CACHE_OTP = str(os.getenv("AG_REDIS_CACHE_OTP", "verify_cache_AG"))
+REDIS_QUEUE_NAME = os.getenv("AG_REDIS_QUEUE_NAME", "userAGB2BReport")
 
 # Database Configuration
 DB_DRIVER = os.getenv("AG_DB_DRIVER", "ODBC Driver 17 for SQL Server")

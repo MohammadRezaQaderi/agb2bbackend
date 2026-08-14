@@ -38,6 +38,172 @@ async def health_check():
     return await func_helper.health_payload("ag_api")
 
 
+@app.get("/ags_api/metrics")
+async def student_metrics():
+    return api_metrics.metrics_response()
+
+
+@app.get("/ags_api/health")
+async def student_health_check():
+    return await func_helper.health_payload("ags_api")
+
+
+def _legacy_action_payload(data: dict):
+    action = data.get("method_type") or data.get("action_type")
+    request_data = data.get("data")
+    if request_data is None:
+        request_data = data.get("request_data")
+    return action, request_data
+
+
+@app.post("/ags_api/signin")
+@api_metrics.monitor_endpoint("ags_api/signin")
+async def student_signin_api(request: Request):
+    method_type = "SIGNIN"
+    conn, cursor = None, None
+
+    try:
+        data = await request.json()
+        action, request_data = _legacy_action_payload(data)
+        if not action:
+            return func_helper.not_method_access_return()
+        if request_data is None:
+            return func_helper.not_data_return(method_type=method_type)
+        if action != "signin":
+            return func_helper.not_method_access_return()
+
+        conn, cursor = await db_helper.db_connection()
+        return service.student_sign_in(conn=conn, cursor=cursor, request_data=request_data)
+
+    except KeyError as e:
+        return await func_helper.key_error_logging("ags_api/signin", "student_signin_api", str(e), method_type)
+    except Exception as e:
+        return await func_helper.exception_error_logging("ags_api/signin", "student_signin_api", str(e), method_type)
+    finally:
+        if conn and cursor:
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
+
+
+@app.post("/ags_api/select_request")
+@api_metrics.monitor_endpoint("ags_api/select_request")
+async def student_select_api(request: Request):
+    method_type = "SELECT"
+    conn, cursor = None, None
+
+    try:
+        data = await request.json()
+        action, request_data = _legacy_action_payload(data)
+        if not action:
+            return func_helper.not_method_access_return()
+        if request_data is None:
+            return func_helper.not_data_return(method_type=method_type)
+
+        conn, cursor = await db_helper.db_connection()
+        state, state_message, user_info = await func_helper.authorizer(
+            conn=conn, cursor=cursor, request_data=request_data
+        )
+        if not state:
+            return func_helper.not_auth_return(message=state_message)
+
+        action_map = {
+            "select_dashboard": service.student_get_dashboard,
+            "select_quiz_setting": service.student_get_quiz_setting,
+            "select_access_product": service.student_get_access_product,
+            "select_quiz_table_info": service.student_get_quiz_table_info,
+            "select_quiz_info": service.student_get_quiz_info,
+        }
+        handler = action_map.get(action)
+        if handler is None:
+            return func_helper.not_method_access_return()
+        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+
+    except KeyError as e:
+        return await func_helper.key_error_logging("ags_api/select_request", "student_select_api", str(e), method_type)
+    except Exception as e:
+        return await func_helper.exception_error_logging("ags_api/select_request", "student_select_api", str(e), method_type)
+    finally:
+        if conn and cursor:
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
+
+
+@app.post("/ags_api/update_request")
+@api_metrics.monitor_endpoint("ags_api/update_request")
+async def student_update_api(request: Request):
+    method_type = "UPDATE"
+    conn, cursor = None, None
+
+    try:
+        data = await request.json()
+        action, request_data = _legacy_action_payload(data)
+        if not action:
+            return func_helper.not_method_access_return()
+        if request_data is None:
+            return func_helper.not_data_return(method_type=method_type)
+
+        conn, cursor = await db_helper.db_connection()
+        state, state_message, user_info = await func_helper.authorizer(
+            conn=conn, cursor=cursor, request_data=request_data
+        )
+        if not state:
+            return func_helper.not_auth_return(message=state_message)
+
+        action_map = {
+            "update_user": service.student_change_user_info,
+            "update_password": service.student_change_password,
+            "update_quiz_answer": service.student_change_quiz_answer,
+        }
+        handler = action_map.get(action)
+        if handler is None:
+            return func_helper.not_method_access_return()
+        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+
+    except KeyError as e:
+        return await func_helper.key_error_logging("ags_api/update_request", "student_update_api", str(e), method_type)
+    except Exception as e:
+        return await func_helper.exception_error_logging("ags_api/update_request", "student_update_api", str(e), method_type)
+    finally:
+        if conn and cursor:
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
+
+
+@app.post("/ags_api/delete_request")
+@api_metrics.monitor_endpoint("ags_api/delete_request")
+async def student_delete_api(request: Request):
+    method_type = "DELETE"
+    conn, cursor = None, None
+
+    try:
+        data = await request.json()
+        action, request_data = _legacy_action_payload(data)
+        if not action:
+            return func_helper.not_method_access_return()
+        if request_data is None:
+            return func_helper.not_data_return(method_type=method_type)
+
+        conn, cursor = await db_helper.db_connection()
+        state, state_message, user_info = await func_helper.authorizer(
+            conn=conn, cursor=cursor, request_data=request_data
+        )
+        if not state:
+            return func_helper.not_auth_return(message=state_message)
+
+        action_map = {
+            "delete_token": service.remove_token,
+        }
+        handler = action_map.get(action)
+        if handler is None:
+            return func_helper.not_method_access_return()
+        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+
+    except KeyError as e:
+        return await func_helper.key_error_logging("ags_api/delete_request", "student_delete_api", str(e), method_type)
+    except Exception as e:
+        return await func_helper.exception_error_logging("ags_api/delete_request", "student_delete_api", str(e), method_type)
+    finally:
+        if conn and cursor:
+            await db_helper.close_db_connection(conn=conn, cursor=cursor)
+
+
 @app.post("/ag_api/signin")
 @api_metrics.monitor_endpoint("ag_api/signin")
 async def signin_api(request: Request):
@@ -411,6 +577,7 @@ async def update_user_voice(
             await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
+@app.get("/ags_api/get_ins_pic/{filename}")
 @app.get("/ag_api/get_ins_pic/{filename}")
 async def get_ins_pic(filename: str):
     file_path = os.path.join(INS_PIC_DIR, filename)
@@ -420,6 +587,7 @@ async def get_ins_pic(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
 
 
+@app.get("/ags_api/get_ag_first_pdf/{phone}/{kind}")
 @app.get("/ag_api/get_ag_first_pdf/{phone}/{kind}")
 async def get_ag_first_pdf(phone: str, kind: str):
     conn, cursor = None, None
@@ -550,6 +718,7 @@ async def get_ag_first_pdf(phone: str, kind: str):
             await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
+@app.get("/ags_api/get_ag_second_pdf/{phone}/{kind}")
 @app.get("/ag_api/get_ag_second_pdf/{phone}/{kind}")
 async def get_ag_second_pdf(phone: str, kind: str):
     conn, cursor = None, None
@@ -680,6 +849,7 @@ async def get_ag_second_pdf(phone: str, kind: str):
             await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
+@app.get("/ags_api/get_scl_first_pdf/{phone}/{kind}")
 @app.get("/ag_api/get_scl_first_pdf/{phone}/{kind}")
 async def get_scl_first_pdf(phone: str, kind: str):
     conn, cursor = None, None
@@ -810,6 +980,7 @@ async def get_scl_first_pdf(phone: str, kind: str):
             await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
+@app.get("/ags_api/get_scl_second_pdf/{phone}/{kind}")
 @app.get("/ag_api/get_scl_second_pdf/{phone}/{kind}")
 async def get_scl_second_pdf(phone: str, kind: str):
     conn, cursor = None, None
@@ -940,6 +1111,7 @@ async def get_scl_second_pdf(phone: str, kind: str):
             await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
+@app.get("/ags_api/get_scl_third_pdf/{phone}/{kind}")
 @app.get("/ag_api/get_scl_third_pdf/{phone}/{kind}")
 async def get_scl_third_pdf(phone: str, kind: str):
     conn, cursor = None, None
@@ -1070,6 +1242,7 @@ async def get_scl_third_pdf(phone: str, kind: str):
             await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
+@app.get("/ags_api/get_default/{reportname}")
 @app.get("/ag_api/get_default/{reportname}")
 async def get_first_default_pdf(reportname: str):
     file_path = os.path.join(DEFAULT_REPORT_PATH, reportname)
@@ -1079,6 +1252,7 @@ async def get_first_default_pdf(reportname: str):
         raise HTTPException(status_code=404, detail="File not found")
 
 
+@app.get("/ags_api/get_pic/{filename}")
 @app.get("/ag_api/get_pic/{filename}")
 async def get_pic(filename: str):
     file_path = os.path.join(PICS_INFO_DIR, filename)
@@ -1088,6 +1262,7 @@ async def get_pic(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
 
 
+@app.get("/ags_api/get_pic_scl/{filename}")
 @app.get("/ag_api/get_pic_scl/{filename}")
 async def get_pic_scl(filename: str):
     file_path = os.path.join(PICS_WORD_SCL_DIR, filename)
@@ -1097,6 +1272,7 @@ async def get_pic_scl(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
 
 
+@app.get("/ags_api/get_pic_info/report/{filename}")
 @app.get("/ag_api/get_pic_info/report/{filename}")
 async def get_pic_info_report(filename: str):
     file_path = os.path.join(PICS_REPORT_DIR, filename)
@@ -1106,6 +1282,7 @@ async def get_pic_info_report(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
 
 
+@app.get("/ags_api/get_pic_info/quiz/{filename}")
 @app.get("/ag_api/get_pic_info/quiz/{filename}")
 async def get_pic_info(filename: str):
     file_path = os.path.join(PICS_QUIZ_DIR, filename)
@@ -1115,6 +1292,7 @@ async def get_pic_info(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
 
 
+@app.get("/ags_api/get_quiz_pic/{filename}")
 @app.get("/ag_api/get_quiz_pic/{filename}")
 async def get_quiz_pic(filename: str):
     file_path = os.path.join(QUIZ_PIC_DIR, filename)
@@ -1124,6 +1302,7 @@ async def get_quiz_pic(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
 
 
+@app.get("/ags_api/get_voice/{filename}")
 @app.get("/ag_api/get_voice/{filename}")
 async def get_voice(filename: str):
     file_path = os.path.join(VOICES_DIR, filename)
@@ -1133,6 +1312,7 @@ async def get_voice(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
 
 
+@app.get("/ags_api/get_pic_info/field/{filename}")
 @app.get("/ag_api/get_pic_info/field/{filename}")
 async def get_pic_info_field(filename: str):
     file_path = os.path.join(PICS_FIELD_DIR, filename)

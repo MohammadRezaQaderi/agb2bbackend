@@ -8,6 +8,7 @@ import services.consultant.consultant_service as consultant_service
 import services.institute.institute_service as institute_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
+import services.student.student_service as student_service
 
 
 def create_token(conn, cursor, user_info):
@@ -93,6 +94,30 @@ def sign_in(conn, cursor, request_data):
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/auth", "sign_in", str(e), request_data, {})
+        return None, "مشکلی در ورود شما رخ داده با پشتیبانی ارتباط بگیرید.", None
+
+
+def sign_in_student(conn, cursor, request_data):
+    try:
+        phone = request_data["phone"]
+        password = request_data["password"]
+        query = 'SELECT user_id, password, role FROM users WHERE phone = ?'
+        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
+        if res is None:
+            return None, " کاربری با این شماره تلفن موجود نمی‌باشد.", None
+
+        if not func_helper.verify_password(plain_password=password, stored_password=res.password):
+            return None, "رمز عبور شما درست نمی‌باشد.", None
+
+        if res.role != "stu":
+            return None, "متاسفانه شما از این سامانه اجازه ورود ندارید.", None
+
+        token_user = create_token(conn=conn, cursor=cursor, user_info=[res.user_id, phone, res.role])
+        _, user_info = student_service.select_student_info(conn=conn, cursor=cursor, user_id=res.user_id)
+        return token_user, "", user_info
+    except Exception as e:
+        conn.rollback()
+        func_helper.service_exception_error_logging(conn, cursor, "ags_api/auth", "sign_in_student", str(e), request_data, {})
         return None, "مشکلی در ورود شما رخ داده با پشتیبانی ارتباط بگیرید.", None
 
 
