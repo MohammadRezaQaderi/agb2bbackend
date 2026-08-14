@@ -673,7 +673,7 @@ async def get_ag_first_pdf(phone: str, kind: str):
                 )
 
         # Proceed with checking report status
-        query = 'SELECT status FROM redis_log WHERE user_id = ? and kind = ?'
+        query = 'SELECT status FROM redis_logs WHERE user_id = ? and kind = ?'
         res_queue = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu.user_id, kind.upper()))
         # if not res_queue:
         #     return JSONResponse(
@@ -804,7 +804,7 @@ async def get_ag_second_pdf(phone: str, kind: str):
                 )
 
         # Proceed with checking report status
-        query = 'SELECT status FROM redis_log WHERE user_id = ? and kind = ?'
+        query = 'SELECT status FROM redis_logs WHERE user_id = ? and kind = ?'
         res_queue = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu.user_id, kind.upper()))
         # if not res_queue:
         #     return JSONResponse(
@@ -935,7 +935,7 @@ async def get_scl_first_pdf(phone: str, kind: str):
                 )
 
         # Proceed with checking report status
-        query = 'SELECT status FROM redis_log WHERE user_id = ? and kind = ?'
+        query = 'SELECT status FROM redis_logs WHERE user_id = ? and kind = ?'
         res_queue = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu.user_id, kind.upper()))
         # if not res_queue:
         #     return JSONResponse(
@@ -1066,7 +1066,7 @@ async def get_scl_second_pdf(phone: str, kind: str):
                 )
 
         # Proceed with checking report status
-        query = 'SELECT status FROM redis_log WHERE user_id = ? and kind = ?'
+        query = 'SELECT status FROM redis_logs WHERE user_id = ? and kind = ?'
         res_queue = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu.user_id, kind.upper()))
         # if not res_queue:
         #     return JSONResponse(
@@ -1197,7 +1197,7 @@ async def get_scl_third_pdf(phone: str, kind: str):
                 )
 
         # Proceed with checking report status
-        query = 'SELECT status FROM redis_log WHERE user_id = ? and kind = ?'
+        query = 'SELECT status FROM redis_logs WHERE user_id = ? and kind = ?'
         res_queue = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu.user_id, kind.upper()))
         # if not res_queue:
         #     return JSONResponse(

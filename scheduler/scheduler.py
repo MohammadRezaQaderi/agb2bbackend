@@ -211,7 +211,7 @@ class AGReportScheduler:
             db_helper.update_record(
                 self.db_conn,
                 self.db_cursor,
-                "redis_log",
+                "redis_logs",
                 ["result", "status", "edited_time"],
                 [f"Error: {error}", 3, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                 "user_id = ? AND kind = ?",
@@ -939,7 +939,7 @@ class AGReportScheduler:
         return scl_calc_data
 
     def _handle_scl_report(self, user_id: str) -> None:
-        """Handle SCL kind: compute labels and store result in redis_log."""
+        """Handle SCL kind: compute labels and store result in redis_logs."""
         try:
             start_time = time.time()
             report_kind = "SCL"
@@ -967,7 +967,7 @@ class AGReportScheduler:
             db_helper.update_record(
                 self.db_conn,
                 self.db_cursor,
-                "redis_log",
+                "redis_logs",
                 ["result", "status", "edited_time"],
                 [
                     "SCL computation started in scheduler",
@@ -1393,7 +1393,7 @@ class AGReportScheduler:
             db_helper.update_record(
                 self.db_conn,
                 self.db_cursor,
-                "redis_log",
+                "redis_logs",
                 ["result", "status", "edited_time"],
                 [
                     "user info checked in scheduler",
@@ -1435,7 +1435,7 @@ class AGReportScheduler:
             db_helper.update_record(
                 self.db_conn,
                 self.db_cursor,
-                "redis_log",
+                "redis_logs",
                 ["result", "status", "edited_time"],
                 [
                     "user info check in scheduler",
@@ -1581,7 +1581,7 @@ class AGReportScheduler:
             db_helper.update_record(
                 self.db_conn,
                 self.db_cursor,
-                "redis_log",
+                "redis_logs",
                 ["result", "status", "edited_time"],
                 [
                     "user info checked in scheduler",

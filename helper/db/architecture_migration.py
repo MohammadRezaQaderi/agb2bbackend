@@ -480,7 +480,11 @@ def run_migration(dry_run: bool) -> None:
 
     try:
         rename_table_if_needed(conn, cursor, "wCon", "ocon", dry_run)
+        rename_table_if_needed(conn, cursor, "redis_log", "redis_logs", dry_run)
+        rename_table_if_needed(conn, cursor, "discount", "discounts", dry_run)
+        rename_table_if_needed(conn, cursor, "error_log", "quiz_missing_answers", dry_run)
         rename_column_if_needed(conn, cursor, "ocon", "wCon_id", "ocon_id", dry_run)
+        rename_column_if_needed(conn, cursor, "quiz_missing_answers", "q_id", "question_id", dry_run)
         normalize_ocon_role_names(conn, cursor, dry_run)
 
         ensure_column(conn, cursor, "capacity_package", "total_allowed", "INT NULL", dry_run)
@@ -614,7 +618,7 @@ def run_migration(dry_run: bool) -> None:
         ensure_index_if_clean(
             conn,
             cursor,
-            "redis_log",
+            "redis_logs",
             "ix_redis_log_user_kind",
             "user_id, kind",
             None,

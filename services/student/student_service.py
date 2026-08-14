@@ -446,7 +446,7 @@ SCL_LAST_QUESTION_ID = max(
 
 def _enqueue_result_generation(conn, cursor, user_id, phone, kind: str):
     """
-    Push user to Redis queue and log in redis_log table.
+    Push user to Redis queue and log in redis_logs table.
 
     kind: Product kind (e.g., AG, SCL). Used by scheduler to choose correct flow.
     """
@@ -468,10 +468,10 @@ def _enqueue_result_generation(conn, cursor, user_id, phone, kind: str):
     )
     r.rpush(REDIS_QUEUE_NAME, payload)
 
-    # Log enqueue operation in redis_log with kind
+    # Log enqueue operation in redis_logs with kind
     field = '([user_id], [kind], [result], [phone])'
     values = (user_id, (kind or "").upper(), "user add to queue to create", phone)
-    db_helper.insert_value(conn=conn, cursor=cursor, table_name="redis_log", fields=field, values=values)
+    db_helper.insert_value(conn=conn, cursor=cursor, table_name="redis_logs", fields=field, values=values)
 
 
 def submit_quiz_answer(conn, cursor, request_data, info):

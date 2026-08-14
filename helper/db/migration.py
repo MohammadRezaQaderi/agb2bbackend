@@ -286,8 +286,8 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
-    "discount": """
-        CREATE TABLE discount (
+    "discounts": """
+        CREATE TABLE discounts (
             id INT IDENTITY(1, 1) PRIMARY KEY,
             code VARCHAR(10),
             status NVARCHAR(100),
@@ -338,8 +338,8 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE(),
         )
     """,
-    "redis_log": """
-        CREATE TABLE redis_log (
+    "redis_logs": """
+        CREATE TABLE redis_logs (
             id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
             kind NVARCHAR(20),
@@ -350,11 +350,11 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
-    "error_log": """
-        CREATE TABLE error_log (
+    "quiz_missing_answers": """
+        CREATE TABLE quiz_missing_answers (
             id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
-            q_id INT,
+            question_id INT,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
         )
@@ -377,7 +377,7 @@ TABLE_DEFINITIONS = {
 DEFAULT_TABLES: Sequence[str] = (
     'users', 'ins', 'sch', 'ocon', 'con', 'stu', 'setting', 'capacity', 'capacity_package', 'capacity_logs',
     'quiz_attempt', 'quiz_question_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications', 'payment',
-    'payment_log', 'discount', 'using_discount', 'tokens', 'redis_log', 'error_log', 'api_logs'
+    'payment_log', 'discounts', 'using_discount', 'tokens', 'redis_logs', 'quiz_missing_answers', 'api_logs'
 )
 
 PASSWORD_SECRET_KEY = os.getenv(
@@ -667,21 +667,21 @@ def migrate():
                       json.dumps(answer_value, ensure_ascii=False), row.DC_Created_Time, row.DC_Edited_Time))
     conn.commit()
 
-    # 9. Migrate remaining tables (scores, result_state, redis_log, error_log, setting)
+    # 9. Migrate remaining tables (scores, result_state, redis_logs, quiz_missing_answers, setting)
     # Note: result_state uses user_id as PK, so no identity insert needed.
-    # setting, scores, redis_log, error_log use Identity for their own IDs.
+    # setting, scores, redis_logs, quiz_missing_answers use Identity for their own IDs.
 
     identity_tables = {
-        "setting": "setting_id",
-        "scores": "scores_id",
-        "redis_log": "id",
-        "error_log": "id"
+        "setting": ("setting_id", "setting_old"),
+        "scores": ("scores_id", "scores_old"),
+        "redis_logs": ("id", "redis_log_old"),
+        "quiz_missing_answers": ("id", "error_log_old"),
     }
 
-    for table, id_col in identity_tables.items():
+    for table, (id_col, source_table) in identity_tables.items():
         print(f"Migrating {table} with Identity...")
         cursor.execute(f"SET IDENTITY_INSERT {table} ON")
-        cursor.execute(f"SELECT * FROM {table}_old")
+        cursor.execute(f"SELECT * FROM {source_table}")
         cols = [c[0] for c in cursor.description]
         for row in cursor.fetchall():
             data = dict(zip(cols, row))
@@ -699,16 +699,16 @@ def migrate():
                     f"INSERT INTO {table} ({id_col}, user_id, phone, quiz_score, brain_fields, brain_categories, brain_branches, created_time, edited_time) VALUES (?,?,?,?,?,?,?,?,?)",
                     (data[id_col], data['user_id'], data['phone'], data['quiz_score'], data['brain_fields'],
                      data['brain_categories'], data['brain_branches'], c_time, e_time))
-            elif table == "redis_log":
+            elif table == "redis_logs":
                 cursor.execute(
                     f"INSERT INTO {table} ({id_col}, user_id, kind, result, status, phone, created_time, edited_time) VALUES (?,?,?,?,?,?,?,?)",
                     (
                         data[id_col], data['user_id'], "AG", data['result'], data['status'], data['phone'], c_time,
                         e_time))
-            elif table == "error_log":
+            elif table == "quiz_missing_answers":
                 cursor.execute(
-                    f"INSERT INTO {table} ({id_col}, user_id, q_id, created_time, edited_time) VALUES (?,?,?,?,?)",
-                    (data[id_col], data['user_id'], data['q_id'], c_time, e_time))
+                    f"INSERT INTO {table} ({id_col}, user_id, question_id, created_time, edited_time) VALUES (?,?,?,?,?)",
+                    (data[id_col], data['user_id'], data.get('question_id') or data.get('q_id'), c_time, e_time))
         cursor.execute(f"SET IDENTITY_INSERT {table} OFF")
 
     print("Migrating result_state...")

@@ -135,7 +135,7 @@ def get_transactions(conn, cursor, request_data, user_info):
 
 def apply_discount(conn, cursor, request_data, user_info):
     try:
-        query = 'SELECT id, discount_percentage, count, status, count_apply, expire_time FROM discount WHERE code = ?'
+        query = 'SELECT id, discount_percentage, count, status, count_apply, expire_time FROM discounts WHERE code = ?'
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["discount_code"])
         if not res:
             return None, None, "کد تخفیف مد نظر شما موجود نیست."
@@ -151,7 +151,7 @@ def apply_discount(conn, cursor, request_data, user_info):
         values = (request_data["discount_code"], "APPLY CODE", user_info["phone"], user_info["user_id"])
         db_helper.insert_value(conn=conn, cursor=cursor, table_name='using_discount', fields=field, values=values)
         db_helper.update_record(
-            conn, cursor, "discount", ["count_apply", "edited_time"], [
+            conn, cursor, "discounts", ["count_apply", "edited_time"], [
                 res.count_apply + 1,
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             ], "id = ?", [res.id]
@@ -161,7 +161,7 @@ def apply_discount(conn, cursor, request_data, user_info):
         new_total = (round(int(request_data["total_value"]) * (1 - res.discount_percentage))) / 100
         return token, {"new_total": new_total}, ""
     except Exception as e:
-        print("error occurred in apply discount", e)
+        print("error occurred in apply discounts", e)
         func_helper.service_exception_error_logging(
             conn, cursor, "ag_api/other", "apply_discount", str(e), request_data, user_info
         )
@@ -309,7 +309,7 @@ def order_payment(conn, cursor, request_data, user_info):
         discount_id = None
         discount_percentage = None
         if request_data.get("discount_code"):
-            query = 'SELECT id, discount_percentage, count, status, used_apply, expire_time FROM discount WHERE code = ?'
+            query = 'SELECT id, discount_percentage, count, status, used_apply, expire_time FROM discounts WHERE code = ?'
             res_discount = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["discount_code"])
             if not res_discount:
                 return None, None, "کد تخفیف شما موجود نیست."
@@ -331,7 +331,7 @@ def order_payment(conn, cursor, request_data, user_info):
                     db_helper.update_record(
                         conn,
                         cursor,
-                        "discount",
+                        "discounts",
                         ["used_apply", "edited_time"],
                         [
                             res_discount.used_apply + 1,
@@ -341,7 +341,7 @@ def order_payment(conn, cursor, request_data, user_info):
                         [res_discount.id],
                     )
 
-        # Calculate price based on selected packages and discount.
+        # Calculate price based on selected packages and discounts.
         price, discount_price, ag_count, scl_count = func_helper.get_price_payment(
             request_data, discount_percentage=discount_percentage
         )

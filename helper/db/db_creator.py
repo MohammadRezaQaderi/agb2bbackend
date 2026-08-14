@@ -317,8 +317,8 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
-    "discount": """
-        CREATE TABLE discount (
+    "discounts": """
+        CREATE TABLE discounts (
             id INT IDENTITY(1, 1) PRIMARY KEY,
             code VARCHAR(10),
             status NVARCHAR(100),
@@ -382,8 +382,8 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
-    "redis_log": """
-        CREATE TABLE redis_log (
+    "redis_logs": """
+        CREATE TABLE redis_logs (
             id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
             kind NVARCHAR(20),
@@ -394,11 +394,11 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
-    "error_log": """
-        CREATE TABLE error_log (
+    "quiz_missing_answers": """
+        CREATE TABLE quiz_missing_answers (
             id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
-            q_id INT,
+            question_id INT,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
         )
@@ -436,7 +436,7 @@ DEFAULT_TABLES: Sequence[str] = (
     'users', 'ins', 'sch', 'ocon', 'con', 'stu', 'setting', 'capacity', 'capacity_package',
     'student_package_access', 'capacity_logs',
     'quiz_attempt', 'quiz_question_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications', 'payment',
-    'payment_log', 'discount', 'using_discount', 'tokens', 'comments', 'otp_logs', 'redis_log', 'error_log',
+    'payment_log', 'discounts', 'using_discount', 'tokens', 'comments', 'otp_logs', 'redis_logs', 'quiz_missing_answers',
     'api_logs'
 )
 

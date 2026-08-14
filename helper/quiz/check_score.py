@@ -158,14 +158,14 @@ def get_iq_score(catel_score: int, age: int):
 
 def _insert_missing_answer(conn, cursor, user_id, question_id) -> None:
     """
-    Insert a row into error_log for a missing answer.
+    Insert a row into quiz_missing_answers for a missing answer.
     """
-    field = '([user_id], [q_id])'
+    field = '([user_id], [question_id])'
     values = (user_id, question_id)
     db_helper.insert_value(
         conn=conn,
         cursor=cursor,
-        table_name="error_log",
+        table_name="quiz_missing_answers",
         fields=field,
         values=values,
     )
