@@ -72,7 +72,10 @@ def change_capacity(conn, cursor, request_data):
 
         # Check if capacity_package record exists for this kind
         # NOTE: Added 'used' to the SELECT statement to capture it for logging
-        query_package = 'SELECT capacity_package_id, allowed, used FROM capacity_package WHERE user_id = ? AND package_name = ?'
+        query_package = (
+            'SELECT capacity_package_id, total_allowed, allowed, used '
+            'FROM capacity_package WHERE user_id = ? AND package_name = ?'
+        )
         package_res = db_helper.search_table(
             conn=conn,
             cursor=cursor,
@@ -86,14 +89,18 @@ def change_capacity(conn, cursor, request_data):
             # Update existing record
             capacity_package_id = package_res.capacity_package_id
             current_used = getattr(package_res, 'used', 0)
+            current_total_allowed = getattr(package_res, 'total_allowed', None)
+            if current_total_allowed is None:
+                current_total_allowed = package_res.allowed + current_used
             new_allowed = package_res.allowed + count
+            new_total_allowed = current_total_allowed + count
 
             db_helper.update_record(
                 conn=conn,
                 cursor=cursor,
                 table_name="capacity_package",
-                update_fields=["allowed", "edited_time"],
-                update_values=[new_allowed, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
+                update_fields=["total_allowed", "allowed", "edited_time"],
+                update_values=[new_total_allowed, new_allowed, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                 condition="capacity_package_id = ?",
                 condition_values=[capacity_package_id]
             )
@@ -108,8 +115,8 @@ def change_capacity(conn, cursor, request_data):
 
         else:
             # Insert new record
-            field_package = '([capacity_id], [user_id], [phone], [package_name], [allowed])'
-            values_package = (capacity_id, user_id, phone, kind, count)
+            field_package = '([capacity_id], [user_id], [phone], [package_name], [total_allowed], [allowed])'
+            values_package = (capacity_id, user_id, phone, kind, count, count)
 
             # Pass id_column to capture the newly generated capacity_package_id
             insert_result = db_helper.insert_value(

@@ -67,34 +67,37 @@ def get_dashboard(conn, cursor, request_data, user_info):
 
         stu_count = results["stu_count"][0]["total"] if results["stu_count"] else 0
 
-        # Count students with AG & SCL access (permission = 1)
-        query_stu_access = "SELECT access FROM stu WHERE con_id = ?"
-        res_stu_access = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query_stu_access, field=user_id)
+        stu_package_count = func_helper.get_student_package_access_counts(
+            conn, cursor, user_id, "consultant_user_id"
+        )
+        if stu_package_count is None:
+            query_stu_access = "SELECT access FROM stu WHERE con_id = ?"
+            res_stu_access = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query_stu_access, field=user_id)
 
-        stu_package_count = {"AG": 0, "SCL": 0}
-        if res_stu_access:
-            for stu in res_stu_access:
-                raw_access = getattr(stu, "access", None) or "{}"
-                try:
-                    access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-                except (json.JSONDecodeError, TypeError):
-                    access_data = {}
+            stu_package_count = {"AG": 0, "SCL": 0}
+            if res_stu_access:
+                for stu in res_stu_access:
+                    raw_access = getattr(stu, "access", None) or "{}"
+                    try:
+                        access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
+                    except (json.JSONDecodeError, TypeError):
+                        access_data = {}
 
-                for package_name in ["AG", "SCL"]:
-                    package_info = access_data.get(package_name, {})
-                    permission = 0
-                    if isinstance(package_info, dict):
-                        permission = int(package_info.get("permission") or 0)
-                    elif isinstance(package_info, bool):
-                        permission = 1 if package_info else 0
-                    elif isinstance(package_info, (int, float, str)):
-                        try:
-                            permission = int(package_info) if str(package_info).strip() != "" else 0
-                        except ValueError:
-                            permission = 0
+                    for package_name in ["AG", "SCL"]:
+                        package_info = access_data.get(package_name, {})
+                        permission = 0
+                        if isinstance(package_info, dict):
+                            permission = int(package_info.get("permission") or 0)
+                        elif isinstance(package_info, bool):
+                            permission = 1 if package_info else 0
+                        elif isinstance(package_info, (int, float, str)):
+                            try:
+                                permission = int(package_info) if str(package_info).strip() != "" else 0
+                            except ValueError:
+                                permission = 0
 
-                    if permission == 1:
-                        stu_package_count[package_name] += 1
+                        if permission == 1:
+                            stu_package_count[package_name] += 1
 
         # Get quiz statistics for AG and SCL packages
         quiz_report = {}
@@ -383,5 +386,4 @@ def change_user_info(conn, cursor, request_data, user_info):
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_user_info", str(e), request_data,
                                         user_info)
         return None, {}
-
 

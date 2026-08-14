@@ -1,6 +1,9 @@
 import base64
+import hashlib
+import hmac
 import os
 import pyodbc
+import secrets
 import string
 import random
 import json
@@ -18,6 +21,8 @@ from config import PASSWORD_SECRET_KEY, DB_DRIVER, DB_SERVER, DB_DATABASE, DB_UI
     REDIS_PORT, REDIS_DB, REDIS_PASSWORD, DEVELOP_TOKEN
 
 _PASSWORD_FERNET: Optional[Fernet] = None
+PASSWORD_HASH_PREFIX = "pbkdf2_sha256"
+PASSWORD_HASH_ITERATIONS = 260000
 
 ACTION_TYPE_ALIASES = {
     "signin": "ag_sign_in",
@@ -338,21 +343,50 @@ def _get_password_fernet() -> Fernet:
     return _PASSWORD_FERNET
 
 
+def hash_password(plain_password: str) -> str:
+    if plain_password is None:
+        return ""
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        str(plain_password).encode("utf-8"),
+        salt.encode("utf-8"),
+        PASSWORD_HASH_ITERATIONS,
+    ).hex()
+    return f"{PASSWORD_HASH_PREFIX}${PASSWORD_HASH_ITERATIONS}${salt}${digest}"
+
+
+def is_password_hash(stored_password: str | None) -> bool:
+    return bool(stored_password and str(stored_password).startswith(f"{PASSWORD_HASH_PREFIX}$"))
+
+
+def verify_password_hash(plain_password: str, stored_password: str) -> bool:
+    try:
+        prefix, iterations, salt, expected_digest = str(stored_password).split("$", 3)
+        if prefix != PASSWORD_HASH_PREFIX:
+            return False
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            str(plain_password).encode("utf-8"),
+            salt.encode("utf-8"),
+            int(iterations),
+        ).hex()
+        return hmac.compare_digest(digest, expected_digest)
+    except Exception:
+        return False
+
+
 def encrypt_password(plain_password: str) -> str:
     """
-    Encrypt a plain-text password for storage.
+    Hash a plain-text password for storage.
 
     Args:
         plain_password: The user-facing password in plain text.
 
     Returns:
-        Encrypted string suitable for storing in the database.
+        Password hash suitable for storing in the database.
     """
-    if plain_password is None:
-        return ""
-    fernet = _get_password_fernet()
-    token = fernet.encrypt(str(plain_password).encode("utf-8"))
-    return token.decode("utf-8")
+    return hash_password(plain_password)
 
 
 def decrypt_password(stored_password: str) -> Optional[str]:
@@ -363,6 +397,8 @@ def decrypt_password(stored_password: str) -> Optional[str]:
     returns the original value as a fallback, or None on fatal error.
     """
     if not stored_password:
+        return None
+    if is_password_hash(stored_password):
         return None
     fernet = _get_password_fernet()
     try:
@@ -377,12 +413,86 @@ def decrypt_password(stored_password: str) -> Optional[str]:
 
 def verify_password(plain_password: str, stored_password: str) -> bool:
     """
-    Verify that a plain-text password matches the stored (encrypted) password.
+    Verify that a plain-text password matches the stored password.
     """
+    if is_password_hash(stored_password):
+        return verify_password_hash(plain_password, stored_password)
+
     decrypted = decrypt_password(stored_password)
     if decrypted is None:
         return False
     return str(plain_password) == str(decrypted)
+
+
+def upsert_student_package_access(
+        conn: pyodbc.Connection,
+        cursor: pyodbc.Cursor,
+        stu_user_id: int,
+        owner_user_id: int | None,
+        consultant_user_id: int | None,
+        package_name: str,
+        permission: int,
+        limit: int,
+) -> None:
+    try:
+        query = """
+            SELECT id
+            FROM student_package_access
+            WHERE stu_user_id = ? AND package_name = ?
+        """
+        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu_user_id, package_name))
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if res:
+            db_helper.update_record(
+                conn,
+                cursor,
+                "student_package_access",
+                ["owner_user_id", "consultant_user_id", "permission", "[limit]", "edited_time"],
+                [owner_user_id, consultant_user_id, permission, limit, now_str],
+                "id = ?",
+                [res.id],
+            )
+            return
+
+        db_helper.insert_value(
+            conn=conn,
+            cursor=cursor,
+            table_name="student_package_access",
+            fields="([stu_user_id], [owner_user_id], [consultant_user_id], [package_name], [permission], [limit])",
+            values=(stu_user_id, owner_user_id, consultant_user_id, package_name, permission, limit),
+        )
+    except Exception as e:
+        # The new table is additive. Keep the old JSON path working if a deployment
+        # temporarily runs before the schema migration.
+        print(f"[student_package_access] sync skipped: {e}")
+
+
+def get_student_package_access_counts(
+        conn: pyodbc.Connection,
+        cursor: pyodbc.Cursor,
+        user_id: int,
+        relation_column: str,
+) -> dict[str, int] | None:
+    if relation_column not in {"owner_user_id", "consultant_user_id"}:
+        return None
+
+    try:
+        query = f"""
+            SELECT package_name, COUNT(*) AS total
+            FROM student_package_access
+            WHERE {relation_column} = ? AND permission = 1
+            GROUP BY package_name
+        """
+        rows = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query, field=user_id)
+        counts = {"AG": 0, "SCL": 0}
+        for row in rows:
+            package_name = str(row.get("package_name", "")).upper()
+            if package_name in counts:
+                counts[package_name] = row.get("total", 0)
+        return counts
+    except Exception as e:
+        print(f"[student_package_access] count fallback: {e}")
+        return None
 
 
 async def db_connection() -> tuple[pyodbc.Connection, pyodbc.Cursor]:
@@ -753,9 +863,9 @@ def add_capacity_signup(
 
     capacity_id = response["id"]
 
-    field_package = '([capacity_id], [user_id], [phone], [package_name], [allowed])'
+    field_package = '([capacity_id], [user_id], [phone], [package_name], [total_allowed], [allowed])'
     for package_name in PACKAGES_DATA.keys():
-        values_package = (capacity_id, user_id, phone, package_name, 1)
+        values_package = (capacity_id, user_id, phone, package_name, 1, 1)
         db_helper.insert_value(
             conn=conn,
             cursor=cursor,
@@ -775,7 +885,7 @@ def update_user_and_role_password(
         role_table: str,
 ) -> Optional[str]:
     """
-    Update password in both `users` table and a role-specific table.
+    Update password in the canonical `users` table.
 
     This helper encapsulates the common pattern used by:
     - update_ins_password
@@ -788,7 +898,7 @@ def update_user_and_role_password(
         cursor: Active database cursor.
         request_data: Request payload containing at least the new 'password'.
         user_info: Context information containing 'user_id'.
-        role_table: Name of the role-specific table ('ins', 'sch', 'wCon', 'con').
+        role_table: Kept for backward-compatible caller signatures.
 
     Returns:
         New tracking token (str) on success, or None on failure.
@@ -797,17 +907,8 @@ def update_user_and_role_password(
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         user_id = str(user_info["user_id"])
         encrypted_password = encrypt_password(request_data["password"])
-        # Update main users table
         db_helper.update_record(
             conn, cursor, 'users',
-            ['password', 'edited_time'],
-            [encrypted_password, now_str],
-            'user_id = ?', [user_id]
-        )
-
-        # Update role-specific table
-        db_helper.update_record(
-            conn, cursor, role_table,
             ['password', 'edited_time'],
             [encrypted_password, now_str],
             'user_id = ?', [user_id]
@@ -884,7 +985,7 @@ def update_student_access_and_capacity(
         if not stu_id:
             return None, "شناسه دانش‌آموز ارسال نشده است."
 
-        query_check = f'SELECT {id_field}, access FROM stu WHERE user_id = ?'
+        query_check = 'SELECT ins_id, con_id, access FROM stu WHERE user_id = ?'
         res_stu = db_helper.search_table(conn=conn, cursor=cursor, query=query_check, field=stu_id)
 
         if res_stu is None:
@@ -997,6 +1098,16 @@ def update_student_access_and_capacity(
             [updated_access_json, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
             'user_id = ?',
             [str(stu_id)]
+        )
+        upsert_student_package_access(
+            conn=conn,
+            cursor=cursor,
+            stu_user_id=int(stu_id),
+            owner_user_id=getattr(res_stu, "ins_id", None),
+            consultant_user_id=getattr(res_stu, "con_id", None),
+            package_name=kind,
+            permission=permission,
+            limit=limit,
         )
 
         token = get_tracking_code()

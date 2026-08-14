@@ -57,33 +57,37 @@ def get_dashboard(conn, cursor, request_data, user_info):
 
         stu_count = results["stu_count"][0]["total"] if results["stu_count"] else 0
 
-        query_stu_access = "SELECT access FROM stu WHERE con_id = ?"
-        res_stu_access = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query_stu_access, field=user_id)
+        stu_package_count = func_helper.get_student_package_access_counts(
+            conn, cursor, user_id, "consultant_user_id"
+        )
+        if stu_package_count is None:
+            query_stu_access = "SELECT access FROM stu WHERE con_id = ?"
+            res_stu_access = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query_stu_access, field=user_id)
 
-        stu_package_count = {"AG": 0, "SCL": 0}
-        if res_stu_access:
-            for stu in res_stu_access:
-                raw_access = getattr(stu, "access", None) or "{}"
-                try:
-                    access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-                except (json.JSONDecodeError, TypeError):
-                    access_data = {}
+            stu_package_count = {"AG": 0, "SCL": 0}
+            if res_stu_access:
+                for stu in res_stu_access:
+                    raw_access = getattr(stu, "access", None) or "{}"
+                    try:
+                        access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
+                    except (json.JSONDecodeError, TypeError):
+                        access_data = {}
 
-                for package_name in ["AG", "SCL"]:
-                    package_info = access_data.get(package_name, {})
-                    permission = 0
-                    if isinstance(package_info, dict):
-                        permission = int(package_info.get("permission") or 0)
-                    elif isinstance(package_info, bool):
-                        permission = 1 if package_info else 0
-                    elif isinstance(package_info, (int, float, str)):
-                        try:
-                            permission = int(package_info) if str(package_info).strip() != "" else 0
-                        except ValueError:
-                            permission = 0
+                    for package_name in ["AG", "SCL"]:
+                        package_info = access_data.get(package_name, {})
+                        permission = 0
+                        if isinstance(package_info, dict):
+                            permission = int(package_info.get("permission") or 0)
+                        elif isinstance(package_info, bool):
+                            permission = 1 if package_info else 0
+                        elif isinstance(package_info, (int, float, str)):
+                            try:
+                                permission = int(package_info) if str(package_info).strip() != "" else 0
+                            except ValueError:
+                                permission = 0
 
-                    if permission == 1:
-                        stu_package_count[package_name] += 1
+                        if permission == 1:
+                            stu_package_count[package_name] += 1
 
         quiz_report = {}
         for package_name in ["AG", "SCL"]:
@@ -165,10 +169,9 @@ def add_owner_consultant(conn, cursor, request_data, user_id):
         sex = request_data.get("sex")
         if not sex:
             sex = 1
-        field = '([first_name], [last_name], [phone], [password], [user_id], [sex])'
+        field = '([first_name], [last_name], [phone], [user_id], [sex])'
         values = (
             request_data["first_name"], request_data["last_name"], request_data["phone"],
-            func_helper.encrypt_password(request_data["password"]),
             user_id, sex)
         db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
                                values=values)
@@ -299,10 +302,10 @@ def get_management_report(conn, cursor, request_data, user_info):
 def add_student(conn, cursor, request_data, stu_user_id, user_info):
     try:
         table = "stu"
-        field = '([user_id], [first_name], [last_name], [phone], [password], [sex], [city], [ins_id], [con_id], [adder_id], [editor_id], [birth_date], [ins_role])'
+        field = '([user_id], [first_name], [last_name], [phone], [sex], [city], [ins_id], [con_id], [adder_id], [editor_id], [birth_date], [ins_role])'
         values = (
             stu_user_id, request_data["first_name"], request_data["last_name"], request_data["phone"],
-            func_helper.encrypt_password(request_data["password"]), request_data["sex"], request_data["city"],
+            request_data["sex"], request_data["city"],
             request_data["user_id"],
             user_info["user_id"], user_info["user_id"], user_info["user_id"], request_data["birth_date"], "wCon",)
         db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
@@ -493,5 +496,3 @@ def change_student_access(conn, cursor, request_data, user_info):
         id_field="ins_id",
         end_point="ag_api/wCon"
     )
-
-

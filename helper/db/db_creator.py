@@ -5,6 +5,7 @@ Usage:
     python helper/db/db_creator.py
 """
 from __future__ import annotations
+import argparse
 import os
 import sys
 from typing import Iterable, Sequence
@@ -18,11 +19,12 @@ TABLE_DEFINITIONS = {
     "users": """
         CREATE TABLE users (
             user_id INT IDENTITY(1, 1) PRIMARY KEY,
-            phone NVARCHAR(12),
-            password NVARCHAR(255),
+            phone NVARCHAR(12) NOT NULL,
+            password NVARCHAR(255) NOT NULL,
             role NVARCHAR(100) NULL,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_users_phone UNIQUE (phone)
         )
     """,
     "ins": """
@@ -35,7 +37,8 @@ TABLE_DEFINITIONS = {
             password NVARCHAR(255),
             verify INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT fk_ins_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
     "sch": """
@@ -48,7 +51,8 @@ TABLE_DEFINITIONS = {
             password NVARCHAR(255),
             verify INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT fk_sch_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
     "wCon": """
@@ -63,7 +67,8 @@ TABLE_DEFINITIONS = {
             sex INT DEFAULT 1,
             verify INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT fk_wcon_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
     "con": """
@@ -79,7 +84,9 @@ TABLE_DEFINITIONS = {
             password NVARCHAR(255),
             ins_role NVARCHAR(15),
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT fk_con_user FOREIGN KEY (user_id) REFERENCES users(user_id),
+            CONSTRAINT fk_con_owner_user FOREIGN KEY (ins_id) REFERENCES users(user_id)
         )
     """,
     "stu": """
@@ -101,7 +108,10 @@ TABLE_DEFINITIONS = {
             adder_id INT,
             editor_id INT,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT fk_stu_user FOREIGN KEY (user_id) REFERENCES users(user_id),
+            CONSTRAINT fk_stu_owner_user FOREIGN KEY (ins_id) REFERENCES users(user_id),
+            CONSTRAINT fk_stu_consultant_user FOREIGN KEY (con_id) REFERENCES users(user_id)
         )
     """,
     "setting": """
@@ -119,10 +129,11 @@ TABLE_DEFINITIONS = {
     "capacity": """
         CREATE TABLE capacity (
             capacity_id INT IDENTITY(1, 1) PRIMARY KEY,
-            user_id INT,
+            user_id INT UNIQUE,
             phone NVARCHAR(12),
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT fk_capacity_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
     "capacity_package": """
@@ -132,10 +143,33 @@ TABLE_DEFINITIONS = {
             package_name NVARCHAR(50),
             user_id INT,
             phone NVARCHAR(12),
+            total_allowed INT DEFAULT 0,
             allowed INT DEFAULT 0,
             used INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_capacity_package_user_package UNIQUE (user_id, package_name),
+            CONSTRAINT fk_capacity_package_user FOREIGN KEY (user_id) REFERENCES users(user_id),
+            CONSTRAINT ck_capacity_package_counts CHECK (
+                ISNULL(total_allowed, 0) >= 0 AND ISNULL(allowed, 0) >= 0 AND ISNULL(used, 0) >= 0
+            )
+        )
+    """,
+    "student_package_access": """
+        CREATE TABLE student_package_access (
+            id INT IDENTITY(1, 1) PRIMARY KEY,
+            stu_user_id INT NOT NULL,
+            owner_user_id INT NULL,
+            consultant_user_id INT NULL,
+            package_name NVARCHAR(50) NOT NULL,
+            permission BIT NOT NULL DEFAULT 0,
+            [limit] BIT NOT NULL DEFAULT 0,
+            created_time DATETIME DEFAULT GETDATE(),
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_student_package_access UNIQUE (stu_user_id, package_name),
+            CONSTRAINT fk_student_package_access_stu FOREIGN KEY (stu_user_id) REFERENCES stu(user_id),
+            CONSTRAINT fk_student_package_access_owner FOREIGN KEY (owner_user_id) REFERENCES users(user_id),
+            CONSTRAINT fk_student_package_access_consultant FOREIGN KEY (consultant_user_id) REFERENCES users(user_id)
         )
     """,
     "quiz_answer": """
@@ -149,7 +183,9 @@ TABLE_DEFINITIONS = {
             ins_id INT,
             con_id INT,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_quiz_answer_user_kind_quiz UNIQUE (user_id, quiz_kind, quiz_id),
+            CONSTRAINT fk_quiz_answer_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
     "scores": """
@@ -162,7 +198,9 @@ TABLE_DEFINITIONS = {
             brain_categories NVARCHAR(MAX),
             brain_branches NVARCHAR(MAX),
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_scores_user UNIQUE (user_id),
+            CONSTRAINT fk_scores_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
     "scl_scores": """
@@ -172,7 +210,9 @@ TABLE_DEFINITIONS = {
             phone NVARCHAR(12),
             scl_date NVARCHAR(MAX),
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_scl_scores_user UNIQUE (user_id),
+            CONSTRAINT fk_scl_scores_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
     "result_state": """
@@ -188,7 +228,8 @@ TABLE_DEFINITIONS = {
             f_state NVARCHAR(100),
             i_state NVARCHAR(100),
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT fk_result_state_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
     "hedayat_fields": """
@@ -199,22 +240,23 @@ TABLE_DEFINITIONS = {
             suggested NVARCHAR(MAX),
             other NVARCHAR(MAX),
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT fk_hedayat_fields_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
     "notifications": """
         CREATE TABLE notifications (
             id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
-            roles NCHAR(100),
+            roles NVARCHAR(100),
             user_id INT,
             title NVARCHAR(MAX),
             description NVARCHAR(MAX),
             added_by NVARCHAR(MAX),         
-            priority NCHAR(100),   
+            priority NVARCHAR(100),   
             persian_date NVARCHAR(50),
             fullText NVARCHAR(MAX),      
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE(),
+            edited_time DATETIME DEFAULT GETDATE()
         )
     """,
     "payment": """
@@ -293,7 +335,9 @@ TABLE_DEFINITIONS = {
             phone NVARCHAR(12),
             role NVARCHAR(100) NULL,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_tokens_user UNIQUE (user_id),
+            CONSTRAINT fk_tokens_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
     "comments": """
@@ -308,7 +352,7 @@ TABLE_DEFINITIONS = {
             role NVARCHAR(100) NULL,
             db_name NVARCHAR(400) NOT NULL,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE(),
+            edited_time DATETIME DEFAULT GETDATE()
         )
     """,
     "otp_logs": """
@@ -319,7 +363,7 @@ TABLE_DEFINITIONS = {
             type_otp VARCHAR(10),
             provider_resp NVARCHAR(MAX),
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE(),
+            edited_time DATETIME DEFAULT GETDATE()
         )
     """,
     "redis_log": """
@@ -348,12 +392,12 @@ TABLE_DEFINITIONS = {
             id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
             user_id INT,
             phone NVARCHAR(12),
-            end_point NCHAR(100),
-            func_name NCHAR(100),
+            end_point NVARCHAR(100),
+            func_name NVARCHAR(100),
             data NVARCHAR(MAX),         
             error_p NVARCHAR(MAX),         
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE(),
+            edited_time DATETIME DEFAULT GETDATE()
         )
     """,
     "capacity_logs": """
@@ -367,13 +411,14 @@ TABLE_DEFINITIONS = {
             used INT DEFAULT 0,
             change INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE(),
+            edited_time DATETIME DEFAULT GETDATE()
         )
     """,
 }
 
 DEFAULT_TABLES: Sequence[str] = (
-    'users', 'ins', 'sch', 'wCon', 'con', 'stu', 'setting', 'capacity', 'capacity_package', 'capacity_logs',
+    'users', 'ins', 'sch', 'wCon', 'con', 'stu', 'setting', 'capacity', 'capacity_package',
+    'student_package_access', 'capacity_logs',
     'quiz_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications', 'payment',
     'payment_log', 'discount', 'using_discount', 'tokens', 'comments', 'otp_logs', 'redis_log', 'error_log',
     'api_logs'
@@ -426,12 +471,22 @@ def build_connection() -> pyodbc.Connection:
     )
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Create missing AGB2B database tables.")
+    parser.add_argument(
+        "--tables",
+        nargs="+",
+        default=list(DEFAULT_TABLES),
+        help="Tables to create. Defaults to the full current schema.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
     conn = build_connection()
     cursor = conn.cursor()
-    drop_tables(conn, cursor,
-                [])
-    create_tables(conn, cursor, ["capacity_logs"])
+    create_tables(conn, cursor, args.tables)
 
     cursor.close()
     conn.close()
