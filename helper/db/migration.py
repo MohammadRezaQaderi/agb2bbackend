@@ -4,6 +4,16 @@ import os
 from cryptography.fernet import Fernet, InvalidToken
 from typing import Optional, Sequence
 
+try:
+    from config import DB_DRIVER, DB_SERVER, DB_DATABASE, DB_UID, DB_PWD, DB_TRUST_CERT
+except ImportError:
+    DB_DRIVER = "ODBC Driver 17 for SQL Server"
+    DB_SERVER = "localhost,1433"
+    DB_DATABASE = "AGB2B_COPY"
+    DB_UID = "mgh27"
+    DB_PWD = "m2711gH9985"
+    DB_TRUST_CERT = "yes"
+
 TABLE_DEFINITIONS = {
     "users": """
         CREATE TABLE users (
@@ -434,12 +444,12 @@ def decrypt_password(stored_password: str) -> Optional[str]:
 
 # Database configuration
 DB_CONFIG = {
-    "driver": "{ODBC Driver 17 for SQL Server}",
-    "host": "localhost,1433",
-    "database": "AGB2B",
-    "UID": "mgh27",
-    "PWD": "m2711gH9985",
-    "TrustServerCertificate": "yes",
+    "driver": f"{{{DB_DRIVER.strip('{}')}}}",
+    "host": DB_SERVER,
+    "database": DB_DATABASE,
+    "UID": DB_UID,
+    "PWD": DB_PWD,
+    "TrustServerCertificate": DB_TRUST_CERT,
 }
 
 

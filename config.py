@@ -9,7 +9,7 @@ deployment environments without changing code.
 """
 
 # Base path for all file storage
-BASE_PATH = os.getenv("AG_BASE_PATH", "D:/WebSites/AGB2B")
+BASE_PATH = os.getenv("AG_BASE_PATH", "D:/WebSites/TestProjects")
 
 # Media / file storage directories
 INS_PIC_DIR = os.getenv("AG_INS_PIC_DIR", os.path.join(BASE_PATH, "Media", "InsPic"))
@@ -101,7 +101,7 @@ REDIS_QUEUE_NAME = os.getenv("AG_REDIS_QUEUE_NAME", "userAGB2BReport")
 # Database Configuration
 DB_DRIVER = os.getenv("AG_DB_DRIVER", "ODBC Driver 17 for SQL Server")
 DB_SERVER = os.getenv("AG_DB_SERVER", "localhost,1433")
-DB_DATABASE = os.getenv("AG_DB_DATABASE", "AGB2B")
+DB_DATABASE = os.getenv("AG_DB_DATABASE", "AGB2B_COPY")
 DB_UID = os.getenv("AG_DB_UID", "mgh27")
 DB_PWD = os.getenv("AG_DB_PWD", "m2711gH9985")
 DB_TRUST_CERT = os.getenv("AG_DB_TRUST_CERT", "yes")
