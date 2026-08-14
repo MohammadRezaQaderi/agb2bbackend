@@ -19,12 +19,12 @@ def get_info(conn, cursor, user_id):
         response_info = {"phone": res.phone, "user_id": user_id, "id": res.con_id, "first_name": res.first_name,
                          "last_name": res.last_name, "role": 'con', "name": res_ins.name, "pic": res_ins.logo,
                          "ins_id": res.ins_id}
-        return token, response_info
+        return token, response_info, ""
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_info", str(e), {},
                                         {"user_id": user_id})
-        return None, {}
+        return None, None, "اطلاعات کاربر یافت نشد."
 
 
 def get_dashboard(conn, cursor, request_data, user_info):
@@ -170,12 +170,12 @@ def get_dashboard(conn, cursor, request_data, user_info):
         }
 
         token = func_helper.get_tracking_code()
-        return token, cons_info, notifications
+        return token, {"dashboard_info": cons_info, "notifications": notifications}, ""
 
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_dashboard", str(e), request_data, user_info)
-        return None, {}, []
+        return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
 def get_report(conn, cursor, request_data, user_info):
@@ -197,11 +197,11 @@ def get_report(conn, cursor, request_data, user_info):
                         "consultant_comment": stu.comment, "report_id": stu.user_id}
                 report_info.append(user_info)
         token = func_helper.get_tracking_code()
-        return token, report_info
+        return token, report_info, ""
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_report", str(e), request_data, user_info)
-        return None, []
+        return None, [], "مشکل در دریافت گزارش رخ داده است."
 
 
 def get_management_report(conn, cursor, request_data, user_info):
@@ -289,12 +289,12 @@ def get_management_report(conn, cursor, request_data, user_info):
                 }
                 report_info.append(info_response)
         token = func_helper.get_tracking_code()
-        return token, report_info
+        return token, report_info, ""
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_management_report", str(e),
                                         request_data, user_info)
-        return None, None
+        return None, None, "مشکل در دریافت گزارش مدیریتی رخ داده است."
 
 
 # this function use for get students of con for list of students
@@ -332,11 +332,11 @@ def get_students(conn, cursor, request_data, user_info):
                         "city": stu.city, "birth_date": stu.birth_date, "access": json.loads(stu.access)}
                 stu_info.append(user_info)
         token = func_helper.get_tracking_code()
-        return token, stu_info
+        return token, stu_info, ""
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_students", str(e), request_data, user_info)
-        return None, []
+        return None, [], "اطلاعات دانش‌آموزان دریافت نشد."
 
 
 # this function is for update the information of consultant
@@ -350,11 +350,11 @@ def change_student(conn, cursor, request_data, user_info):
                                  request_data["birth_date"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(request_data["student_id"])])
         token = func_helper.get_tracking_code()
-        return token
+        return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_student", str(e), request_data, user_info)
-        return None
+        return None, None, "مشکلی در تغییر اطلاعات دانش‌آموز رخ داده است."
 
 
 def change_comment(conn, cursor, request_data, user_info):
@@ -365,11 +365,11 @@ def change_comment(conn, cursor, request_data, user_info):
                                  datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(request_data["student_id"])])
         token = func_helper.get_tracking_code()
-        return token
+        return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_comment", str(e), request_data, user_info)
-        return None
+        return None, None, "مشکلی در تغییر توضیحات دانش‌آموز رخ داده است."
 
 
 def change_user_info(conn, cursor, request_data, user_info):
@@ -380,10 +380,9 @@ def change_user_info(conn, cursor, request_data, user_info):
                                  datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(user_info["user_id"])])
         token = func_helper.get_tracking_code()
-        return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}
+        return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_user_info", str(e), request_data,
                                         user_info)
-        return None, {}
-
+        return None, None, "اطلاعات شما با موفقیت تغییر نیافت."

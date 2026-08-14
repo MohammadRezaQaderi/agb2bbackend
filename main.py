@@ -559,14 +559,20 @@ async def update_user_voice(
         with open(file_path, "wb") as file_object:
             file_object.write(voice.file.read())
         if role == "ins":
-            res_request = institute_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, user_info=user_info)
-            return res_request
+            tracking_token, response_data, response_message = institute_service.change_user_voice(
+                conn=conn, cursor=cursor, request_data=data, user_info=user_info
+            )
+            return service.service_response(method_type, tracking_token, response_data, response_message)
         elif role == "sch":
-            res_request = school_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, user_info=user_info)
-            return res_request
+            tracking_token, response_data, response_message = school_service.change_user_voice(
+                conn=conn, cursor=cursor, request_data=data, user_info=user_info
+            )
+            return service.service_response(method_type, tracking_token, response_data, response_message)
         elif role == "ocon":
-            res_request = owner_consultant_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, user_info=user_info)
-            return res_request
+            tracking_token, response_data, response_message = owner_consultant_service.change_user_voice(
+                conn=conn, cursor=cursor, request_data=data, user_info=user_info
+            )
+            return service.service_response(method_type, tracking_token, response_data, response_message)
         else:
             return {"status": 200, "tracking_code": None, "method_type": method_type,
                     "error": "شما به این سرویس دسترسی ندارید."}

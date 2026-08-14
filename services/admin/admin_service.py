@@ -15,21 +15,21 @@ def change_capacity(conn, cursor, request_data):
         count = request_data.get("count")
 
         if not phone:
-            return None, "شماره تلفن الزامی است."
+            return None, None, "شماره تلفن الزامی است."
 
         if not kind:
-            return None, "نوع بسته الزامی است."
+            return None, None, "نوع بسته الزامی است."
 
         kind = kind.upper()
         if kind not in func_helper.PACKAGES_DATA:
             valid_packages = "، ".join(f"{package} ({func_helper.get_kind_name(package)})" for package in func_helper.PACKAGES_DATA.keys())
-            return None, f"نوع بسته معتبر نیست. بسته‌های معتبر: {valid_packages}"
+            return None, None, f"نوع بسته معتبر نیست. بسته‌های معتبر: {valid_packages}"
 
         if not isinstance(count, int):
-            return None, "تعداد باید یک عدد صحیح مثبت باشد."
+            return None, None, "تعداد باید یک عدد صحیح مثبت باشد."
 
         if count <= 0:
-            return None, "تعداد باید یک عدد صحیح مثبت باشد."
+            return None, None, "تعداد باید یک عدد صحیح مثبت باشد."
 
         # Get user user_info from users table
         query_user = 'SELECT user_id, role FROM users WHERE phone = ?'
@@ -38,13 +38,13 @@ def change_capacity(conn, cursor, request_data):
         user_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_user, field=phone)
 
         if not user_res:
-            return None, "کاربری با این شماره تلفن یافت نشد."
+            return None, None, "کاربری با این شماره تلفن یافت نشد."
 
         user_id = user_res.user_id
         role = user_res.role
 
         if role not in ["ins", "sch", "ocon"]:
-            return None, "نقش کاربر باید ins، sch یا ocon باشد."
+            return None, None, "نقش کاربر باید ins، sch یا ocon باشد."
 
         # Check if capacity record exists
         query_capacity = 'SELECT capacity_id FROM capacity WHERE user_id = ?'
@@ -68,7 +68,7 @@ def change_capacity(conn, cursor, request_data):
             if capacity_result and capacity_result.get("id"):
                 capacity_id = capacity_result["id"]
             else:
-                return None, "خطا در ایجاد رکورد ظرفیت."
+                return None, None, "خطا در ایجاد رکورد ظرفیت."
 
         # Check if capacity_package record exists for this kind
         # NOTE: Added 'used' to the SELECT statement to capture it for logging
@@ -164,13 +164,13 @@ def change_capacity(conn, cursor, request_data):
         return token, {
             "phone": phone,
             "capacity": capacity_result
-        }
+        }, ""
 
     except Exception as e:
         func_helper.service_exception_error_logging(
             conn, cursor, "ag_api/admin_request", "change_capacity", str(e), request_data, {}
         )
-        return None, f"خطا در به‌روزرسانی ظرفیت: {str(e)}"
+        return None, None, f"خطا در به‌روزرسانی ظرفیت: {str(e)}"
 
 
 def get_user_info(conn, cursor, request_data):
@@ -187,14 +187,14 @@ def get_user_info(conn, cursor, request_data):
         phone = request_data.get("phone")
 
         if not phone:
-            return None, "شماره تلفن الزامی است."
+            return None, None, "شماره تلفن الزامی است."
 
         # Get user user_info from users table
         query_user = 'SELECT user_id, role FROM users WHERE phone = ?'
         user_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_user, field=phone)
 
         if not user_res:
-            return None, "کاربری با این شماره تلفن یافت نشد."
+            return None, None, "کاربری با این شماره تلفن یافت نشد."
 
         user_id = user_res.user_id
         role = user_res.role
@@ -308,13 +308,13 @@ def get_user_info(conn, cursor, request_data):
                     user_info["access"] = access_data
 
         token = func_helper.get_tracking_code()
-        return token, user_info
+        return token, user_info, ""
 
     except Exception as e:
         func_helper.service_exception_error_logging(
             conn, cursor, "ag_api/admin_request", "get_user_info", str(e), request_data, {}
         )
-        return None, f"خطا در دریافت اطلاعات کاربر: {str(e)}"
+        return None, None, f"خطا در دریافت اطلاعات کاربر: {str(e)}"
 
 
 def check_student_quiz_answer(conn, cursor, request_data):
@@ -330,14 +330,14 @@ def check_student_quiz_answer(conn, cursor, request_data):
         phone = request_data.get("phone")
 
         if not phone:
-            return None, "شماره تلفن الزامی است."
+            return None, None, "شماره تلفن الزامی است."
 
         # Get student user_info
         query_stu = 'SELECT user_id, first_name, last_name, access FROM stu WHERE phone = ?'
         stu_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_stu, field=phone)
 
         if not stu_res:
-            return None, "دانش‌آموزی با این شماره تلفن یافت نشد."
+            return None, None, "دانش‌آموزی با این شماره تلفن یافت نشد."
 
         user_id = stu_res.user_id
 
@@ -395,10 +395,10 @@ def check_student_quiz_answer(conn, cursor, request_data):
         }
 
         token = func_helper.get_tracking_code()
-        return token, result
+        return token, result, ""
 
     except Exception as e:
         func_helper.service_exception_error_logging(
             conn, cursor, "ag_api/admin_request", "check_student_quiz_answer", str(e), request_data, {}
         )
-        return None, f"خطا در بررسی پاسخ‌های آزمون دانش‌آموز: {str(e)}"
+        return None, None, f"خطا در بررسی پاسخ‌های آزمون دانش‌آموز: {str(e)}"

@@ -94,7 +94,7 @@ def select_student_info(conn, cursor, user_id):
             return token, {"phone": res.phone, "user_id": user_id, "id": res.stu_id, "first_name": res.first_name,
                            "last_name": res.last_name, "sex": res.sex, "city": res.city,
                            "access": res.access, "role": "stu", "name": res_ins.name, "con_name": con_name,
-                           "pic": res_ins.logo, "ins_id": res_ins.user_id, }
+                           "pic": res_ins.logo, "ins_id": res_ins.user_id, }, ""
         else:
             query_con = 'SELECT first_name, last_name FROM ocon WHERE user_id = ?'
             res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query_con, field=res.con_id)
@@ -104,12 +104,12 @@ def select_student_info(conn, cursor, user_id):
             return token, {"phone": res.phone, "user_id": user_id, "id": res.stu_id, "first_name": res.first_name,
                            "last_name": res.last_name, "sex": res.sex, "city": res.city,
                            "access": res.access, "role": "stu", "name": "هدایت تحصیلی", "con_name": con_name,
-                           "pic": None, "ins_id": res.con_id}
+                           "pic": None, "ins_id": res.con_id}, ""
     except Exception as e:
         conn.rollback()
         service_exception_error_logging(conn, cursor, "ags_api/stu", "select_student_info", str(e), {},
                                         {"user_id": user_id})
-        return None, {}
+        return None, None, "اطلاعات دانش‌آموز یافت نشد."
 
 
 def select_stu_dashboard(conn, cursor, request_data, info):
@@ -246,11 +246,11 @@ def select_stu_dashboard(conn, cursor, request_data, info):
             "notifications": notifications_res,
         }
         token = str(uuid.uuid4())
-        return token, dashboard_info
+        return token, dashboard_info, ""
     except Exception as e:
         conn.rollback()
         service_exception_error_logging(conn, cursor, "ags_api/stu", "select_stu_dashboard", str(e), request_data, info)
-        return None, {}
+        return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
 def update_stu_user_profile(conn, cursor, request_data, info):
@@ -261,12 +261,12 @@ def update_stu_user_profile(conn, cursor, request_data, info):
                                  datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(info["user_id"])])
         token = str(uuid.uuid4())
-        return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]},
+        return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
         conn.rollback()
         service_exception_error_logging(conn, cursor, "ags_api/stu", "update_stu_user_profile", str(e), request_data,
                                         info)
-        return None, {}
+        return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
 
 def update_stu_password(conn, cursor, request_data, info):
@@ -284,11 +284,11 @@ def update_stu_password(conn, cursor, request_data, info):
             [str(info["user_id"])],
         )
         token = str(uuid.uuid4())
-        return token
+        return token, None, "رمز عبور شما با موفقیت تغییر کرد."
     except Exception as e:
         conn.rollback()
         service_exception_error_logging(conn, cursor, "ags_api/stu", "update_stu_password", str(e), request_data, info)
-        return None
+        return None, None, "رمز عبور شما تغییر نیافت."
 
 
 def select_stu_quiz_table_info(conn, cursor, request_data, info):
@@ -298,19 +298,19 @@ def select_stu_quiz_table_info(conn, cursor, request_data, info):
         # If kind is not provided, we cannot determine which quiz pack to use
         if not kind:
             token = str(uuid.uuid4())
-            return token, []
+            return token, [], ""
         stu_access = _load_student_access(conn, cursor, info["user_id"])
         permission, _ = _package_permission(stu_access, kind)
         has_access = permission == 1
 
         if not has_access:
-            return None, []
+            return None, None, "شما به این محصول دسترسی ندارید."
 
         quiz_info = get_quiz_table_info(kind=kind) or []
 
         if not quiz_info:
             token = str(uuid.uuid4())
-            return token, []
+            return token, [], ""
 
         # Use quiz_kind column (per-pack quizzes start from id 1)
         # Support legacy rows where quiz_kind might be NULL.
@@ -361,12 +361,12 @@ def select_stu_quiz_table_info(conn, cursor, request_data, info):
                 else:
                     student_quiz_info.append(_build_quiz_item(q, status=0, can_start=0))
         token = str(uuid.uuid4())
-        return token, student_quiz_info
+        return token, student_quiz_info, ""
     except Exception as e:
         conn.rollback()
         service_exception_error_logging(conn, cursor, "ags_api/stu", "select_stu_quiz_table_info", str(e), request_data,
                                         info)
-        return None, []
+        return None, None, "اطلاعات آزمون دریافت نشد."
 
 
 def select_stu_quiz_info(conn, cursor, request_data, info):
@@ -377,7 +377,7 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
         # Determine product kind directly from request (per-pack quiz ids start from 1)
         quiz_kind = request_data.get("quiz_kind").upper()
         if not quiz_kind:
-            return None, [], {}
+            return None, None, "quiz_kind is required"
 
         query_stu = 'SELECT ins_id FROM stu WHERE user_id = ?'
         res_stu = db_helper.search_table(conn=conn, cursor=cursor, query=query_stu, field=info["user_id"])
@@ -386,7 +386,7 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
         has_access = permission == 1
 
         if not has_access:
-            return None, [], {}
+            return None, None, "شما به این محصول دسترسی ندارید."
         # Limit answers to this user and this quiz kind (support legacy NULL quiz_kind)
         query = (
             "SELECT * FROM quiz_answer "
@@ -425,10 +425,10 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
         if not all_answers:
             first_quiz_id = min(quiz_ids_for_kind) if quiz_ids_for_kind else None
             if quiz_id != first_quiz_id:
-                return None, [], {}
+                return None, None, "آزمون مورد نظر شما در دسترس شما نیست."
 
             quiz_info_obj = _apply_setting_overrides(_load_quiz_info(), res_quiz_setting)
-            return token, quiz_info_obj, {}
+            return token, {"data": quiz_info_obj, "quizAnswers": {}}, ""
 
         # There is at least one answered quiz for this product
         last_answer_row = all_answers[-1]
@@ -442,30 +442,30 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
         if last_quiz_id == quiz_id:
             if last_quiz_state == 2:
                 # Finished quiz cannot be reopened
-                return None, [], {}
+                return None, None, "آزمون مورد نظر شما در دسترس شما نیست."
             elif last_quiz_state == 1:
                 # In-progress quiz can be continued with existing answers
                 quiz_info_obj = _apply_setting_overrides(_load_quiz_info(), res_quiz_setting)
                 answers_json = last_answer_row[4] if len(last_answer_row) > 4 else None
                 quiz_answer = json.loads(answers_json) if answers_json else {}
-                return token, quiz_info_obj, quiz_answer
+                return token, {"data": quiz_info_obj, "quizAnswers": quiz_answer}, ""
 
         # If requesting the next quiz in sequence
         if last_quiz_id + 1 == quiz_id:
             if last_quiz_state == 2:
                 # Previous quiz finished -> allow starting new quiz with empty answers
                 quiz_info_obj = _apply_setting_overrides(_load_quiz_info(), res_quiz_setting)
-                return token, quiz_info_obj, {}
+                return token, {"data": quiz_info_obj, "quizAnswers": {}}, ""
             else:
                 # Previous quiz not finished -> cannot start next quiz
-                return None, [], {}
+                return None, None, "آزمون مورد نظر شما در دسترس شما نیست."
 
         # Any other quiz_id (skipping ahead or going back) is not allowed
-        return None, [], {}
+        return None, None, "آزمون مورد نظر شما در دسترس شما نیست."
     except Exception as e:
         conn.rollback()
         service_exception_error_logging(conn, cursor, "ags_api/stu", "select_stu_quiz_info", str(e), request_data, info)
-        return None, [], {}
+        return None, None, "آزمون مورد نظر شما در دسترس شما نیست."
 
 
 # Pre-compute the last AG question id once (used for Redis enqueue condition)
@@ -533,7 +533,7 @@ def submit_quiz_answer(conn, cursor, request_data, info):
         question_number = request_data["question_Number"]
         last_question_id = request_data.get("last_question_id")
         if not quiz_kind:
-            return None, "quiz_kind is required"
+            return None, None, "quiz_kind is required"
 
         # Normalize / clean answers: drop any nulls from list answers
         question_answer = request_data.get("question_Answer")
@@ -552,7 +552,7 @@ def submit_quiz_answer(conn, cursor, request_data, info):
                 [str(quiz_id), str(info["user_id"]), quiz_kind],
             )
             token = str(uuid.uuid4())
-            return token, "آزمون شما به علت اتمام زمان به پایان رسید."
+            return token, None, "آزمون شما به علت اتمام زمان به پایان رسید."
 
         # Load existing answer row (limited to this user, quiz and kind)
         query_quiz_answer = """
@@ -574,7 +574,7 @@ def submit_quiz_answer(conn, cursor, request_data, info):
             # Validate that first question for this quiz is being answered
             quiz_info_obj = get_quiz_info(quiz_id=quiz_id, kind=quiz_kind)
             if not quiz_info_obj:
-                return None, "quiz info not found"
+                return None, None, "quiz info not found"
 
             first_q_id = None
             for section in quiz_info_obj.get("sections", []):
@@ -584,7 +584,7 @@ def submit_quiz_answer(conn, cursor, request_data, info):
                         first_q_id = qid
 
             if first_q_id is not None and question_number != first_q_id:
-                return None, "this question number is not valid reload quiz"
+                return None, None, "this question number is not valid reload quiz"
 
             answers = {question_number: question_answer}
             answers_data = json.dumps(answers, ensure_ascii=False)
@@ -652,11 +652,11 @@ def submit_quiz_answer(conn, cursor, request_data, info):
             )
             message = "کارنامه شما در حال تولید است ، لطفا کمی صبور باشید."
 
-        return token, message
+        return token, None, message
     except Exception as e:
         conn.rollback()
         service_exception_error_logging(conn, cursor, "ags_api/stu", "submit_quiz_answer", str(e), request_data, info)
-        return None, ""
+        return None, None, ""
 
 
 def get_stu_other_info(conn, cursor, user_id):
@@ -674,9 +674,9 @@ def select_student_access_info(conn, cursor, request_data, info):
         stu_access = _load_student_access(conn, cursor, info["user_id"])
         token = str(uuid.uuid4())
         comment = getattr(res_stu_access, "comment", None) if res_stu_access else None
-        return token, {"access": stu_access or _empty_access(), "comment": comment}
+        return token, {"access": stu_access or _empty_access(), "comment": comment}, ""
     except Exception as e:
         conn.rollback()
         service_exception_error_logging(conn, cursor, "ags_api/stu", "select_student_access_info", str(e), request_data,
                                         info)
-        return None, {}
+        return None, None, "اطلاعات دسترسی دانش‌آموز دریافت نشد."

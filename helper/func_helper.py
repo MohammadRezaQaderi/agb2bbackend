@@ -951,7 +951,7 @@ def update_student_access_and_capacity(
         role_type: str,
         id_field: str,
         end_point: str,
-) -> Tuple[Optional[str], str]:
+) -> Tuple[Optional[str], Optional[dict], str]:
     """
     Update student access permissions and manage capacity tracking.
 
@@ -971,7 +971,7 @@ def update_student_access_and_capacity(
         end_point: API endpoint for error logging
 
     Returns:
-        Tuple of (token, message) on success, (None, error_message) on failure
+        Tuple of (tracking_token, response_data, response_message) on success/failure.
 
     Note:
         Access is stored in format: {"AG": {"permission": 1, "limit": 1}}
@@ -983,17 +983,17 @@ def update_student_access_and_capacity(
         stu_id = request_data.get("stu_id")
 
         if not stu_id:
-            return None, "شناسه دانش‌آموز ارسال نشده است."
+            return None, None, "شناسه دانش‌آموز ارسال نشده است."
 
         query_check = 'SELECT ins_id, con_id, access FROM stu WHERE user_id = ?'
         res_stu = db_helper.search_table(conn=conn, cursor=cursor, query=query_check, field=stu_id)
 
         if res_stu is None:
-            return None, "دانش‌آموز یافت نشد."
+            return None, None, "دانش‌آموز یافت نشد."
 
         org_id = getattr(res_stu, id_field, None)
         if org_id != user_id:
-            return None, "این دانش‌آموز به شما تعلق ندارد."
+            return None, None, "این دانش‌آموز به شما تعلق ندارد."
 
         current_access_str = res_stu.access or '{}'
         try:
@@ -1003,11 +1003,11 @@ def update_student_access_and_capacity(
 
         kind = request_data.get("kind")
         if not kind:
-            return None, "نوع بسته (kind) ارسال نشده است."
+            return None, None, "نوع بسته (kind) ارسال نشده است."
 
         if kind not in PACKAGES_DATA:
             valid_packages = "، ".join(f"{package} ({get_kind_name(package)})" for package in PACKAGES_DATA.keys())
-            return None, f"نوع بسته {kind} معتبر نیست. بسته‌های معتبر: {valid_packages}"
+            return None, None, f"نوع بسته {kind} معتبر نیست. بسته‌های معتبر: {valid_packages}"
 
         permission = request_data.get("permission", 0)
         limit = request_data.get("limit", 0)
@@ -1063,7 +1063,7 @@ def update_student_access_and_capacity(
             )
 
             if not res_capacity:
-                return None, f"بسته {get_kind_name(kind=kind)} برای شما تعریف نشده است."
+                return None, None, f"بسته {get_kind_name(kind=kind)} برای شما تعریف نشده است."
 
             capacity_info = res_capacity[0]
             allowed = capacity_info.get("allowed", 0)
@@ -1071,7 +1071,7 @@ def update_student_access_and_capacity(
 
             if is_granting:
                 if allowed <= 0:
-                    return None, f"ظرفیت بسته {get_kind_name(kind=kind)} تکمیل شده است."
+                    return None, None, f"ظرفیت بسته {get_kind_name(kind=kind)} تکمیل شده است."
 
                 db_helper.update_record(
                     conn, cursor, 'capacity_package',
@@ -1111,7 +1111,7 @@ def update_student_access_and_capacity(
         )
 
         token = get_tracking_code()
-        return token, "دسترسی دانش‌آموز با موفقیت به‌روزرسانی شد."
+        return token, None, "دسترسی دانش‌آموز با موفقیت به‌روزرسانی شد."
 
     except Exception as e:
         conn.rollback()
@@ -1120,7 +1120,7 @@ def update_student_access_and_capacity(
             f"update_student_access_and_capacity_{role_type}",
             str(e), request_data, user_info
         )
-        return None, "مشکلی در به‌روزرسانی دسترسی دانش‌آموز رخ داده است."
+        return None, None, "مشکلی در به‌روزرسانی دسترسی دانش‌آموز رخ داده است."
 
 
 def get_quiz_name(kind, quiz_id) -> str | None:

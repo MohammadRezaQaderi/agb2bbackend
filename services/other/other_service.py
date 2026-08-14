@@ -70,7 +70,7 @@ def get_all_products(conn, cursor):
         for p in res
     ]
     token = func_helper.get_tracking_code()
-    return token, products_info
+    return token, products_info, ""
 
 
 def get_transactions(conn, cursor, request_data, user_info):
@@ -127,10 +127,10 @@ def get_transactions(conn, cursor, request_data, user_info):
                     "date": p[5]
                 })
         token = func_helper.get_tracking_code()
-        return token, transactions_info
+        return token, transactions_info, ""
     except Exception as e:
         print(e)
-        return None, None
+        return None, None, "مشکلی در دریافت لیست تراکنش‌ها رخ داده است."
 
 
 def get_order_status(conn, cursor, data, user_info):
@@ -168,7 +168,7 @@ def get_order_status(conn, cursor, data, user_info):
         return token, transactions_info, status
     except Exception as e:
         print(e)
-        return None, None, None
+        return None, None, "مشکلی در دریافت وضعیت سفارش رخ داده است."
 
 
 def mellat_request_created(conn, cursor, data, user_info):
@@ -277,14 +277,14 @@ def order_payment(conn, cursor, request_data, user_info):
             query = 'SELECT id, discount_percentage, count, status, used_apply, expire_time FROM discount WHERE code = ?'
             res_discount = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["discount_code"])
             if not res_discount:
-                return None, None, "کد تخفیف شما موجود نیست.", None
+                return None, None, "کد تخفیف شما موجود نیست."
             elif res_discount:
                 if datetime.now() > res_discount.expire_time:
-                    return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده.", None
+                    return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
                 elif res_discount.status == 'EXPIRED':
-                    return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده.", None
+                    return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
                 elif res_discount.count == 0:
-                    return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته.", None
+                    return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
                 else:
                     discount_id = res_discount.id
                     discount_percentage = res_discount.discount_percentage
@@ -330,12 +330,12 @@ def order_payment(conn, cursor, request_data, user_info):
             "gateway": "mellat",
             "discount_id": discount_id,
         }
-        return None, None, "متاسفانه فعلا درگاه پرداخت در دسترس نیست", None
+        return None, None, "متاسفانه فعلا درگاه پرداخت در دسترس نیست"
         ref_id, message, url = mellat_request_created(conn, cursor, product_data, user_info)
-        return token, ref_id, message, url
+        return func_helper.get_tracking_code(), {"ref_id": ref_id, "url": url}, message
     except Exception as e:
         print(e)
-        return None, None, "خطا در دسترسی به پرداخت", None
+        return None, None, "خطا در دسترسی به پرداخت"
 
 
 def get_report_data(conn, cursor, request_data, user_info):
@@ -344,7 +344,7 @@ def get_report_data(conn, cursor, request_data, user_info):
         student_id = request_data.get("student_id")
         
         if not student_id:
-            return None, None
+            return None, None, "شناسه دانش‌آموز ارسال نشده است."
         
         if kind == "AG":
             # Fetch result_state from result_state table
@@ -437,7 +437,7 @@ def get_report_data(conn, cursor, request_data, user_info):
             }
             
             token = func_helper.get_tracking_code()
-            return token, report_data
+            return token, report_data, ""
         elif kind == "SCL":
             # Fetch scl_date from scl_scores table
             query_scl_scores = """
@@ -472,10 +472,10 @@ def get_report_data(conn, cursor, request_data, user_info):
             }
             
             token = func_helper.get_tracking_code()
-            return token, report_data
+            return token, report_data, ""
         else:
             token = func_helper.get_tracking_code()
-            return token, {}
+            return token, {}, ""
     except Exception as e:
         print(e)
-        return None, None
+        return None, None, "خطا در دریافت اطلاعات گزارش."

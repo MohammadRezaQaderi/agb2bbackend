@@ -31,6 +31,12 @@ def _service_response(method_type, tracking_token, response_data=None, response_
     return _error_response(method_type=method_type, message=error_message or response_message or DEFAULT_SERVICE_ERROR)
 
 
+def service_response(method_type, tracking_token, response_data=None, response_message="", error_message=None,
+                     **extra_response):
+    return _service_response(method_type, tracking_token, response_data, response_message, error_message,
+                             **extra_response)
+
+
 def _role_handler(user_info, handlers):
     handler = handlers.get(user_info.get("role"))
     return handler() if handler else None
@@ -38,13 +44,10 @@ def _role_handler(user_info, handlers):
 
 def remove_token(conn, cursor, request_data, user_info):
     method_type = "DELETE"
-    token = func_helper.get_tracking_code()
-    res = auth_service.remove_token(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
-    if res == 0:
-        return {"status": 200, "tracking_code": token, "method_type": method_type,
-                "response": {"message": "نشد"}}
-    return {"status": 200, "tracking_code": token, "method_type": method_type,
-            "response": {"message": "شد"}}
+    tracking_token, response_data, response_message = auth_service.remove_token(
+        conn=conn, cursor=cursor, request_data=request_data, user_info=user_info
+    )
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def sign_in(conn, cursor, request_data):
@@ -57,16 +60,10 @@ def sign_in(conn, cursor, request_data):
     if not is_valid:
         return error_response
 
-    tracking_code, message, response_info = auth_service.sign_in(conn=conn, cursor=cursor, request_data=request_data)
-    if response_info is None:
-        return {"status": 200, "tracking_code": None, "method_type": method_type,
-                "error": message}
-    elif tracking_code:
-        return {"status": 200, "tracking_code": tracking_code, "method_type": method_type,
-                "response": response_info}
-    else:
-        return {"status": 200, "tracking_code": None, "method_type": method_type,
-                "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
+    tracking_token, response_data, response_message = auth_service.sign_in(
+        conn=conn, cursor=cursor, request_data=request_data
+    )
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def student_sign_in(conn, cursor, request_data):
@@ -79,16 +76,10 @@ def student_sign_in(conn, cursor, request_data):
     if not is_valid:
         return error_response
 
-    tracking_code, message, response_info = auth_service.sign_in_student(
+    tracking_token, response_data, response_message = auth_service.sign_in_student(
         conn=conn, cursor=cursor, request_data=request_data
     )
-    if response_info is None:
-        return {"status": 200, "tracking_code": None, "method_type": method_type, "error": message}
-    if tracking_code:
-        return {"status": 200, "tracking_code": tracking_code, "method_type": method_type,
-                "response": response_info}
-    return {"status": 200, "tracking_code": None, "method_type": method_type,
-            "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def sign_up(conn, cursor, redis_db, request_data):
@@ -101,16 +92,10 @@ def sign_up(conn, cursor, redis_db, request_data):
     if not is_valid:
         return error_response
 
-    token, message = auth_service.sign_up(conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data)
-    if token is None:
-        return {"status": 200, "tracking_code": None, "method_type": method_type,
-                "error": message}
-    elif token:
-        return {"status": 200, "tracking_code": token, "method_type": method_type,
-                "response": {"message": message}}
-    else:
-        return {"status": 200, "tracking_code": None, "method_type": method_type,
-                "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
+    tracking_token, response_data, response_message = auth_service.sign_up(
+        conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data
+    )
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def send_otp(conn, cursor, redis_db, request_data):
@@ -123,13 +108,10 @@ def send_otp(conn, cursor, redis_db, request_data):
     if not is_valid:
         return error_response
 
-    token, message, phone = auth_service.send_otp(conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data)
-    if token is None:
-        return {"status": 200, "tracking_code": None, "method_type": method_type,
-                "error": message}
-    else:
-        return {"status": 200, "tracking_code": token, "method_type": method_type,
-                "response": {"phone": phone}}
+    tracking_token, response_data, response_message = auth_service.send_otp(
+        conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data
+    )
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def check_otp(conn, cursor, redis_db, request_data):
@@ -142,17 +124,10 @@ def check_otp(conn, cursor, redis_db, request_data):
     if not is_valid:
         return error_response
 
-    tracking_code, message, user_info = auth_service.check_otp(conn=conn, cursor=cursor, redis_db=redis_db,
-                                                    request_data=request_data)
-    if user_info is None:
-        return {"status": 200, "tracking_code": None, "method_type": method_type,
-                "error": message}
-    elif tracking_code:
-        return {"status": 200, "tracking_code": tracking_code, "method_type": method_type,
-                "response": user_info}
-    else:
-        return {"status": 200, "tracking_code": None, "method_type": method_type,
-                "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
+    tracking_token, response_data, response_message = auth_service.check_otp(
+        conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data
+    )
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def change_user_info(conn, cursor, request_data, user_info):
@@ -170,8 +145,7 @@ def change_user_info(conn, cursor, request_data, user_info):
     if result is None:
         return func_helper.not_method_access_return()
 
-    tracking_token, response_data = result
-    response_message = "اطلاعات شما با موفقیت تغییر یافت."
+    tracking_token, response_data, response_message = result
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -228,10 +202,9 @@ def student_change_user_info(conn, cursor, request_data, user_info):
     if user_info["role"] != "stu":
         return func_helper.not_method_access_return()
 
-    tracking_token, response_data = student_service.update_stu_user_profile(
+    tracking_token, response_data, response_message = student_service.update_stu_user_profile(
         conn=conn, cursor=cursor, request_data=request_data, info=user_info
     )
-    response_message = "اطلاعات شما با موفقیت تغییر یافت."
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -255,11 +228,9 @@ def student_change_password(conn, cursor, request_data, user_info):
     if user_info["role"] != "stu":
         return func_helper.not_method_access_return()
 
-    tracking_token = student_service.update_stu_password(
+    tracking_token, response_data, response_message = student_service.update_stu_password(
         conn=conn, cursor=cursor, request_data=request_data, info=user_info
     )
-    response_data = None
-    response_message = "رمز عبور شما با موفقیت تغییر کرد."
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -268,10 +239,10 @@ def student_get_dashboard(conn, cursor, request_data, user_info):
     if user_info["role"] != "stu":
         return func_helper.not_method_access_return()
 
-    tracking_token, response_data = student_service.select_stu_dashboard(
+    tracking_token, response_data, response_message = student_service.select_stu_dashboard(
         conn=conn, cursor=cursor, request_data=request_data, info=user_info
     )
-    return _service_response(method_type, tracking_token, response_data)
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def student_get_quiz_setting(conn, cursor, request_data, user_info):
@@ -298,12 +269,10 @@ def student_get_quiz_table_info(conn, cursor, request_data, user_info):
     if user_info["role"] != "stu":
         return func_helper.not_method_access_return()
 
-    tracking_token, response_data = student_service.select_stu_quiz_table_info(
+    tracking_token, response_data, response_message = student_service.select_stu_quiz_table_info(
         conn=conn, cursor=cursor, request_data=request_data, info=user_info
     )
-    return _service_response(
-        method_type, tracking_token, response_data, error_message="شما به این محصول دسترسی ندارید."
-    )
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def student_get_quiz_info(conn, cursor, request_data, user_info):
@@ -318,12 +287,12 @@ def student_get_quiz_info(conn, cursor, request_data, user_info):
     if user_info["role"] != "stu":
         return func_helper.not_method_access_return()
 
-    tracking_token, response_data, quiz_answers = student_service.select_stu_quiz_info(
+    tracking_token, response_data, response_message = student_service.select_stu_quiz_info(
         conn=conn, cursor=cursor, request_data=request_data, info=user_info
     )
     if not response_data:
-        return _error_response(method_type, "آزمون مورد نظر شما در دسترس شما نیست.")
-    return _service_response(method_type, tracking_token, response_data, quizAnswers=quiz_answers)
+        return _error_response(method_type, response_message or "آزمون مورد نظر شما در دسترس شما نیست.")
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def student_change_quiz_answer(conn, cursor, request_data, user_info):
@@ -338,10 +307,9 @@ def student_change_quiz_answer(conn, cursor, request_data, user_info):
     if user_info["role"] != "stu":
         return func_helper.not_method_access_return()
 
-    tracking_token, response_message = student_service.submit_quiz_answer(
+    tracking_token, response_data, response_message = student_service.submit_quiz_answer(
         conn=conn, cursor=cursor, request_data=request_data, info=user_info
     )
-    response_data = None
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -350,12 +318,10 @@ def student_get_access_product(conn, cursor, request_data, user_info):
     if user_info["role"] != "stu":
         return func_helper.not_method_access_return()
 
-    tracking_token, response_data = student_service.select_student_access_info(
+    tracking_token, response_data, response_message = student_service.select_student_access_info(
         conn=conn, cursor=cursor, request_data=request_data, info=user_info
     )
-    return _service_response(
-        method_type, tracking_token, response_data, error_message="اطلاعات شما در دسترسی نیست."
-    )
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def change_setting(conn, cursor, request_data, user_info):
@@ -374,9 +340,7 @@ def change_setting(conn, cursor, request_data, user_info):
     if result is None:
         return func_helper.not_method_access_return()
 
-    tracking_token = result
-    response_data = None
-    response_message = "پیش اطلاعات اولیه آزمون شما تغییر یافت."
+    tracking_token, response_data, response_message = result
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -403,8 +367,7 @@ def change_student_access(conn, cursor, request_data, user_info):
     if result is None:
         return func_helper.not_method_access_return()
 
-    tracking_token, response_message = result
-    response_data = None
+    tracking_token, response_data, response_message = result
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -429,8 +392,8 @@ def get_dashboard(conn, cursor, request_data, user_info):
     if result is None:
         return func_helper.not_method_access_return()
 
-    tracking_token, response_data, notifications = result
-    return _service_response(method_type, tracking_token, response_data, notifications=notifications)
+    tracking_token, response_data, response_message = result
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 # this gateway is for get the consultants list of roles
@@ -445,11 +408,12 @@ def get_consultants(conn, cursor, request_data, user_info):
     if result is None:
         return _error_response(method_type, ACCESS_DENIED_MESSAGE)
 
-    tracking_token, response_data = result
+    tracking_token, response_data, response_message = result
     return _service_response(
         method_type,
         tracking_token,
         response_data,
+        response_message,
         error_message="اطلاعات مشاورین مشکل دارد، با پشتیبانی در ارتباط باشید.",
     )
 
@@ -481,8 +445,7 @@ def add_consultant(conn, cursor, request_data, user_info):
     if result is None:
         return func_helper.not_method_access_return()
 
-    tracking_token, response_message = result
-    response_data = None
+    tracking_token, response_data, response_message = result
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -498,8 +461,7 @@ def change_consultant(conn, cursor, request_data, user_info):
     if result is None:
         return _error_response(method_type, ACCESS_DENIED_MESSAGE)
 
-    tracking_token, response_message = result
-    response_data = None
+    tracking_token, response_data, response_message = result
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -519,8 +481,8 @@ def get_students(conn, cursor, request_data, user_info):
     if result is None:
         return func_helper.not_method_access_return()
 
-    tracking_token, response_data = result
-    return _service_response(method_type, tracking_token, response_data)
+    tracking_token, response_data, response_message = result
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 def check_student_access(conn, cursor, student_user_id, user_info):
     """
@@ -567,10 +529,10 @@ def get_report_data(conn, cursor, request_data, user_info):
         if not check_student_access(conn, cursor, student_id, user_info):
             return _error_response(method_type, "شما به این دانش‌آموز دسترسی ندارید.")
         
-        tracking_token, response_data = other_service.get_report_data(conn=conn, cursor=cursor, request_data=request_data,
+        tracking_token, response_data, response_message = other_service.get_report_data(conn=conn, cursor=cursor, request_data=request_data,
                                              user_info=user_info)
         return _service_response(
-            method_type, tracking_token, response_data, error_message="خطا در دریافت اطلاعات گزارش."
+            method_type, tracking_token, response_data, response_message, error_message="خطا در دریافت اطلاعات گزارش."
         )
     else:
         return func_helper.not_method_access_return()
@@ -596,9 +558,7 @@ def add_student(conn, cursor, request_data, user_info):
     if result is None:
         return _error_response(method_type, ACCESS_DENIED_MESSAGE)
 
-    tracking_token = result
-    response_data = None
-    response_message = "دانش‌آموز شما با موفقیت ثبت شد."
+    tracking_token, response_data, response_message = result
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -628,9 +588,7 @@ def change_student(conn, cursor, request_data, user_info):
     if result is None:
         return func_helper.not_method_access_return()
 
-    tracking_token = result
-    response_data = None
-    response_message = "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
+    tracking_token, response_data, response_message = result
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -646,9 +604,7 @@ def change_comment(conn, cursor, request_data, user_info):
     if result is None:
         return _error_response(method_type, "متاسفانه شما از این سامانه به این سرویس دسترسی ندارید.")
 
-    tracking_token = result
-    response_data = None
-    response_message = "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
+    tracking_token, response_data, response_message = result
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -697,8 +653,8 @@ def get_report(conn, cursor, request_data, user_info):
     if result is None:
         return func_helper.not_method_access_return()
 
-    tracking_token, response_data = result
-    return _service_response(method_type, tracking_token, response_data)
+    tracking_token, response_data, response_message = result
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def get_management_report(conn, cursor, request_data, user_info):
@@ -720,8 +676,8 @@ def get_management_report(conn, cursor, request_data, user_info):
     if result is None:
         return func_helper.not_method_access_return()
 
-    tracking_token, response_data = result
-    return _service_response(method_type, tracking_token, response_data)
+    tracking_token, response_data, response_message = result
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 # get the information of quiz (quiz id, quiz description, quiz voice, quiz sections, quiz name)
@@ -732,15 +688,15 @@ def get_quiz_info(conn, cursor, request_data, user_info):
 
     tracking_token = func_helper.get_tracking_code()
     response_data = quiz_data_extractor.get_quiz_table_info()
-    return _service_response(method_type, tracking_token, response_data)
+    return _service_response(method_type, tracking_token, response_data, "")
 
 
 # transactions and payments
 def get_transactions(conn, cursor, request_data, user_info):
     method_type = "SELECT"
     if user_info["role"] in ["ocon", "ins", "sch"]:
-        tracking_token, response_data = other_service.get_transactions(conn, cursor, request_data, user_info)
-        return _service_response(method_type, tracking_token, response_data)
+        tracking_token, response_data, response_message = other_service.get_transactions(conn, cursor, request_data, user_info)
+        return _service_response(method_type, tracking_token, response_data, response_message)
     return func_helper.not_method_access_return()
 
 
@@ -801,9 +757,10 @@ def add_payment_order(conn, cursor, request_data, user_info):
     # if not is_valid:
     #     return error_response
     if user_info["role"] in ["ocon", "ins", "sch"]:
-        token, ref_id, message, url = other_service.order_payment(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
-        return {"status": 200, "tracking_code": token, "method_type": method_type,
-                "response": {"message": message, "url": url, "ref_id": ref_id}}
+        tracking_token, response_data, response_message = other_service.order_payment(
+            conn=conn, cursor=cursor, request_data=request_data, user_info=user_info
+        )
+        return _service_response(method_type, tracking_token, response_data, response_message)
     else:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
@@ -911,9 +868,7 @@ def admin_change_capacity(conn, cursor, request_data):
     if not is_valid:
         return error_response
     
-    tracking_token, response_data = admin_service.change_capacity(conn=conn, cursor=cursor, request_data=request_data)
-    response_message = response_data if isinstance(response_data, str) else ""
-    response_data = None if isinstance(response_data, str) else response_data
+    tracking_token, response_data, response_message = admin_service.change_capacity(conn=conn, cursor=cursor, request_data=request_data)
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -927,9 +882,7 @@ def admin_get_user_info(conn, cursor, request_data):
     if not is_valid:
         return error_response
     
-    tracking_token, response_data = admin_service.get_user_info(conn=conn, cursor=cursor, request_data=request_data)
-    response_message = response_data if isinstance(response_data, str) else ""
-    response_data = None if isinstance(response_data, str) else response_data
+    tracking_token, response_data, response_message = admin_service.get_user_info(conn=conn, cursor=cursor, request_data=request_data)
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -943,9 +896,7 @@ def admin_check_student_quiz_answer(conn, cursor, request_data):
     if not is_valid:
         return error_response
     
-    tracking_token, response_data = admin_service.check_student_quiz_answer(
+    tracking_token, response_data, response_message = admin_service.check_student_quiz_answer(
         conn=conn, cursor=cursor, request_data=request_data
     )
-    response_message = response_data if isinstance(response_data, str) else ""
-    response_data = None if isinstance(response_data, str) else response_data
     return _service_response(method_type, tracking_token, response_data, response_message)
