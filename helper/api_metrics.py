@@ -54,6 +54,7 @@ HTTP_REQUESTS_IN_PROGRESS = Gauge(
 
 SKIPPED_HTTP_PATHS = {
     "/ag_api/metrics",
+    "/ags_api/metrics",
     "/docs",
     "/redoc",
     "/openapi.json",
