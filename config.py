@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 """
 Central configuration for paths and tokens used across the backend.
@@ -32,6 +33,32 @@ DEFAULT_REPORT_PATH = os.getenv(
 DEFAULT_REPORT2_PATH = os.getenv(
     "AG_DEFAULT_REPORT2_PATH",
     os.path.join(REPORTS_DIR, "default", "Report2.pdf"),
+)
+
+# Report templates used by the background scheduler.
+REPORT1_TEMPLATE_PATH = Path(
+    os.getenv("AG_REPORT1_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report1.docx"))
+)
+REPORT2_TEMPLATE_PATH = Path(
+    os.getenv("AG_REPORT2_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report2.docx"))
+)
+REPORT3_TEMPLATE_PATH = Path(
+    os.getenv("AG_REPORT3_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report3.docx"))
+)
+REPORT5_TEMPLATE_PATH = Path(
+    os.getenv("AG_REPORT5_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report5.docx"))
+)
+OCD_TEMPLATE_PATH = Path(
+    os.getenv("AG_OCD_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "ocd.docx"))
+)
+ANX_TEMPLATE_PATH = Path(
+    os.getenv("AG_ANX_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "anx.docx"))
+)
+DEP_TEMPLATE_PATH = Path(
+    os.getenv("AG_DEP_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "dep.docx"))
+)
+BRAIN_EXCEL_PATH = Path(
+    os.getenv("AG_BRAIN_EXCEL_PATH", str(Path(BASE_PATH) / "FileAG" / "Brain.xlsx"))
 )
 
 # Developer token (for internal/testing use)

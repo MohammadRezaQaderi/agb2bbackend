@@ -10,7 +10,7 @@ from helper.func_helper import service_exception_error_logging
 from helper.quiz.ag_quiz_data_info import ag_quiz_info
 from helper.quiz.scl_quiz_data_info import scl_quiz_info
 from helper.quiz.quiz_data_extractor import get_quiz_table_info, get_quiz_info
-from config import REDIS_QUEUE_NAME, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+from config import REDIS_QUEUE_NAME, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB
 
 AG_REPORT_INFO = {
     "t_state": {"name": "تجربی", "title": "t_state"},
@@ -494,6 +494,7 @@ def _enqueue_result_generation(conn, cursor, user_id, phone, kind: str):
         host=REDIS_HOST,
         port=REDIS_PORT,
         password=REDIS_PASSWORD if REDIS_PASSWORD else None,
+        db=REDIS_DB,
         decode_responses=True,
     )
 
