@@ -12,13 +12,13 @@ from typing import List, Tuple, Dict, Any
 
 from helper.chart import bar, bidirection, gauge, bidirection_two_side, tube, scatter, horizontal
 import helper.db.db_helper as db_helper
-from helper.quiz.ms_excel import LoadExcelSourceFile, compute_brain_info
+from helper.office.excel_helper import LoadExcelSourceFile, compute_brain_info
 from helper.quiz.check_score import score_computation_scl
 from helper.quiz.report_info import *
 from helper.quiz.bookmarks_info import CALC_DATA, USER_TAGS_INFO, COLOR_TAGS
 from helper.quiz.scl_answer_info import bookmark_scl_object
 from helper.quiz.scl_report_info import get_statefast_value, get_interfast_value, get_report_text
-from helper.word_helper import (
+from helper.office.word_helper import (
     generate_first_report_documents,
     generate_second_report_documents,
     generate_third_report_documents,
