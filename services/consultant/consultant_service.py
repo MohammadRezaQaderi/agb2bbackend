@@ -107,7 +107,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
             # Count students who finished all quizzes (completed last quiz with state = 2)
             query_finish_quiz = """
                 SELECT COUNT(DISTINCT user_id) AS total 
-                FROM quiz_answer 
+                FROM quiz_attempt 
                 WHERE con_id = ? AND quiz_kind = ? AND state = 2 AND quiz_id = ?
             """
             res_finish_quiz = db_helper.search_fetchall(conn, cursor, query_finish_quiz,
@@ -117,7 +117,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
             # Count students who started at least one quiz
             query_started_quiz = """
                 SELECT COUNT(DISTINCT user_id) AS total 
-                FROM quiz_answer 
+                FROM quiz_attempt 
                 WHERE con_id = ? AND quiz_kind = ?
             """
             res_started_quiz = db_helper.search_fetchall(conn, cursor, query_started_quiz,
@@ -127,7 +127,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
             # Count total completed quizzes (state = 2) for this package
             query_c_quiz = """
                 SELECT COUNT(*) AS total 
-                FROM quiz_answer 
+                FROM quiz_attempt 
                 WHERE con_id = ? AND quiz_kind = ? AND state = 2
             """
             res_c_quiz = db_helper.search_fetchall(conn, cursor, query_c_quiz, field=(user_id, package_name))
@@ -136,7 +136,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
             # Count total started quizzes (any state) for this package
             query_total_first = """
                 SELECT COUNT(*) AS total 
-                FROM quiz_answer 
+                FROM quiz_attempt 
                 WHERE con_id = ? AND quiz_kind = ?
             """
             res_total_first = db_helper.search_fetchall(conn, cursor, query_total_first, field=(user_id, package_name))
@@ -251,7 +251,7 @@ def get_management_report(conn, cursor, request_data, user_info):
 
                         if total_quizzes:
                             query_quiz = (
-                                'SELECT state, quiz_id FROM quiz_answer '
+                                'SELECT state, quiz_id FROM quiz_attempt '
                                 'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
                             )
                             res_quiz = db_helper.search_allin_table(
@@ -310,7 +310,7 @@ def get_students(conn, cursor, request_data, user_info):
         stu_info = []
         if len(res) != 0:
             for stu in res:
-                # query_quiz = 'SELECT state, quiz_id FROM quiz_answer WHERE user_id = ? ORDER BY quiz_id asc'
+                # query_quiz = 'SELECT state, quiz_id FROM quiz_attempt WHERE user_id = ? ORDER BY quiz_id asc'
                 # res_quiz = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query_quiz, field=stu.user_id)
                 # status = ''
                 # if len(res_quiz) == 0:

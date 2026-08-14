@@ -1,8 +1,8 @@
-import json
 import time
 from typing import Any, Dict, List, Tuple
 
 import helper.db.db_helper as db_helper
+from helper.quiz import answer_store
 from helper.quiz.ag_answer_info import quiz_labels, quiz_questions_answer_schema
 from helper.quiz.scl_answer_info import (
     quiz_labels as scl_quiz_labels,
@@ -182,20 +182,10 @@ def ag_score_computation(conn, cursor, user_id, user_age=9):
     )
     if res_stu:
         user_age = 1400 - int(res_stu[0]) - 1
-    query = "SELECT answers FROM quiz_answer WHERE user_id = ? AND quiz_kind = ?"
-    res_score = db_helper.search_allin_table(
-        conn,
-        cursor,
-        query,
-        (user_id, "AG"),
-    )
-    user_answers = {}
-    if len(res_score) < 7:
-        raise "error"
-    else:
-        for answer_row in res_score:
-            answers_dict = json.loads(answer_row[0])
-            user_answers.update(answers_dict)
+    completed_count = answer_store.get_completed_count(conn, cursor, user_id, "AG")
+    if completed_count < 7:
+        raise ValueError("Insufficient AG quiz data")
+    user_answers = answer_store.get_answers_for_user_kind(conn, cursor, user_id, "AG")
     labels = quiz_labels.copy()
     catel_answer = {str(i): user_answers.get(str(i), []) for i in range(1, 62)}
     for _, question in enumerate(quiz_questions_answer_schema):

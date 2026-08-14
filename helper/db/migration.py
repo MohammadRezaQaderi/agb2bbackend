@@ -152,16 +152,29 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
-    "quiz_answer": """
-        CREATE TABLE quiz_answer (
-            quiz_answer_id INT IDENTITY(1, 1) PRIMARY KEY,
-            user_id INT,
-            quiz_id INT,
-            quiz_kind VARCHAR(25), 
-            answers NVARCHAR(MAX),
-            state INT,
-            ins_id INT,
-            con_id INT,
+    "quiz_attempt": """
+        CREATE TABLE quiz_attempt (
+            id INT IDENTITY(1, 1) PRIMARY KEY,
+            user_id INT NOT NULL,
+            quiz_kind VARCHAR(25) NOT NULL,
+            quiz_id INT NOT NULL,
+            state INT NOT NULL DEFAULT 1,
+            remain_time INT NULL,
+            ins_id INT NULL,
+            con_id INT NULL,
+            created_time DATETIME DEFAULT GETDATE(),
+            edited_time DATETIME DEFAULT GETDATE()
+        )
+    """,
+    "quiz_question_answer": """
+        CREATE TABLE quiz_question_answer (
+            id INT IDENTITY(1, 1) PRIMARY KEY,
+            attempt_id INT NOT NULL,
+            user_id INT NOT NULL,
+            quiz_kind VARCHAR(25) NOT NULL,
+            quiz_id INT NOT NULL,
+            question_id INT NOT NULL,
+            answer_value NVARCHAR(MAX) NOT NULL,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
         )
@@ -363,7 +376,7 @@ TABLE_DEFINITIONS = {
 
 DEFAULT_TABLES: Sequence[str] = (
     'users', 'ins', 'sch', 'ocon', 'con', 'stu', 'setting', 'capacity', 'capacity_package', 'capacity_logs',
-    'quiz_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications', 'payment',
+    'quiz_attempt', 'quiz_question_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications', 'payment',
     'payment_log', 'discount', 'using_discount', 'tokens', 'redis_log', 'error_log', 'api_logs'
 )
 
@@ -626,14 +639,32 @@ def migrate():
     cursor.execute("SET IDENTITY_INSERT capacity OFF")
     conn.commit()
 
-    print("Migrating quiz_answer...")
+    print("Migrating quiz_attempt and quiz_question_answer...")
     cursor.execute("SELECT * FROM quiz_answer_old")
     for row in cursor.fetchall():
+        quiz_kind = getattr(row, "quiz_kind", None) or "AG"
         cursor.execute("""
-                INSERT INTO quiz_answer (user_id, quiz_id, quiz_kind, answers, state, ins_id, con_id, created_time, edited_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (row.user_id, row.quiz_id, "AG", row.answers, row.state, row.ins_id, row.con_id,
+                INSERT INTO quiz_attempt (user_id, quiz_id, quiz_kind, state, ins_id, con_id, created_time, edited_time)
+                OUTPUT INSERTED.id
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (row.user_id, row.quiz_id, quiz_kind, row.state, row.ins_id, row.con_id,
                   row.DC_Created_Time, row.DC_Edited_Time))
+        attempt_id = cursor.fetchone()[0]
+        try:
+            answers = json.loads(row.answers) if row.answers else {}
+        except (TypeError, json.JSONDecodeError):
+            answers = {}
+        for question_id, answer_value in answers.items():
+            try:
+                question_id = int(question_id)
+            except (TypeError, ValueError):
+                continue
+            cursor.execute("""
+                    INSERT INTO quiz_question_answer
+                        (attempt_id, user_id, quiz_kind, quiz_id, question_id, answer_value, created_time, edited_time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (attempt_id, row.user_id, quiz_kind, row.quiz_id, question_id,
+                      json.dumps(answer_value, ensure_ascii=False), row.DC_Created_Time, row.DC_Edited_Time))
     conn.commit()
 
     # 9. Migrate remaining tables (scores, result_state, redis_log, error_log, setting)

@@ -646,7 +646,7 @@ async def get_ag_first_pdf(phone: str, kind: str):
 
         # After the count of the quiz answered, check that all answers should be completed (state = 2)
         query_quiz = (
-            'SELECT state, quiz_id FROM quiz_answer '
+            'SELECT state, quiz_id FROM quiz_attempt '
             'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
         )
         res_quiz = db_helper.search_allin_table(
@@ -777,7 +777,7 @@ async def get_ag_second_pdf(phone: str, kind: str):
 
         # After the count of the quiz answered, check that all answers should be completed (state = 2)
         query_quiz = (
-            'SELECT state, quiz_id FROM quiz_answer '
+            'SELECT state, quiz_id FROM quiz_attempt '
             'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
         )
         res_quiz = db_helper.search_allin_table(
@@ -908,7 +908,7 @@ async def get_scl_first_pdf(phone: str, kind: str):
 
         # After the count of the quiz answered, check that all answers should be completed (state = 2)
         query_quiz = (
-            'SELECT state, quiz_id FROM quiz_answer '
+            'SELECT state, quiz_id FROM quiz_attempt '
             'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
         )
         res_quiz = db_helper.search_allin_table(
@@ -1039,7 +1039,7 @@ async def get_scl_second_pdf(phone: str, kind: str):
 
         # After the count of the quiz answered, check that all answers should be completed (state = 2)
         query_quiz = (
-            'SELECT state, quiz_id FROM quiz_answer '
+            'SELECT state, quiz_id FROM quiz_attempt '
             'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
         )
         res_quiz = db_helper.search_allin_table(
@@ -1170,7 +1170,7 @@ async def get_scl_third_pdf(phone: str, kind: str):
 
         # After the count of the quiz answered, check that all answers should be completed (state = 2)
         query_quiz = (
-            'SELECT state, quiz_id FROM quiz_answer '
+            'SELECT state, quiz_id FROM quiz_attempt '
             'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
         )
         res_quiz = db_helper.search_allin_table(

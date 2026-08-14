@@ -95,7 +95,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
 
             query_finish_quiz = """
                 SELECT COUNT(DISTINCT user_id) AS total 
-                FROM quiz_answer 
+                FROM quiz_attempt 
                 WHERE con_id = ? AND quiz_kind = ? AND state = 2 AND quiz_id = ?
             """
             res_finish_quiz = db_helper.search_fetchall(conn, cursor, query_finish_quiz,
@@ -104,7 +104,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
 
             query_started_quiz = """
                 SELECT COUNT(DISTINCT user_id) AS total 
-                FROM quiz_answer 
+                FROM quiz_attempt 
                 WHERE con_id = ? AND quiz_kind = ?
             """
             res_started_quiz = db_helper.search_fetchall(conn, cursor, query_started_quiz,
@@ -113,7 +113,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
 
             query_c_quiz = """
                 SELECT COUNT(*) AS total 
-                FROM quiz_answer 
+                FROM quiz_attempt 
                 WHERE con_id = ? AND quiz_kind = ? AND state = 2
             """
             res_c_quiz = db_helper.search_fetchall(conn, cursor, query_c_quiz, field=(user_id, package_name))
@@ -121,7 +121,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
 
             query_total_first = """
                 SELECT COUNT(*) AS total 
-                FROM quiz_answer 
+                FROM quiz_attempt 
                 WHERE con_id = ? AND quiz_kind = ?
             """
             res_total_first = db_helper.search_fetchall(conn, cursor, query_total_first, field=(user_id, package_name))
@@ -253,7 +253,7 @@ def get_management_report(conn, cursor, request_data, user_info):
 
                         if total_quizzes:
                             query_quiz = (
-                                'SELECT state, quiz_id FROM quiz_answer '
+                                'SELECT state, quiz_id FROM quiz_attempt '
                                 'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
                             )
                             res_quiz = db_helper.search_allin_table(

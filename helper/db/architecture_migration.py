@@ -203,6 +203,10 @@ def ensure_index_if_clean(
     unique: bool = True,
     where_sql: str | None = None,
 ) -> None:
+    if not table_exists(cursor, table_name):
+        print(f"SKIP: table {table_name} does not exist; cannot create index {index_name}")
+        return
+
     if index_exists(cursor, table_name, index_name):
         print(f"SKIP: index {index_name} already exists")
         return
@@ -228,6 +232,10 @@ def ensure_fk_if_clean(
     orphan_sql: str,
     dry_run: bool,
 ) -> None:
+    if not table_exists(cursor, table_name):
+        print(f"SKIP: table {table_name} does not exist; cannot add FK {constraint_name}")
+        return
+
     if object_exists(cursor, constraint_name):
         print(f"SKIP: FK {constraint_name} already exists")
         return
@@ -263,6 +271,55 @@ def ensure_student_package_access(conn: Any, cursor: Any, dry_run: bool) -> None
     )
     """
     run_sql(conn, cursor, sql, dry_run, "create student_package_access")
+
+
+def ensure_quiz_attempt_tables(conn: Any, cursor: Any, dry_run: bool) -> None:
+    if not table_exists(cursor, "quiz_attempt"):
+        run_sql(
+            conn,
+            cursor,
+            """
+            CREATE TABLE [quiz_attempt] (
+                [id] INT IDENTITY(1, 1) PRIMARY KEY,
+                [user_id] INT NOT NULL,
+                [quiz_kind] VARCHAR(25) NOT NULL,
+                [quiz_id] INT NOT NULL,
+                [state] INT NOT NULL DEFAULT 1,
+                [remain_time] INT NULL,
+                [ins_id] INT NULL,
+                [con_id] INT NULL,
+                [created_time] DATETIME DEFAULT GETDATE(),
+                [edited_time] DATETIME DEFAULT GETDATE()
+            )
+            """,
+            dry_run,
+            "create quiz_attempt",
+        )
+    else:
+        print("SKIP: quiz_attempt already exists")
+
+    if not table_exists(cursor, "quiz_question_answer"):
+        run_sql(
+            conn,
+            cursor,
+            """
+            CREATE TABLE [quiz_question_answer] (
+                [id] INT IDENTITY(1, 1) PRIMARY KEY,
+                [attempt_id] INT NOT NULL,
+                [user_id] INT NOT NULL,
+                [quiz_kind] VARCHAR(25) NOT NULL,
+                [quiz_id] INT NOT NULL,
+                [question_id] INT NOT NULL,
+                [answer_value] NVARCHAR(MAX) NOT NULL,
+                [created_time] DATETIME DEFAULT GETDATE(),
+                [edited_time] DATETIME DEFAULT GETDATE()
+            )
+            """,
+            dry_run,
+            "create quiz_question_answer",
+        )
+    else:
+        print("SKIP: quiz_question_answer already exists")
 
 
 def backfill_student_package_access(conn: Any, cursor: Any, dry_run: bool) -> None:
@@ -442,6 +499,7 @@ def run_migration(dry_run: bool) -> None:
             )
 
         ensure_student_package_access(conn, cursor, dry_run)
+        ensure_quiz_attempt_tables(conn, cursor, dry_run)
         backfill_student_package_access(conn, cursor, dry_run)
         alter_text_columns(conn, cursor, dry_run)
         migrate_passwords_to_hash(conn, cursor, dry_run)
@@ -488,15 +546,32 @@ def run_migration(dry_run: bool) -> None:
         ensure_index_if_clean(
             conn,
             cursor,
-            "quiz_answer",
-            "ux_quiz_answer_user_kind_quiz",
+            "quiz_attempt",
+            "ux_quiz_attempt_user_kind_quiz",
             "user_id, quiz_kind, quiz_id",
             """
             SELECT COUNT(*) FROM (
                 SELECT user_id, quiz_kind, quiz_id
-                FROM quiz_answer
+                FROM quiz_attempt
                 WHERE user_id IS NOT NULL AND quiz_kind IS NOT NULL AND quiz_id IS NOT NULL
                 GROUP BY user_id, quiz_kind, quiz_id
+                HAVING COUNT(*) > 1
+            ) d
+            """,
+            dry_run,
+        )
+        ensure_index_if_clean(
+            conn,
+            cursor,
+            "quiz_question_answer",
+            "ux_quiz_question_answer_attempt_question",
+            "attempt_id, question_id",
+            """
+            SELECT COUNT(*) FROM (
+                SELECT attempt_id, question_id
+                FROM quiz_question_answer
+                WHERE attempt_id IS NOT NULL AND question_id IS NOT NULL
+                GROUP BY attempt_id, question_id
                 HAVING COUNT(*) > 1
             ) d
             """,
@@ -529,8 +604,8 @@ def run_migration(dry_run: bool) -> None:
         ensure_index_if_clean(
             conn,
             cursor,
-            "quiz_answer",
-            "ix_quiz_answer_dashboard",
+            "quiz_attempt",
+            "ix_quiz_attempt_dashboard",
             "ins_id, con_id, quiz_kind, state, quiz_id",
             None,
             dry_run,
@@ -572,12 +647,34 @@ def run_migration(dry_run: bool) -> None:
         ensure_fk_if_clean(
             conn,
             cursor,
-            "fk_quiz_answer_user",
-            "quiz_answer",
+            "fk_quiz_attempt_user",
+            "quiz_attempt",
             "user_id",
             "users",
             "user_id",
-            "SELECT COUNT(*) FROM quiz_answer q LEFT JOIN users u ON q.user_id = u.user_id WHERE q.user_id IS NOT NULL AND u.user_id IS NULL",
+            "SELECT COUNT(*) FROM quiz_attempt q LEFT JOIN users u ON q.user_id = u.user_id WHERE q.user_id IS NOT NULL AND u.user_id IS NULL",
+            dry_run,
+        )
+        ensure_fk_if_clean(
+            conn,
+            cursor,
+            "fk_quiz_question_answer_attempt",
+            "quiz_question_answer",
+            "attempt_id",
+            "quiz_attempt",
+            "id",
+            "SELECT COUNT(*) FROM quiz_question_answer qa LEFT JOIN quiz_attempt q ON qa.attempt_id = q.id WHERE qa.attempt_id IS NOT NULL AND q.id IS NULL",
+            dry_run,
+        )
+        ensure_fk_if_clean(
+            conn,
+            cursor,
+            "fk_quiz_question_answer_user",
+            "quiz_question_answer",
+            "user_id",
+            "users",
+            "user_id",
+            "SELECT COUNT(*) FROM quiz_question_answer qa LEFT JOIN users u ON qa.user_id = u.user_id WHERE qa.user_id IS NOT NULL AND u.user_id IS NULL",
             dry_run,
         )
 

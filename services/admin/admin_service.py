@@ -3,6 +3,7 @@ from datetime import datetime
 
 import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
+from helper.quiz import answer_store
 
 
 def change_capacity(conn, cursor, request_data):
@@ -322,7 +323,7 @@ def check_student_quiz_answer(conn, cursor, request_data):
     Check student quiz answer and student state.
     
     Requirements:
-    - With quiz_answer table check student quiz answer
+    - With quiz_attempt and quiz_question_answer tables check student quiz answer
     - Check student state (in stu table with access field for permission and limits)
     - Return object of student quiz answer and student state
     """
@@ -348,8 +349,12 @@ def check_student_quiz_answer(conn, cursor, request_data):
         except (json.JSONDecodeError, TypeError):
             access_data = {}
 
-        # Get quiz answers
-        query_quiz = 'SELECT quiz_id, quiz_kind, answers, state FROM quiz_answer WHERE user_id = ? ORDER BY quiz_id ASC'
+        query_quiz = """
+            SELECT id, quiz_id, quiz_kind, state
+            FROM quiz_attempt
+            WHERE user_id = ?
+            ORDER BY quiz_kind ASC, quiz_id ASC
+        """
         quiz_res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query_quiz, field=user_id)
 
         quiz_answers = []
@@ -357,7 +362,7 @@ def check_student_quiz_answer(conn, cursor, request_data):
             quiz_answers.append({
                 "quiz_id": quiz.get("quiz_id"),
                 "quiz_kind": quiz.get("quiz_kind"),
-                "answers": quiz.get("answers"),
+                "answers": answer_store.get_answers_for_attempt(conn, cursor, quiz.get("id")),
                 "state": quiz.get("state")
             })
 

@@ -172,20 +172,36 @@ TABLE_DEFINITIONS = {
             CONSTRAINT fk_student_package_access_consultant FOREIGN KEY (consultant_user_id) REFERENCES users(user_id)
         )
     """,
-    "quiz_answer": """
-        CREATE TABLE quiz_answer (
-            quiz_answer_id INT IDENTITY(1, 1) PRIMARY KEY,
-            user_id INT,
-            quiz_id INT,
-            quiz_kind VARCHAR(25), 
-            answers NVARCHAR(MAX),
-            state INT,
-            ins_id INT,
-            con_id INT,
+    "quiz_attempt": """
+        CREATE TABLE quiz_attempt (
+            id INT IDENTITY(1, 1) PRIMARY KEY,
+            user_id INT NOT NULL,
+            quiz_kind VARCHAR(25) NOT NULL,
+            quiz_id INT NOT NULL,
+            state INT NOT NULL DEFAULT 1,
+            remain_time INT NULL,
+            ins_id INT NULL,
+            con_id INT NULL,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE(),
-            CONSTRAINT uq_quiz_answer_user_kind_quiz UNIQUE (user_id, quiz_kind, quiz_id),
-            CONSTRAINT fk_quiz_answer_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+            CONSTRAINT uq_quiz_attempt_user_kind_quiz UNIQUE (user_id, quiz_kind, quiz_id),
+            CONSTRAINT fk_quiz_attempt_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    """,
+    "quiz_question_answer": """
+        CREATE TABLE quiz_question_answer (
+            id INT IDENTITY(1, 1) PRIMARY KEY,
+            attempt_id INT NOT NULL,
+            user_id INT NOT NULL,
+            quiz_kind VARCHAR(25) NOT NULL,
+            quiz_id INT NOT NULL,
+            question_id INT NOT NULL,
+            answer_value NVARCHAR(MAX) NOT NULL,
+            created_time DATETIME DEFAULT GETDATE(),
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_quiz_question_answer_attempt_question UNIQUE (attempt_id, question_id),
+            CONSTRAINT fk_quiz_question_answer_attempt FOREIGN KEY (attempt_id) REFERENCES quiz_attempt(id),
+            CONSTRAINT fk_quiz_question_answer_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
     "scores": """
@@ -419,7 +435,7 @@ TABLE_DEFINITIONS = {
 DEFAULT_TABLES: Sequence[str] = (
     'users', 'ins', 'sch', 'ocon', 'con', 'stu', 'setting', 'capacity', 'capacity_package',
     'student_package_access', 'capacity_logs',
-    'quiz_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications', 'payment',
+    'quiz_attempt', 'quiz_question_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications', 'payment',
     'payment_log', 'discount', 'using_discount', 'tokens', 'comments', 'otp_logs', 'redis_log', 'error_log',
     'api_logs'
 )

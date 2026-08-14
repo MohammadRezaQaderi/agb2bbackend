@@ -7,6 +7,7 @@ import redis
 import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
 from helper.func_helper import service_exception_error_logging
+from helper.quiz import answer_store
 from helper.quiz.ag_quiz_data_info import ag_quiz_info
 from helper.quiz.scl_quiz_data_info import scl_quiz_info
 from helper.quiz.quiz_data_extractor import get_quiz_table_info, get_quiz_info
@@ -138,14 +139,7 @@ def select_stu_dashboard(conn, cursor, request_data, info):
         quiz_progress = {}
 
         if ag_has_permission:
-            ag_completed_query = """
-                SELECT COUNT(*) AS completed
-                FROM quiz_answer
-                WHERE user_id = ? AND quiz_kind = ? AND state = 2
-            """
-            ag_completed_res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=ag_completed_query,
-                                                         field=(user_id, "AG"))
-            ag_completed_count = ag_completed_res[0]["completed"] if ag_completed_res else 0
+            ag_completed_count = answer_store.get_completed_count(conn, cursor, user_id, "AG")
             ag_total_quizzes = len(get_quiz_table_info(kind="AG"))
             quiz_progress["AG"] = {
                 "completed": ag_completed_count,
@@ -154,14 +148,7 @@ def select_stu_dashboard(conn, cursor, request_data, info):
             }
 
         if scl_has_permission:
-            scl_completed_query = """
-                SELECT COUNT(*) AS completed
-                FROM quiz_answer
-                WHERE user_id = ? AND quiz_kind = ? AND state = 2
-            """
-            scl_completed_res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=scl_completed_query,
-                                                          field=(user_id, "SCL"))
-            scl_completed_count = scl_completed_res[0]["completed"] if scl_completed_res else 0
+            scl_completed_count = answer_store.get_completed_count(conn, cursor, user_id, "SCL")
             scl_total_quizzes = len(get_quiz_table_info(kind="SCL"))
             quiz_progress["SCL"] = {
                 "completed": scl_completed_count,
@@ -314,17 +301,7 @@ def select_stu_quiz_table_info(conn, cursor, request_data, info):
 
         # Use quiz_kind column (per-pack quizzes start from id 1)
         # Support legacy rows where quiz_kind might be NULL.
-        query = (
-            "SELECT * FROM quiz_answer "
-            "WHERE user_id = ? AND (quiz_kind = ?) "
-            "ORDER BY quiz_id ASC"
-        )
-        all_answers = db_helper.search_allin_table(
-            conn=conn,
-            cursor=cursor,
-            query=query,
-            field=(info["user_id"], kind),
-        )
+        all_attempts = answer_store.get_attempts(conn, cursor, info["user_id"], kind)
         student_quiz_info = []
 
         def _build_quiz_item(q, status=0, can_start=0):
@@ -333,17 +310,14 @@ def select_stu_quiz_table_info(conn, cursor, request_data, info):
             item["can_start"] = can_start
             return item
 
-        if not all_answers:
+        if not all_attempts:
             for index, q in enumerate(quiz_info):
                 can_start = 1 if index == 0 else 0
                 student_quiz_info.append(_build_quiz_item(q, status=0, can_start=can_start))
         else:
-            # quiz_answer schema (see helper/db_schemas.py):
-            # [0]=quiz_answer_id, [1]=user_id, [2]=quiz_id, [3]=quiz_kind,
-            # [4]=answers(JSON), [5]=state, [6]=ins_id, [7]=con_id, ...
-            last_answer_row = all_answers[-1]
-            last_quiz_id = last_answer_row[2]
-            last_quiz_state = last_answer_row[5]
+            last_attempt = all_attempts[-1]
+            last_quiz_id = last_attempt["quiz_id"]
+            last_quiz_state = last_attempt["state"]
 
             for q in quiz_info:
                 q_id = q["id"]
@@ -388,23 +362,13 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
         if not has_access:
             return None, None, "شما به این محصول دسترسی ندارید."
         # Limit answers to this user and this quiz kind (support legacy NULL quiz_kind)
-        query = (
-            "SELECT * FROM quiz_answer "
-            "WHERE user_id = ? AND (quiz_kind = ?) "
-            "ORDER BY quiz_id ASC"
-        )
-        all_answers = db_helper.search_allin_table(
-            conn=conn,
-            cursor=cursor,
-            query=query,
-            field=(info["user_id"], quiz_kind),
-        )
+        all_attempts = answer_store.get_attempts(conn, cursor, info["user_id"], quiz_kind)
 
         query_quiz = 'SELECT * FROM setting WHERE user_id = ' + str(res_stu.ins_id) + ' and quiz_id = ' + str(
             quiz_id) + ''
         response_quiz_setting = cursor.execute(query_quiz)
         res_quiz_setting = response_quiz_setting.fetchone()
-        # All answers already limited to this product kind (AG, SCL, ...)
+        # All attempts already limited to this product kind (AG, SCL, ...)
         quiz_ids_for_kind = {q["id"] for q in get_quiz_table_info(kind=quiz_kind)}
 
         # Helper to load quiz metadata from the appropriate data file
@@ -422,7 +386,7 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
             return quiz_info_obj
 
         # If no answer for this product yet, only the first quiz of this product is allowed
-        if not all_answers:
+        if not all_attempts:
             first_quiz_id = min(quiz_ids_for_kind) if quiz_ids_for_kind else None
             if quiz_id != first_quiz_id:
                 return None, None, "آزمون مورد نظر شما در دسترس شما نیست."
@@ -430,13 +394,10 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
             quiz_info_obj = _apply_setting_overrides(_load_quiz_info(), res_quiz_setting)
             return token, {"data": quiz_info_obj, "quizAnswers": {}}, ""
 
-        # There is at least one answered quiz for this product
-        last_answer_row = all_answers[-1]
-        # quiz_answer schema (see helper/db_schemas.py):
-        # [0]=quiz_answer_id, [1]=user_id, [2]=quiz_id, [3]=quiz_kind,
-        # [4]=answers(JSON), [5]=state, [6]=ins_id, [7]=con_id, ...
-        last_quiz_id = last_answer_row[2]
-        last_quiz_state = last_answer_row[5]
+        # There is at least one attempt for this product
+        last_attempt = all_attempts[-1]
+        last_quiz_id = last_attempt["quiz_id"]
+        last_quiz_state = last_attempt["state"]
 
         # If requesting the same quiz as the last one
         if last_quiz_id == quiz_id:
@@ -446,8 +407,7 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
             elif last_quiz_state == 1:
                 # In-progress quiz can be continued with existing answers
                 quiz_info_obj = _apply_setting_overrides(_load_quiz_info(), res_quiz_setting)
-                answers_json = last_answer_row[4] if len(last_answer_row) > 4 else None
-                quiz_answer = json.loads(answers_json) if answers_json else {}
+                quiz_answer = answer_store.get_answers_for_attempt(conn, cursor, last_attempt["id"])
                 return token, {"data": quiz_info_obj, "quizAnswers": quiz_answer}, ""
 
         # If requesting the next quiz in sequence
@@ -528,49 +488,26 @@ def submit_quiz_answer(conn, cursor, request_data, info):
         # some of the quiz have the time and the state changed something except "" and in that time
         # should finish it (state 2) (if line 405)
 
-        quiz_id = request_data["quiz_id"]
-        quiz_kind = (request_data.get("quiz_kind")).upper()
-        question_number = request_data["question_Number"]
+        quiz_id = int(request_data["quiz_id"])
+        quiz_kind = answer_store.normalize_quiz_kind(request_data.get("quiz_kind"))
+        question_number = int(request_data["question_Number"])
         last_question_id = request_data.get("last_question_id")
         if not quiz_kind:
             return None, None, "quiz_kind is required"
 
-        # Normalize / clean answers: drop any nulls from list answers
-        question_answer = request_data.get("question_Answer")
-        if isinstance(question_answer, list):
-            question_answer = [a for a in question_answer if a is not None]
+        question_answer = answer_store.normalize_answer_value(request_data.get("question_Answer"))
 
         # If quiz has timed-out on client side, just mark state=2 and exit
         if request_data.get("state") and request_data.get("state") != "":
-            db_helper.update_record(
-                conn,
-                cursor,
-                "quiz_answer",
-                ["state", "edited_time"],
-                [2, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                "quiz_id = ? AND user_id = ? AND (quiz_kind = ? OR quiz_kind IS NULL)",
-                [str(quiz_id), str(info["user_id"]), quiz_kind],
-            )
+            answer_store.finish_attempt(conn, cursor, info["user_id"], quiz_kind, quiz_id)
             token = str(uuid.uuid4())
             return token, None, "آزمون شما به علت اتمام زمان به پایان رسید."
 
-        # Load existing answer row (limited to this user, quiz and kind)
-        query_quiz_answer = """
-            SELECT quiz_answer_id, user_id, quiz_id, quiz_kind, answers, state, ins_id, con_id
-            FROM quiz_answer
-            WHERE user_id = ? AND quiz_id = ? AND (quiz_kind = ?)
-        """
-        rows = db_helper.search_fetchall(
-            conn=conn,
-            cursor=cursor,
-            query=query_quiz_answer,
-            field=(info["user_id"], quiz_id, quiz_kind),
-        )
-        row = rows[0] if rows else None
+        attempt = answer_store.get_attempt(conn, cursor, info["user_id"], quiz_kind, quiz_id)
 
         message = ""
 
-        if row is None:
+        if attempt is None:
             # Validate that first question for this quiz is being answered
             quiz_info_obj = get_quiz_info(quiz_id=quiz_id, kind=quiz_kind)
             if not quiz_info_obj:
@@ -586,49 +523,27 @@ def submit_quiz_answer(conn, cursor, request_data, info):
             if first_q_id is not None and question_number != first_q_id:
                 return None, None, "this question number is not valid reload quiz"
 
-            answers = {question_number: question_answer}
-            answers_data = json.dumps(answers, ensure_ascii=False)
             ins_id, con_id = get_stu_other_info(conn=conn, cursor=cursor, user_id=info["user_id"])
-            field = '([user_id], [quiz_id], [quiz_kind], [answers], [state], [ins_id], [con_id])'
-            values = (
-                info["user_id"],
-                quiz_id,
-                quiz_kind,
-                answers_data,
-                1,
-                ins_id,
-                con_id,
-            )
-            db_helper.insert_value(conn=conn, cursor=cursor, table_name="quiz_answer", fields=field, values=values)
+            state = 2 if last_question_id is not None and question_number == last_question_id else 1
+            attempt = answer_store.upsert_attempt(conn, cursor, info["user_id"], quiz_kind, quiz_id, state, ins_id, con_id)
         else:
-            # Update existing answers JSON
-            existing_answers_json = row.get("answers")
-            answers = json.loads(existing_answers_json) if existing_answers_json else {}
-            answers[question_number] = question_answer
-            answers_data = json.dumps(answers, ensure_ascii=False)
-
+            state = attempt["state"]
             if last_question_id is not None and question_number == last_question_id:
-                # Last question of this quiz -> mark quiz as finished (state=2)
-                db_helper.update_record(
+                state = 2
+            if state != attempt["state"]:
+                attempt = answer_store.upsert_attempt(
                     conn,
                     cursor,
-                    "quiz_answer",
-                    ["answers", "state", "edited_time"],
-                    [answers_data, 2, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                    "quiz_id = ? AND user_id = ? AND (quiz_kind = ? OR quiz_kind IS NULL)",
-                    [str(quiz_id), str(info["user_id"]), quiz_kind],
+                    info["user_id"],
+                    quiz_kind,
+                    quiz_id,
+                    state,
+                    attempt.get("ins_id"),
+                    attempt.get("con_id"),
+                    attempt.get("remain_time"),
                 )
-            else:
-                # In-progress quiz (state stays as-is or 1)
-                db_helper.update_record(
-                    conn,
-                    cursor,
-                    "quiz_answer",
-                    ["answers", "edited_time"],
-                    [answers_data, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                    "quiz_id = ? AND user_id = ? AND (quiz_kind = ? OR quiz_kind IS NULL)",
-                    [str(quiz_id), str(info["user_id"]), quiz_kind],
-                )
+
+        answer_store.upsert_question_answer(conn, cursor, attempt, question_number, question_answer)
 
         # After the whole product is finished, add user to Redis queue.
         # For AG product, this happens when the very last question (global id) is answered.

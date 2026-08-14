@@ -12,6 +12,7 @@ from typing import List, Tuple, Dict, Any
 
 from helper.chart import bar, bidirection, gauge, bidirection_two_side, tube, scatter, horizontal
 import helper.db.db_helper as db_helper
+from helper.quiz import answer_store
 from helper.office.excel_helper import LoadExcelSourceFile, compute_brain_info
 from helper.quiz.check_score import score_computation_scl
 from helper.quiz.report_info import *
@@ -279,14 +280,22 @@ class AGReportScheduler:
     def _validate_quiz_data(self, user_id: str, report_kind: str) -> None:
         """Validate that user has sufficient quiz data."""
         try:
-            query = "SELECT answers FROM quiz_answer WHERE user_id = ? AND quiz_kind = ?"
-            res_score = db_helper.search_allin_table(
-                conn=self.db_conn, cursor=self.db_cursor, query=query, field=(user_id, report_kind)
+            query = """
+                SELECT COUNT(*) AS completed
+                FROM quiz_attempt
+                WHERE user_id = ? AND quiz_kind = ? AND state = 2
+            """
+            rows = db_helper.search_fetchall(
+                conn=self.db_conn,
+                cursor=self.db_cursor,
+                query=query,
+                field=(user_id, report_kind),
             )
+            completed_count = int(rows[0]["completed"] or 0) if rows else 0
 
-            if report_kind == "AG" and len(res_score) < 7:
+            if report_kind == "AG" and completed_count < 7:
                 raise ValueError("Insufficient quiz data for report generation")
-            if report_kind == "SCL" and len(res_score) < 4:
+            if report_kind == "SCL" and completed_count < 4:
                 raise ValueError("Insufficient quiz data for report generation")
         except Exception as e:
             logging.error(f"Error validating quiz data: {str(e)}")
@@ -850,27 +859,14 @@ class AGReportScheduler:
         return fields_matched
 
     def _compute_scl_scores(self, user_id: str) -> tuple[Dict, List[int]]:
-        """Compute SCL labels for a user based on quiz_answer rows."""
+        """Compute SCL labels for a user based on quiz question answer rows."""
         try:
-            query = "SELECT answers FROM quiz_answer WHERE user_id = ? AND quiz_kind = ?"
-            rows = db_helper.search_allin_table(
+            user_answers: Dict[str, Any] = answer_store.get_answers_for_user_kind(
                 self.db_conn,
                 self.db_cursor,
-                query,
-                (user_id, "SCL"),
+                int(user_id),
+                "SCL",
             )
-
-            user_answers: Dict[str, Any] = {}
-            for row in rows or []:
-                try:
-                    answers_dict = json.loads(row[0])
-                    user_answers.update(answers_dict)
-                except Exception as exc:
-                    logging.warning(
-                        "Failed to parse SCL answers JSON for user %s: %s",
-                        user_id,
-                        exc,
-                    )
 
             labels, missing_questions = score_computation_scl(user_answers)
             return labels, missing_questions
