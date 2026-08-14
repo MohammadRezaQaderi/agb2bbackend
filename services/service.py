@@ -1,5 +1,3 @@
-from datetime import datetime
-
 import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
 import helper.quiz.quiz_data_extractor as quiz_data_extractor
@@ -701,51 +699,19 @@ def get_transactions(conn, cursor, request_data, user_info):
 
 
 def apply_discount(conn, cursor, request_data, user_info):
-    try:
-        method_type = "SELECT"
-        is_valid, error_response = func_helper.validate_request_data_fields(
-            request_data=request_data,
-            required_fields=["discount_code", "total_value"],
-            method_type=method_type,
-        )
-        if not is_valid:
-            return error_response
+    method_type = "SELECT"
+    is_valid, error_response = func_helper.validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["discount_code", "total_value"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return error_response
 
-        query = 'SELECT id, discount_percentage, count, status, count_apply, expire_time FROM discount WHERE code = ?'
-        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["discount_code"])
-        if not res:
-            return {"status": 200, "tracking_code": None, "method_type": method_type,
-                    "error": "کد تخفیف مد نظر شما موجود نیست."}
-        else:
-            if res.expire_time:
-                if datetime.now() > res.expire_time:
-                    return {"status": 200, "tracking_code": None, "method_type": method_type,
-                            "error": "متاسفانه زمان مصرف این کد به پایان رسیده."}
-
-            elif res.status == 'expired':
-                return {"status": 200, "tracking_code": None, "method_type": method_type,
-                        "error": "متاسفانه زمان مصرف این کد به پایان رسیده."}
-            elif res.count == 0:
-                return {"status": 200, "tracking_code": None, "method_type": method_type,
-                        "error": "متاسفانه کد تخفیف مدنظر اتمام یافته."}
-            field = '([code], [status], [phone], [user_id])'
-            values = (request_data["discount_code"], "APPLY CODE", user_info["phone"], user_info["user_id"])
-            db_helper.insert_value(conn=conn, cursor=cursor, table_name='using_discount', fields=field,
-                                   values=values)
-            db_helper.update_record(
-                conn, cursor, "discount", ["count_apply", "edited_time"], [
-                    res.count_apply + 1,
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                ], "id = ?", [res.id]
-            )
-        token = func_helper.get_tracking_code()
-        new_total = (round(int(request_data["total_value"]) * (1 - res.discount_percentage)))/100
-        return {"status": 200, "tracking_code": token, "method_type": method_type,
-                "response": {"new_total": new_total}}
-    except Exception as e:
-        print("error occurred in apply discount", e)
-        return {"status": 200, "tracking_code": None, "method_type": None,
-                "error": "در پردازش کد تخفیف مشکلی پیش آمده"}
+    tracking_token, response_data, response_message = other_service.apply_discount(
+        conn=conn, cursor=cursor, request_data=request_data, user_info=user_info
+    )
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 def add_payment_order(conn, cursor, request_data, user_info):
     method_type = "INSERT"
@@ -761,100 +727,20 @@ def add_payment_order(conn, cursor, request_data, user_info):
             conn=conn, cursor=cursor, request_data=request_data, user_info=user_info
         )
         return _service_response(method_type, tracking_token, response_data, response_message)
-    else:
-        return {"status": 200, "tracking_code": None, "method_type": method_type,
-                "error": "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."}
-
-
+    return _error_response(method_type, DEFAULT_SERVICE_ERROR)
 
 def get_comments(conn, cursor):
     method_type = "SELECT"
-    query = """
-            SELECT TOP 100
-                id, 
-                name,
-                comment, 
-                rating,
-                persian_date
-            FROM comments 
-            ORDER BY created_time DESC
-        """
-    res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query)
-    comments = [
-        {
-            "id": p["id"],
-            "name": p["name"],
-            "comment": p["comment"],
-            "rating": p["rating"],
-            "persian_date": p["persian_date"],
-        }
-        for p in res
-    ]
-    token = func_helper.get_tracking_code()
-    return {
-        "status": 200,
-        "tracking_code": token,
-        "method_type": method_type,
-        "response": comments
-    }
+    tracking_token, response_data, response_message = other_service.get_comments(conn=conn, cursor=cursor)
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def add_comment(conn, cursor, request_data):
     method_type = "INSERT"
-    user_role = None
-    name = ""
-    query = 'SELECT role, user_id FROM users WHERE phone = ?'
-    res_role = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
-    if res_role is None:
-        return {
-            "status": 422,
-            "tracking_code": None,
-            "method_type": method_type,
-            "response": ""
-        }
-    else:
-        user_role = res_role[0]
-    if user_role in ["ins", "sch"]:
-        if user_role == "ins":
-            query = 'SELECT user_id, name, phone FROM ins WHERE phone = ?'
-        else:
-            query = 'SELECT user_id, name, phone FROM sch WHERE phone = ?'
-        res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
-        if res_user is None:
-            return {
-                "status": 422,
-                "tracking_code": None,
-                "method_type": method_type,
-                "response": ""
-            }
-        name = res_user[1]
-    elif user_role in ["con", "ocon"]:
-        if user_role == "con":
-            query = 'SELECT user_id, first_name, last_name, phone FROM con WHERE phone = ?'
-        else:
-            query = 'SELECT user_id, first_name, last_name, phone FROM ocon WHERE phone = ?'
-        res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
-        if res_user is None:
-            return {
-                "status": 422,
-                "tracking_code": None,
-                "method_type": method_type,
-                "response": ""
-            }
-        name = res_user[1] + " " + res_user[2]
-    field = '([name], [comment], [rating], [persian_date], [user_id], [phone], [db_name], [role])'
-    values = (
-        request_data["first_name"] + " " + request_data["last_name"], request_data["comment"], request_data["rating"], request_data["date"], res_role[1],
-        request_data["phone"], name, user_role,)
-    db_helper.insert_value(conn=conn, cursor=cursor, table_name='comments', fields=field,
-                           values=values)
-    token = func_helper.get_tracking_code()
-    return {
-        "status": 200,
-        "tracking_code": token,
-        "method_type": method_type,
-        "response": ""
-    }
+    tracking_token, response_data, response_message = other_service.add_comment(
+        conn=conn, cursor=cursor, request_data=request_data
+    )
+    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 # Admin functions

@@ -133,6 +133,41 @@ def get_transactions(conn, cursor, request_data, user_info):
         return None, None, "مشکلی در دریافت لیست تراکنش‌ها رخ داده است."
 
 
+def apply_discount(conn, cursor, request_data, user_info):
+    try:
+        query = 'SELECT id, discount_percentage, count, status, count_apply, expire_time FROM discount WHERE code = ?'
+        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["discount_code"])
+        if not res:
+            return None, None, "کد تخفیف مد نظر شما موجود نیست."
+
+        if res.expire_time and datetime.now() > res.expire_time:
+            return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
+        if res.status == 'expired':
+            return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
+        if res.count == 0:
+            return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
+
+        field = '([code], [status], [phone], [user_id])'
+        values = (request_data["discount_code"], "APPLY CODE", user_info["phone"], user_info["user_id"])
+        db_helper.insert_value(conn=conn, cursor=cursor, table_name='using_discount', fields=field, values=values)
+        db_helper.update_record(
+            conn, cursor, "discount", ["count_apply", "edited_time"], [
+                res.count_apply + 1,
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ], "id = ?", [res.id]
+        )
+
+        token = func_helper.get_tracking_code()
+        new_total = (round(int(request_data["total_value"]) * (1 - res.discount_percentage))) / 100
+        return token, {"new_total": new_total}, ""
+    except Exception as e:
+        print("error occurred in apply discount", e)
+        func_helper.service_exception_error_logging(
+            conn, cursor, "ag_api/other", "apply_discount", str(e), request_data, user_info
+        )
+        return None, None, "در پردازش کد تخفیف مشکلی پیش آمده"
+
+
 def get_order_status(conn, cursor, data, user_info):
     try:
         query = """
@@ -479,3 +514,85 @@ def get_report_data(conn, cursor, request_data, user_info):
     except Exception as e:
         print(e)
         return None, None, "خطا در دریافت اطلاعات گزارش."
+
+
+def get_comments(conn, cursor):
+    try:
+        query = """
+            SELECT TOP 100
+                id,
+                name,
+                comment,
+                rating,
+                persian_date
+            FROM comments
+            ORDER BY created_time DESC
+        """
+        res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query)
+        comments = [
+            {
+                "id": p["id"],
+                "name": p["name"],
+                "comment": p["comment"],
+                "rating": p["rating"],
+                "persian_date": p["persian_date"],
+            }
+            for p in res
+        ]
+        return func_helper.get_tracking_code(), comments, ""
+    except Exception as e:
+        print("error occurred in get comments", e)
+        func_helper.service_exception_error_logging(
+            conn, cursor, "ag_api/other", "get_comments", str(e), {}, {}
+        )
+        return None, None, "خطا در دریافت نظرات."
+
+
+def add_comment(conn, cursor, request_data):
+    try:
+        query = 'SELECT role, user_id FROM users WHERE phone = ?'
+        res_role = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
+        if res_role is None:
+            return None, None, "کاربر یافت نشد."
+
+        user_role = res_role[0]
+        db_name = ""
+        if user_role in ["ins", "sch"]:
+            if user_role == "ins":
+                query = 'SELECT user_id, name, phone FROM ins WHERE phone = ?'
+            else:
+                query = 'SELECT user_id, name, phone FROM sch WHERE phone = ?'
+            res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
+            if res_user is None:
+                return None, None, "اطلاعات کاربر یافت نشد."
+            db_name = res_user[1]
+        elif user_role in ["con", "ocon"]:
+            if user_role == "con":
+                query = 'SELECT user_id, first_name, last_name, phone FROM con WHERE phone = ?'
+            else:
+                query = 'SELECT user_id, first_name, last_name, phone FROM ocon WHERE phone = ?'
+            res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
+            if res_user is None:
+                return None, None, "اطلاعات کاربر یافت نشد."
+            db_name = res_user[1] + " " + res_user[2]
+
+        field = '([name], [comment], [rating], [persian_date], [user_id], [phone], [db_name], [role])'
+        values = (
+            request_data["first_name"] + " " + request_data["last_name"],
+            request_data["comment"],
+            request_data["rating"],
+            request_data["date"],
+            res_role[1],
+            request_data["phone"],
+            db_name,
+            user_role,
+        )
+        db_helper.insert_value(conn=conn, cursor=cursor, table_name='comments', fields=field, values=values)
+        return func_helper.get_tracking_code(), None, "نظر شما با موفقیت ثبت شد."
+    except Exception as e:
+        conn.rollback()
+        print("error occurred in add comment", e)
+        func_helper.service_exception_error_logging(
+            conn, cursor, "ag_api/other", "add_comment", str(e), request_data, {}
+        )
+        return None, None, "خطا در ثبت نظر."
