@@ -83,10 +83,15 @@ def ensure_migration_log_table(conn: pyodbc.Connection, cursor: pyodbc.Cursor, d
     conn.commit()
 
 
-def migration_wcon_logo(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run: bool) -> None:
-    table_name = "wCon"
+def migration_ocon_logo(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run: bool) -> None:
+    try:
+        table_name = "ocon"
+        schema_name = get_table_schema(cursor, table_name)
+    except RuntimeError:
+        table_name = "wCon"
+        schema_name = get_table_schema(cursor, table_name)
+
     column_name = "logo"
-    schema_name = get_table_schema(cursor, table_name)
 
     if column_exists(cursor, schema_name, table_name, column_name):
         print(f"SKIP: {schema_name}.{table_name}.{column_name} already exists")
@@ -105,7 +110,7 @@ def migration_wcon_logo(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run:
 
 
 MIGRATIONS: tuple[Migration, ...] = (
-    Migration("2026_08_10_add_wcon_logo", migration_wcon_logo),
+    Migration("2026_08_10_add_ocon_logo", migration_ocon_logo),
 )
 
 

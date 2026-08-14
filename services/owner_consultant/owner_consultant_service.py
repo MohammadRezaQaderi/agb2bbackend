@@ -8,15 +8,15 @@ import helper.func_helper as func_helper
 
 def get_info(conn, cursor, user_id):
     try:
-        query = 'SELECT wCon_id, phone, first_name, last_name, logo FROM wCon WHERE user_id = ?'
+        query = 'SELECT ocon_id, phone, first_name, last_name, logo FROM ocon WHERE user_id = ?'
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
         token = func_helper.get_tracking_code()
-        user_info = {"phone": res.phone, "user_id": user_id, "id": res.wCon_id, "first_name": res.first_name, "role": "wCon",
+        user_info = {"phone": res.phone, "user_id": user_id, "id": res.ocon_id, "first_name": res.first_name, "role": "ocon",
                 "last_name": res.last_name, "pic": res.logo}
         return token, user_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "get_info", str(e), {},
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_info", str(e), {},
                                         {"user_id": user_id})
         return None, None
 
@@ -158,14 +158,14 @@ def get_dashboard(conn, cursor, request_data, user_info):
 
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "get_dashboard", str(e), request_data,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_dashboard", str(e), request_data,
                                         user_info)
         return None, {}, []
 
 
 def add_owner_consultant(conn, cursor, request_data, user_id):
     try:
-        table = "wCon"
+        table = "ocon"
         sex = request_data.get("sex")
         if not sex:
             sex = 1
@@ -180,7 +180,7 @@ def add_owner_consultant(conn, cursor, request_data, user_id):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "add_owner_consultant", str(e), request_data,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "add_owner_consultant", str(e), request_data,
                                         {"user_id": user_id, "phone": request_data["phone"]})
         return None
 
@@ -207,7 +207,7 @@ def get_report(conn, cursor, request_data, user_info):
         return token, report_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "get_report", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_report", str(e), request_data, user_info)
         return None, []
 
 
@@ -294,7 +294,7 @@ def get_management_report(conn, cursor, request_data, user_info):
         return token, report_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "get_management_report", str(e),
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_management_report", str(e),
                                         request_data, user_info)
         return None, None
 
@@ -307,14 +307,14 @@ def add_student(conn, cursor, request_data, stu_user_id, user_info):
             stu_user_id, request_data["first_name"], request_data["last_name"], request_data["phone"],
             request_data["sex"], request_data["city"],
             request_data["user_id"],
-            user_info["user_id"], user_info["user_id"], user_info["user_id"], request_data["birth_date"], "wCon",)
+            user_info["user_id"], user_info["user_id"], user_info["user_id"], request_data["birth_date"], "ocon",)
         db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
                                values=values)
         token = func_helper.get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "add_student", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "add_student", str(e), request_data, user_info)
         return None
 
 
@@ -331,7 +331,7 @@ def change_student(conn, cursor, request_data, user_info):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "change_student", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_student", str(e), request_data, user_info)
         return None
 
 
@@ -346,7 +346,7 @@ def change_comment(conn, cursor, request_data, user_info):
         return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "change_comment", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_comment", str(e), request_data, user_info)
         return None
 
 
@@ -367,7 +367,7 @@ def change_user_info(conn, cursor, request_data, user_info):
             update_fields.insert(2, 'logo')
             update_values.insert(2, pic)
 
-        db_helper.update_record(conn, cursor, 'wCon',
+        db_helper.update_record(conn, cursor, 'ocon',
                                 update_fields,
                                 update_values,
                                 'user_id = ?', [str(user_info["user_id"])])
@@ -378,14 +378,14 @@ def change_user_info(conn, cursor, request_data, user_info):
         return token, response
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "change_user_info", str(e), request_data,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_user_info", str(e), request_data,
                                         user_info)
         return None, {}
 
 
 def get_students(conn, cursor, request_data, user_info):
     try:
-        query = 'SELECT first_name, last_name FROM wCon WHERE user_id = ?'
+        query = 'SELECT first_name, last_name FROM ocon WHERE user_id = ?'
         res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
         con_name = ""
         if res_con and len(res_con) >= 2:
@@ -405,7 +405,7 @@ def get_students(conn, cursor, request_data, user_info):
         return token, stu_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "get_students", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_students", str(e), request_data, user_info)
         return None, []
 
 
@@ -432,7 +432,7 @@ def change_user_voice(conn, cursor, request_data, user_info):
                     "response": {"message": "اطلاعات شما با موفقیت تغییر یافت."}}
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "change_user_voice", str(e), request_data,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_user_voice", str(e), request_data,
                                         user_info)
         return {"status": 200, "tracking_code": None, "method_type": None,
                 "response": {"message": "اطلاعات شما با موفقیت تغییر یافت."}}
@@ -458,25 +458,25 @@ def change_setting(conn, cursor, request_data, user_info):
             return token
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "change_setting", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_setting", str(e), request_data, user_info)
         return None
 
 
 def verify_user(conn, cursor, user_id):
     try:
-        db_helper.update_record(conn, cursor, 'wCon',
+        db_helper.update_record(conn, cursor, 'ocon',
                                 ['verify', 'edited_time'],
                                 [1, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(user_id)])
         token = func_helper.get_tracking_code()
-        query = 'SELECT wCon_id, phone, first_name, last_name, logo FROM wCon WHERE user_id = ?'
+        query = 'SELECT ocon_id, phone, first_name, last_name, logo FROM ocon WHERE user_id = ?'
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
-        user_info = {"phone": res.phone, "user_id": user_id, "id": res.wCon_id, "first_name": res.first_name, "role": "wCon",
+        user_info = {"phone": res.phone, "user_id": user_id, "id": res.ocon_id, "first_name": res.first_name, "role": "ocon",
                 "last_name": res.last_name, "pic": res.logo}
         return token, user_info
     except Exception as e:
         conn.rollback()
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/wCon", "verify_user", str(e), None,
+        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "verify_user", str(e), None,
                                         {"user_id": user_id})
         return None, None
 
@@ -492,7 +492,7 @@ def change_student_access(conn, cursor, request_data, user_info):
         cursor=cursor,
         request_data=request_data,
         user_info=user_info,
-        role_type="wCon",
+        role_type="ocon",
         id_field="ins_id",
-        end_point="ag_api/wCon"
+        end_point="ag_api/ocon"
     )

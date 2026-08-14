@@ -55,9 +55,9 @@ TABLE_DEFINITIONS = {
             CONSTRAINT fk_sch_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
-    "wCon": """
-        CREATE TABLE wCon (
-            wCon_id INT IDENTITY(1, 1),
+    "ocon": """
+        CREATE TABLE ocon (
+            ocon_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
             phone NVARCHAR(12),
             first_name NVARCHAR(50),
@@ -68,7 +68,7 @@ TABLE_DEFINITIONS = {
             verify INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE(),
-            CONSTRAINT fk_wcon_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+            CONSTRAINT fk_ocon_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
     "con": """
@@ -417,7 +417,7 @@ TABLE_DEFINITIONS = {
 }
 
 DEFAULT_TABLES: Sequence[str] = (
-    'users', 'ins', 'sch', 'wCon', 'con', 'stu', 'setting', 'capacity', 'capacity_package',
+    'users', 'ins', 'sch', 'ocon', 'con', 'stu', 'setting', 'capacity', 'capacity_package',
     'student_package_access', 'capacity_logs',
     'quiz_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications', 'payment',
     'payment_log', 'discount', 'using_discount', 'tokens', 'comments', 'otp_logs', 'redis_log', 'error_log',

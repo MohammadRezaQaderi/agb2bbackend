@@ -41,9 +41,9 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
-    "wCon": """
-        CREATE TABLE wCon (
-            wCon_id INT IDENTITY(1, 1),
+    "ocon": """
+        CREATE TABLE ocon (
+            ocon_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
             phone NVARCHAR(12),
             first_name NVARCHAR(50),
@@ -352,7 +352,7 @@ TABLE_DEFINITIONS = {
 }
 
 DEFAULT_TABLES: Sequence[str] = (
-    'users', 'ins', 'sch', 'wCon', 'con', 'stu', 'setting', 'capacity', 'capacity_package', 'capacity_logs',
+    'users', 'ins', 'sch', 'ocon', 'con', 'stu', 'setting', 'capacity', 'capacity_package', 'capacity_logs',
     'quiz_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications', 'payment',
     'payment_log', 'discount', 'using_discount', 'tokens', 'redis_log', 'error_log', 'api_logs'
 )
@@ -485,7 +485,7 @@ def migrate():
     cursor.execute("SELECT * FROM users_old")
     for row in cursor.fetchall():
         formatted_phone = row.phone
-        if row.role in ["ins", "sch", "wCon", "con"]:
+        if row.role in ["ins", "sch", "ocon", "con"]:
             formatted_phone = format_phone(row.phone)
         raw_pwd = decrypt_password(row.password) or row.password
         new_pwd = encrypt_password(raw_pwd)
@@ -496,10 +496,10 @@ def migrate():
     cursor.execute("SET IDENTITY_INSERT users OFF")
     conn.commit()
 
-    # 4. Migrate Role Tables (ins, sch, wCon)
+    # 4. Migrate Role Tables (ins, sch, ocon)
     # Since these tables in db_creator use user_id as a PRIMARY KEY (not identity),
     # we just insert the value directly.
-    for role_table in ['ins', 'sch', 'wCon']:
+    for role_table in ['ins', 'sch', 'ocon']:
         print(f"Migrating {role_table} table...")
         cursor.execute(f"SELECT * FROM {role_table}_old")
         columns = [column[0] for column in cursor.description]
@@ -522,7 +522,7 @@ def migrate():
             if role_table in ['ins', 'sch']:
                 fields.extend(['name', 'logo'])
                 values.extend([data['name'], data['logo']])
-            else:  # wCon
+            else:  # ocon
                 fields.extend(['first_name', 'last_name', 'logo'])
                 values.extend([data['first_name'], data['last_name'], data.get('logo')])
 

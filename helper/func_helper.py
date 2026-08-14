@@ -890,7 +890,7 @@ def update_user_and_role_password(
     This helper encapsulates the common pattern used by:
     - update_ins_password
     - update_sch_password
-    - update_wcon_password
+    - update_ocon_password
     - update_con_password
 
     Args:
@@ -966,7 +966,7 @@ def update_student_access_and_capacity(
             - permission: Permission flag (1 or 0) indicating grant/revoke access
             - limit: Limit flag (1 or 0) for the package
         user_info: Context user_info containing user_id
-        role_type: Role type ("ins", "sch", or "wCon") for error logging
+        role_type: Role type ("ins", "sch", or "ocon") for error logging
         id_field: Field name to check ownership ("ins_id" for all three)
         end_point: API endpoint for error logging
 

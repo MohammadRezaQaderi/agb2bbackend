@@ -80,6 +80,99 @@ def run_sql(conn: Any, cursor: Any, sql: str, dry_run: bool, label: str) -> None
     print(f"APPLIED: {label}")
 
 
+def rename_table_if_needed(
+    conn: Any,
+    cursor: Any,
+    old_name: str,
+    new_name: str,
+    dry_run: bool,
+) -> None:
+    old_exists = table_exists(cursor, old_name)
+    new_exists = table_exists(cursor, new_name)
+
+    if new_exists:
+        if old_exists:
+            print(f"WARN: both {old_name} and {new_name} exist; skipped automatic table merge")
+        else:
+            print(f"SKIP: table {new_name} already exists")
+        return
+
+    if not old_exists:
+        print(f"SKIP: neither {old_name} nor {new_name} exists")
+        return
+
+    sql = f"EXEC sp_rename N'dbo.{old_name}', N'{new_name}'"
+    run_sql(conn, cursor, sql, dry_run, f"rename table {old_name} to {new_name}")
+
+
+def rename_column_if_needed(
+    conn: Any,
+    cursor: Any,
+    table_name: str,
+    old_name: str,
+    new_name: str,
+    dry_run: bool,
+) -> None:
+    if not table_exists(cursor, table_name):
+        print(f"SKIP: table {table_name} does not exist")
+        return
+
+    if column_exists(cursor, table_name, new_name):
+        print(f"SKIP: column {table_name}.{new_name} already exists")
+        return
+
+    if not column_exists(cursor, table_name, old_name):
+        print(f"SKIP: column {table_name}.{old_name} does not exist")
+        return
+
+    sql = f"EXEC sp_rename N'dbo.{table_name}.{old_name}', N'{new_name}', N'COLUMN'"
+    run_sql(conn, cursor, sql, dry_run, f"rename column {table_name}.{old_name} to {new_name}")
+
+
+def normalize_ocon_role_names(conn: Any, cursor: Any, dry_run: bool) -> None:
+    exact_role_columns = (
+        ("users", "role"),
+        ("tokens", "role"),
+        ("comments", "role"),
+        ("stu", "ins_role"),
+        ("con", "ins_role"),
+    )
+    for table_name, column_name in exact_role_columns:
+        if table_exists(cursor, table_name) and column_exists(cursor, table_name, column_name):
+            run_sql(
+                conn,
+                cursor,
+                (
+                    f"UPDATE {quote_name(table_name)} "
+                    f"SET {quote_name(column_name)} = 'ocon', edited_time = GETDATE() "
+                    f"WHERE {quote_name(column_name)} IN ('wCon', 'wcon', 'WCon')"
+                ),
+                dry_run,
+                f"normalize {table_name}.{column_name} wCon to ocon",
+            )
+
+    replace_text_columns = (
+        ("notifications", "roles"),
+        ("api_logs", "end_point"),
+    )
+    for table_name, column_name in replace_text_columns:
+        if table_exists(cursor, table_name) and column_exists(cursor, table_name, column_name):
+            run_sql(
+                conn,
+                cursor,
+                (
+                    f"UPDATE {quote_name(table_name)} "
+                    f"SET {quote_name(column_name)} = REPLACE(REPLACE(REPLACE({quote_name(column_name)}, 'wCon', 'ocon'), 'wcon', 'ocon'), 'WCon', 'ocon'), "
+                    f"edited_time = GETDATE() "
+                    f"WHERE {quote_name(column_name)} LIKE '%wCon%' "
+                    f"OR {quote_name(column_name)} LIKE '%wcon%' "
+                    f"OR {quote_name(column_name)} LIKE '%WCon%'"
+                ),
+                dry_run,
+                f"replace legacy ocon text in {table_name}.{column_name}",
+            )
+
+
 def scalar(cursor: Any, sql: str, params: tuple[Any, ...] = ()) -> int:
     cursor.execute(sql, *params)
     row = cursor.fetchone()
@@ -329,6 +422,10 @@ def run_migration(dry_run: bool) -> None:
     cursor = conn.cursor()
 
     try:
+        rename_table_if_needed(conn, cursor, "wCon", "ocon", dry_run)
+        rename_column_if_needed(conn, cursor, "ocon", "wCon_id", "ocon_id", dry_run)
+        normalize_ocon_role_names(conn, cursor, dry_run)
+
         ensure_column(conn, cursor, "capacity_package", "total_allowed", "INT NULL", dry_run)
         if column_exists(cursor, "capacity_package", "total_allowed"):
             run_sql(

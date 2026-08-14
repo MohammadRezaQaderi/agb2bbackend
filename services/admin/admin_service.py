@@ -43,8 +43,8 @@ def change_capacity(conn, cursor, request_data):
         user_id = user_res.user_id
         role = user_res.role
 
-        if role not in ["ins", "sch", "wCon"]:
-            return None, "نقش کاربر باید ins، sch یا wCon باشد."
+        if role not in ["ins", "sch", "ocon"]:
+            return None, "نقش کاربر باید ins، sch یا ocon باشد."
 
         # Check if capacity record exists
         query_capacity = 'SELECT capacity_id FROM capacity WHERE user_id = ?'
@@ -179,8 +179,8 @@ def get_user_info(conn, cursor, request_data):
     
     Requirements:
     - Request data has phone
-    - Get information from users and ins, sch, wCon, con, stu tables
-    - For wcon, sch, ins return capacity
+    - Get information from users and ins, sch, ocon, con, stu tables
+    - For ocon, sch, ins return capacity
     - Return user user_info
     """
     try:
@@ -246,19 +246,19 @@ def get_user_info(conn, cursor, request_data):
                 }
                 user_info["capacity"] = capacity_info
 
-        elif role == "wCon":
-            query_role = 'SELECT wCon_id, first_name, last_name, sex, verify FROM wCon WHERE phone = ?'
+        elif role == "ocon":
+            query_role = 'SELECT ocon_id, first_name, last_name, sex, verify FROM ocon WHERE phone = ?'
             role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=phone)
             if role_res:
                 user_info.update({
-                    "wCon_id": role_res.wCon_id,
+                    "ocon_id": role_res.ocon_id,
                     "first_name": role_res.first_name,
                     "last_name": role_res.last_name,
                     "sex": role_res.sex,
                     "verify": role_res.verify
                 })
 
-                # Get capacity for wCon
+                # Get capacity for ocon
                 query_capacity = 'SELECT package_name, allowed, used FROM capacity_package WHERE user_id = ?'
                 capacity_res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query_capacity, field=user_id)
                 capacity_info = {

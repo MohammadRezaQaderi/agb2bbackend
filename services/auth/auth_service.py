@@ -77,8 +77,8 @@ def sign_in(conn, cursor, request_data):
                              user_info={"user_id": res.user_id, "phone": phone})
                 return None, "شما هنوز احراز هویت انجام نداده‌اید.", None
             ـ, user_info = school_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
-        elif res.role == "wCon":
-            query = 'SELECT verify FROM wCon WHERE phone = ?'
+        elif res.role == "ocon":
+            query = 'SELECT verify FROM ocon WHERE phone = ?'
             res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
             if res_verify.verify == 0:
                 remove_token(conn=conn, cursor=cursor, request_data={"user_id": res.user_id},
@@ -156,7 +156,7 @@ def sign_up(conn, cursor, redis_db, request_data):
         elif role == "sch":
             token = school_service.add_school(conn=conn, cursor=cursor, request_data=request_data, user_id=res_user.user_id)
 
-        elif role == "wCon":
+        elif role == "ocon":
             token = owner_consultant_service.add_owner_consultant(conn=conn, cursor=cursor, request_data=request_data,
                                             user_id=res_user.user_id)
 
@@ -212,8 +212,8 @@ def send_otp(conn, cursor, redis_db, request_data):
             if res_verify.verify == 1:
                 return None, "شما از قبل احراز هویت نموده‌اید.", None
 
-        if res.role == "wCon" and type_otp == "verify":
-            query = 'SELECT verify FROM wCon WHERE phone = ?'
+        if res.role == "ocon" and type_otp == "verify":
+            query = 'SELECT verify FROM ocon WHERE phone = ?'
             res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
             if res_verify.verify == 1:
                 return None, "شما از قبل احراز هویت نموده‌اید.", None
@@ -265,7 +265,7 @@ def check_otp(conn, cursor, redis_db, request_data):
                 ـ, user_info = institute_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "sch":
                 ـ, user_info = school_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
-            elif res.role == "wCon":
+            elif res.role == "ocon":
                 ـ, user_info = owner_consultant_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "con":
                 ـ, user_info = consultant_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
@@ -278,7 +278,7 @@ def check_otp(conn, cursor, redis_db, request_data):
                 ـ, user_info = institute_service.verify_user(conn=conn, cursor=cursor, user_id=res.user_id)
             elif res.role == "sch":
                 ـ, user_info = school_service.verify_user(conn=conn, cursor=cursor, user_id=res.user_id)
-            elif res.role == "wCon":
+            elif res.role == "ocon":
                 ـ, user_info = owner_consultant_service.verify_user(conn=conn, cursor=cursor, user_id=res.user_id)
             else:
                 return None, "شما به این سرویس دسترسی ندارید.", None

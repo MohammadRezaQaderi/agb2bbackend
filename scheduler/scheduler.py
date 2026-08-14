@@ -255,13 +255,13 @@ class AGReportScheduler:
                 if school and school[2]:
                     logo_path = os.path.join(INS_PIC_DIR, school[2])
             else:
-                wcon_query = 'SELECT first_name, last_name FROM wCon WHERE user_id = ?'
-                consultant = db_helper.search_table(self.db_conn, self.db_cursor, wcon_query, student[4])
+                ocon_query = 'SELECT first_name, last_name FROM ocon WHERE user_id = ?'
+                consultant = db_helper.search_table(self.db_conn, self.db_cursor, ocon_query, student[4])
                 institute_name = f"{consultant[0]} {consultant[1]}" if consultant else ""
                 consultant_name = f"{consultant[0]} {consultant[1]}" if consultant else ""
 
             # Get consultant name if con_id exists
-            if student[5] and student[6] not in ["wCon"]:  # con_id field
+            if student[5] and student[6] not in ["ocon"]:  # con_id field
                 con_query = 'SELECT user_id, first_name, last_name FROM con WHERE user_id = ?'
                 consultant = db_helper.search_table(self.db_conn, self.db_cursor, con_query, student[5])
                 consultant_name = f"{consultant[1]} {consultant[2]}" if consultant else ""

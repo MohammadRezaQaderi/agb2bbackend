@@ -564,7 +564,7 @@ async def update_user_voice(
         elif role == "sch":
             res_request = school_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, user_info=user_info)
             return res_request
-        elif role == "wCon":
+        elif role == "ocon":
             res_request = owner_consultant_service.change_user_voice(conn=conn, cursor=cursor, request_data=data, user_info=user_info)
             return res_request
         else:

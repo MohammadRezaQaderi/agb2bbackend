@@ -96,7 +96,7 @@ def select_student_info(conn, cursor, user_id):
                            "access": res.access, "role": "stu", "name": res_ins.name, "con_name": con_name,
                            "pic": res_ins.logo, "ins_id": res_ins.user_id, }
         else:
-            query_con = 'SELECT first_name, last_name FROM wCon WHERE user_id = ?'
+            query_con = 'SELECT first_name, last_name FROM ocon WHERE user_id = ?'
             res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query_con, field=res.con_id)
             con_name = ""
             if res_con and len(res_con) >= 2:

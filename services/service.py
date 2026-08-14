@@ -146,7 +146,7 @@ def change_user_info(conn, cursor, request_data, user_info):
         token, data = consultant_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data, "message": "اطلاعات شما با موفقیت تغییر یافت."}}
-    elif user_info["role"] == "wCon":
+    elif user_info["role"] == "ocon":
         token, data = owner_consultant_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data,
                                                user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
@@ -179,7 +179,7 @@ def change_password(conn, cursor, request_data, user_info):
     role_table_map = {
         "ins": "ins",
         "sch": "sch",
-        "wCon": "wCon",
+        "ocon": "ocon",
         "con": "con",
     }
 
@@ -362,7 +362,7 @@ def change_setting(conn, cursor, request_data, user_info):
         token = school_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "پیش اطلاعات اولیه آزمون شما تغییر یافت."}}
-    elif user_info["role"] == "wCon":
+    elif user_info["role"] == "ocon":
         token = owner_consultant_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "پیش اطلاعات اولیه آزمون شما تغییر یافت."}}
@@ -391,7 +391,7 @@ def change_student_access(conn, cursor, request_data, user_info):
         token, message = school_service.change_student_access(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": message}}
-    elif user_info["role"] == "wCon":
+    elif user_info["role"] == "ocon":
         token, message = owner_consultant_service.change_student_access(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": message}}
@@ -413,7 +413,7 @@ def change_user_quiz_setting(conn, cursor, request_data, user_info):
         token = school_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "پیش اطلاعات اولیه آزمون شما تغییر یافت."}}
-    elif user_info["role"] == "wCon":
+    elif user_info["role"] == "ocon":
         token = owner_consultant_service.change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "پیش اطلاعات اولیه آزمون شما تغییر یافت."}}
@@ -439,7 +439,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
                                                                user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": dash_info, "notifications": notifications}}
-    elif user_info["role"] == "wCon":
+    elif user_info["role"] == "ocon":
         token, dash_info, notifications = owner_consultant_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
                                                                 user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
@@ -504,7 +504,7 @@ def add_consultant(conn, cursor, request_data, user_info):
                                                con_user_id=con_user_id, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": message}}
-    elif user_info["role"] in ["con", "wCon"]:
+    elif user_info["role"] in ["con", "ocon"]:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "شما به این سرویس دسترسی ندارید."}
     else:
@@ -552,7 +552,7 @@ def get_students(conn, cursor, request_data, user_info):
                                              user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": stu_conf}}
-    elif user_info["role"] == "wCon":
+    elif user_info["role"] == "ocon":
         token, stu_conf = owner_consultant_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
                                               user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
@@ -565,7 +565,7 @@ def check_student_access(conn, cursor, student_user_id, user_info):
     """
     Check if the current user has access to the specified student.
     For ins/sch roles: check if student's ins_id matches user_id
-    For con/wCon roles: check if student's con_id matches user_id
+    For con/ocon roles: check if student's con_id matches user_id
     Returns True if access is granted, False otherwise.
     """
     try:
@@ -580,7 +580,7 @@ def check_student_access(conn, cursor, student_user_id, user_info):
         if role in ["ins", "sch"]:
             # For institute/school, check if student's ins_id matches user_id
             return res.ins_id == user_id
-        elif role in ["con", "wCon"]:
+        elif role in ["con", "ocon"]:
             # For consultant/owner consultant, check if student's con_id matches user_id
             return res.con_id == user_id
         
@@ -600,7 +600,7 @@ def get_report_data(conn, cursor, request_data, user_info):
     if not is_valid:
         return error_response
     
-    if user_info["role"] in ["ins", "sch", "con", "wCon"]:
+    if user_info["role"] in ["ins", "sch", "con", "ocon"]:
         student_id = request_data.get("student_id")
         # Check if user has access to this student
         if not check_student_access(conn, cursor, student_id, user_info):
@@ -639,7 +639,7 @@ def add_student(conn, cursor, request_data, user_info):
                                    user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "دانش‌آموز شما با موفقیت ثبت شد."}}
-    elif user_info["role"] == "wCon":
+    elif user_info["role"] == "ocon":
         token = owner_consultant_service.add_student(conn=conn, cursor=cursor, request_data=request_data, stu_user_id=stu_user_id,
                                     user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
@@ -670,7 +670,7 @@ def change_student(conn, cursor, request_data, user_info):
         token = school_service.change_student(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."}}
-    elif user_info["role"] == "wCon":
+    elif user_info["role"] == "ocon":
         token = owner_consultant_service.change_student(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."}}
@@ -690,7 +690,7 @@ def change_comment(conn, cursor, request_data, user_info):
         token = consultant_service.change_comment(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."}}
-    elif user_info["role"] == "wCon":
+    elif user_info["role"] == "ocon":
         token = owner_consultant_service.change_comment(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."}}
@@ -742,7 +742,7 @@ def get_report(conn, cursor, request_data, user_info):
         token, data = school_service.get_report(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data}}
-    elif user_info["role"] == "wCon":
+    elif user_info["role"] == "ocon":
         token, data = owner_consultant_service.get_report(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data}}
@@ -765,7 +765,7 @@ def get_management_report(conn, cursor, request_data, user_info):
         token, data = school_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data}}
-    elif user_info["role"] == "wCon":
+    elif user_info["role"] == "ocon":
         token, data = owner_consultant_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": data}}
@@ -784,7 +784,7 @@ def get_management_report(conn, cursor, request_data, user_info):
 # get the information of quiz (quiz id, quiz description, quiz voice, quiz sections, quiz name)
 def get_quiz_info(conn, cursor, request_data, user_info):
     method_type = "SELECT"
-    if user_info["role"] not in ["ins", "sch", "wCon", "con"]:
+    if user_info["role"] not in ["ins", "sch", "ocon", "con"]:
         return {"status": 200, "tracking_code": None, "method_type": method_type,
                 "error": "متاسفانه شما از این سامانه به این سرویس دسترسی ندارید."}
     else:
@@ -797,7 +797,7 @@ def get_quiz_info(conn, cursor, request_data, user_info):
 # transactions and payments
 def get_transactions(conn, cursor, request_data, user_info):
     method_type = "SELECT"
-    if user_info["role"] in ["wCon", "ins", "sch"]:
+    if user_info["role"] in ["ocon", "ins", "sch"]:
         token, transactions_info = other_service.get_transactions(conn, cursor, request_data, user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"data": transactions_info}}
@@ -862,7 +862,7 @@ def add_payment_order(conn, cursor, request_data, user_info):
     # )
     # if not is_valid:
     #     return error_response
-    if user_info["role"] in ["wCon", "ins", "sch"]:
+    if user_info["role"] in ["ocon", "ins", "sch"]:
         token, ref_id, message, url = other_service.order_payment(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
         return {"status": 200, "tracking_code": token, "method_type": method_type,
                 "response": {"message": message, "url": url, "ref_id": ref_id}}
@@ -933,11 +933,11 @@ def add_comment(conn, cursor, request_data):
                 "response": ""
             }
         name = res_user[1]
-    elif user_role in ["con", "wCon"]:
+    elif user_role in ["con", "ocon"]:
         if user_role == "con":
             query = 'SELECT user_id, first_name, last_name, phone FROM con WHERE phone = ?'
         else:
-            query = 'SELECT user_id, first_name, last_name, phone FROM wCon WHERE phone = ?'
+            query = 'SELECT user_id, first_name, last_name, phone FROM ocon WHERE phone = ?'
         res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
         if res_user is None:
             return {
