@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse
 import helper.db.db_helper as db_helper
 import helper.api_metrics as api_metrics
 import helper.func_helper as func_helper
+import helper.static_data.get_data as static_data
 import services.institute.institute_service as institute_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
@@ -46,7 +47,6 @@ async def student_metrics():
 @app.get("/ags_api/health")
 async def student_health_check():
     return await func_helper.health_payload("ags_api")
-
 
 def _legacy_action_payload(data: dict):
     action = data.get("method_type") or data.get("action_type")
@@ -1316,6 +1316,46 @@ async def get_voice(filename: str):
         return FileResponse(file_path, filename=filename)
     else:
         raise HTTPException(status_code=404, detail="File not found")
+
+@app.get("/ags_api/majors")
+@app.get("/ag_api/majors")
+async def get_majors():
+    return {"majors": static_data.MAJORS}
+
+
+@app.get("/ags_api/majors/{major_id}/categories")
+@app.get("/ag_api/majors/{major_id}/categories")
+async def get_major_categories(major_id: int):
+    major_item = next((item for item in static_data.MAJORS if item["id"] == major_id), None)
+    if not major_item:
+        raise HTTPException(status_code=404, detail="Major not found")
+
+    categories = [item for item in static_data.CATEGORY if item.get("number") == major_item["id"]]
+    return {"major": major_item, "categories": categories}
+
+
+@app.get("/ags_api/fields/{field_id}")
+@app.get("/ag_api/fields/{field_id}")
+async def get_field(field_id: int):
+    field_item = next((item for item in static_data.FIELDS if item["id"] == field_id), None)
+    if not field_item:
+        raise HTTPException(status_code=404, detail="Field not found")
+
+    category_items = [item for item in static_data.CATEGORY if item.get("id") == field_id]
+    field_item_with_categories = field_item.copy()
+
+    if category_items:
+        field_item_with_categories["categories"] = category_items
+        first_category = category_items[0]
+        for key in ["a1", "a2", "a3", "a4", "a5", "a6"]:
+            if key in first_category:
+                field_item_with_categories[key] = first_category[key]
+    else:
+        for key in ["a1", "a2", "a3", "a4", "a5", "a6"]:
+            field_item_with_categories[key] = None
+
+    return {"field": field_item_with_categories}
+
 
 
 @app.get("/ags_api/get_pic_info/field/{filename}")
