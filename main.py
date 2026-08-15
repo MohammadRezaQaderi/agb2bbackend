@@ -48,13 +48,6 @@ async def student_metrics():
 async def student_health_check():
     return await func_helper.health_payload("ags_api")
 
-def _legacy_action_payload(data: dict):
-    action = data.get("method_type") or data.get("action_type")
-    request_data = data.get("data")
-    if request_data is None:
-        request_data = data.get("request_data")
-    return action, request_data
-
 
 @app.post("/ags_api/signin")
 @api_metrics.monitor_endpoint("ags_api/signin")
@@ -64,12 +57,13 @@ async def student_signin_api(request: Request):
 
     try:
         data = await request.json()
-        action, request_data = _legacy_action_payload(data)
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
+        request_data = data.get("request_data")
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
-        if action != "signin":
+        if action != "ags_sign_in":
             return func_helper.not_method_access_return()
 
         conn, cursor = await db_helper.db_connection()
@@ -92,9 +86,10 @@ async def student_select_api(request: Request):
 
     try:
         data = await request.json()
-        action, request_data = _legacy_action_payload(data)
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
+        request_data = data.get("request_data")
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
@@ -106,11 +101,11 @@ async def student_select_api(request: Request):
             return func_helper.not_auth_return(message=state_message)
 
         action_map = {
-            "select_dashboard": service.student_get_dashboard,
-            "select_quiz_setting": service.student_get_quiz_setting,
-            "select_access_product": service.student_get_access_product,
-            "select_quiz_table_info": service.student_get_quiz_table_info,
-            "select_quiz_info": service.student_get_quiz_info,
+            "ags_get_dashboard": service.student_get_dashboard,
+            "ags_get_quiz_setting": service.student_get_quiz_setting,
+            "ags_get_access_product": service.student_get_access_product,
+            "ags_get_quiz_table_info": service.student_get_quiz_table_info,
+            "ags_get_quiz_info": service.student_get_quiz_info,
         }
         handler = action_map.get(action)
         if handler is None:
@@ -134,9 +129,10 @@ async def student_update_api(request: Request):
 
     try:
         data = await request.json()
-        action, request_data = _legacy_action_payload(data)
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
+        request_data = data.get("request_data")
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
@@ -148,9 +144,9 @@ async def student_update_api(request: Request):
             return func_helper.not_auth_return(message=state_message)
 
         action_map = {
-            "update_user": service.student_change_user_info,
-            "update_password": service.student_change_password,
-            "update_quiz_answer": service.student_change_quiz_answer,
+            "ags_change_user_info": service.student_change_user_info,
+            "ags_change_password": service.student_change_password,
+            "ags_change_quiz_answer": service.student_change_quiz_answer,
         }
         handler = action_map.get(action)
         if handler is None:
@@ -174,9 +170,10 @@ async def student_delete_api(request: Request):
 
     try:
         data = await request.json()
-        action, request_data = _legacy_action_payload(data)
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
+        request_data = data.get("request_data")
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
@@ -188,7 +185,7 @@ async def student_delete_api(request: Request):
             return func_helper.not_auth_return(message=state_message)
 
         action_map = {
-            "delete_token": service.remove_token,
+            "ags_remove_token": service.remove_token,
         }
         handler = action_map.get(action)
         if handler is None:
@@ -213,7 +210,7 @@ async def signin_api(request: Request):
     try:
         data = await request.json()
 
-        action = func_helper.normalize_action_type(data.get("action_type"))
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
 
@@ -246,7 +243,7 @@ async def insert_api(request: Request):
     try:
         data = await request.json()
 
-        action = func_helper.normalize_action_type(data.get("action_type"))
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
 
@@ -305,7 +302,7 @@ async def select_api(request: Request):
     try:
         data = await request.json()
 
-        action = func_helper.normalize_action_type(data.get("action_type"))
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
 
@@ -366,7 +363,7 @@ async def update_api(request: Request):
     try:
         data = await request.json()
 
-        action = func_helper.normalize_action_type(data.get("action_type"))
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
 
@@ -414,7 +411,7 @@ async def delete_api(request: Request):
     try:
         data = await request.json()
 
-        action = func_helper.normalize_action_type(data.get("action_type"))
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
 
@@ -459,7 +456,7 @@ async def admin_api(request: Request):
         if not func_helper.authorize_admin(token=token):
             return func_helper.not_auth_return(message="شما به این سرویس دسترسی ندارید.", method_type=method_type)
 
-        action = func_helper.normalize_action_type(data.get("action_type"))
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
 
@@ -497,7 +494,7 @@ async def update_user_file_image(request: Request):
     conn, cursor = None, None
     try:
         data = await request.json()
-        action = func_helper.normalize_action_type(data.get("action_type"))
+        action = data.get("action_type")
         if not action:
             return func_helper.not_method_access_return()
         if action not in ["ag_change_user_info", "ag_change_user_image"]:

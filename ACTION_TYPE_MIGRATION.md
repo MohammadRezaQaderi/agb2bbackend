@@ -1,10 +1,33 @@
-# AG action_type migration
+# Frontend action_type migration for AG/AGS
 
-Request bodies now follow the ERBackend-style wrapper:
+This is the source of truth for migrating AG and AGS frontend calls to the new
+ERBackend-style API contract.
+
+Old action names are no longer accepted by the backend. Every `/ag_api/*` and
+`/ags_api/*` request must send the new `action_type` values listed below and
+must wrap payloads in `request_data`.
+
+## Required request wrapper
+
+Owner/consultant/institute/school requests under `/ag_api/*` use `ag_*`
+action names:
 
 ```json
 {
   "action_type": "ag_get_dashboard",
+  "request_data": {
+    "user_id": 1,
+    "token": "..."
+  }
+}
+```
+
+Student requests under `/ags_api/*` use the same wrapper shape, but with
+student-scoped `ags_*` action names:
+
+```json
+{
+  "action_type": "ags_get_dashboard",
   "request_data": {
     "user_id": 1,
     "token": "..."
@@ -24,7 +47,14 @@ Admin requests keep the admin token at the top level:
 }
 ```
 
-Old action names are still accepted as aliases during migration.
+## Migration rules
+
+1. Replace legacy `method_type` with `action_type`.
+2. Replace legacy top-level request payload fields with `request_data`.
+3. Replace every old action name with the matching required action name in the
+   endpoint tables below.
+4. Keep admin tokens at the top level for `/ag_api/admin_request`.
+5. Do not keep compatibility branches for old action names in frontend code.
 
 ## Internal service method names
 
@@ -94,13 +124,13 @@ Role service files now use the same local vocabulary:
 
 ## /ag_api/signin
 
-| Old action_type | New action_type |
+| Legacy action_type | Required action_type |
 | --- | --- |
 | `signin` | `ag_sign_in` |
 
 ## /ag_api/insert_request
 
-| Old action_type | New action_type |
+| Legacy action_type | Required action_type |
 | --- | --- |
 | `signup` | `ag_sign_up` |
 | `send_otp` | `ag_send_otp` |
@@ -111,7 +141,7 @@ Role service files now use the same local vocabulary:
 
 ## /ag_api/select_request
 
-| Old action_type | New action_type |
+| Legacy action_type | Required action_type |
 | --- | --- |
 | `check_otp` | `ag_check_otp` |
 | `select_comments` | `ag_get_comments` |
@@ -128,7 +158,7 @@ Role service files now use the same local vocabulary:
 
 ## /ag_api/update_request
 
-| Old action_type | New action_type |
+| Legacy action_type | Required action_type |
 | --- | --- |
 | `update_user` | `ag_change_user_info` |
 | `update_password` | `ag_change_password` |
@@ -141,13 +171,13 @@ Role service files now use the same local vocabulary:
 
 ## /ag_api/delete_request
 
-| Old action_type | New action_type |
+| Legacy action_type | Required action_type |
 | --- | --- |
 | `delete_token` | `ag_remove_token` |
 
 ## /ag_api/admin_request
 
-| Old action_type | New action_type |
+| Legacy action_type | Required action_type |
 | --- | --- |
 | `update_capacity` | `ag_change_capacity` |
 | `get_user_info` | `ag_get_user_info` |
@@ -155,7 +185,51 @@ Role service files now use the same local vocabulary:
 
 ## /ag_api/update_user_file_image
 
-| Old action_type | New action_type |
+| Legacy action_type | Required action_type |
 | --- | --- |
 | `update_user` | `ag_change_user_info` |
 | `update_user_file_image` | `ag_change_user_image` |
+
+## /ags_api/signin
+
+| Legacy action_type | Required action_type |
+| --- | --- |
+| `signin` | `ags_sign_in` |
+
+## /ags_api/select_request
+
+| Legacy action_type | Required action_type |
+| --- | --- |
+| `select_dashboard` | `ags_get_dashboard` |
+| `select_quiz_setting` | `ags_get_quiz_setting` |
+| `select_access_product` | `ags_get_access_product` |
+| `select_quiz_table_info` | `ags_get_quiz_table_info` |
+| `select_quiz_info` | `ags_get_quiz_info` |
+
+## /ags_api/update_request
+
+| Legacy action_type | Required action_type |
+| --- | --- |
+| `update_user` | `ags_change_user_info` |
+| `update_password` | `ags_change_password` |
+| `update_quiz_answer` | `ags_change_quiz_answer` |
+
+## /ags_api/delete_request
+
+| Legacy action_type | Required action_type |
+| --- | --- |
+| `delete_token` | `ags_remove_token` |
+
+## Static GET endpoints
+
+These endpoints do not use `action_type`; they are direct `GET` routes and are
+available under both `/ag_api` and `/ags_api`:
+
+| Endpoint |
+| --- |
+| `/ag_api/majors` |
+| `/ags_api/majors` |
+| `/ag_api/majors/{major_id}/categories` |
+| `/ags_api/majors/{major_id}/categories` |
+| `/ag_api/fields/{field_id}` |
+| `/ags_api/fields/{field_id}` |
