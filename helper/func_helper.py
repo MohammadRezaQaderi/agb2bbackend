@@ -501,7 +501,12 @@ async def authorizer(conn: pyodbc.Connection | None, cursor: pyodbc.Cursor | Non
     try:
         if request_data.get("token"):
             if request_data["token"] is not None:
-                query = "SELECT user_id, phone, role FROM tokens WHERE token = ?"
+                query = """
+                    SELECT t.user_id, u.phone, t.role
+                    FROM tokens t
+                    INNER JOIN users u ON u.user_id = t.user_id
+                    WHERE t.token = ?
+                """
                 res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["token"])
                 if res is None:
                     return False, "نشست شما به پایان رسیده  لطفا یکبار خروج کرده و سپس ورود شوید.", None
@@ -806,8 +811,8 @@ def add_capacity_signup(
         phone: str,
 ) -> Optional[int]:
     """Create a capacity record and associated package entries for a new user signup."""
-    field = '([user_id], [phone])'
-    values = (user_id, phone)
+    field = '([user_id])'
+    values = (user_id,)
     response = db_helper.insert_value(
         conn=conn,
         cursor=cursor,
@@ -822,9 +827,9 @@ def add_capacity_signup(
 
     capacity_id = response["id"]
 
-    field_package = '([capacity_id], [user_id], [phone], [package_name], [total_allowed], [allowed])'
+    field_package = '([capacity_id], [user_id], [package_name], [total_allowed], [allowed])'
     for package_name in PACKAGES_DATA.keys():
-        values_package = (capacity_id, user_id, phone, package_name, 1, 1)
+        values_package = (capacity_id, user_id, package_name, 1, 1)
         db_helper.insert_value(
             conn=conn,
             cursor=cursor,

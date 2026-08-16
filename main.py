@@ -604,7 +604,7 @@ async def get_ag_first_pdf(phone: str, kind: str):
             )
         conn, cursor = await db_helper.db_connection()
         # Check the access of the student for this kind - should have permission = 1
-        query = 'SELECT user_id, access FROM stu WHERE phone = ?'
+        query = 'SELECT s.user_id, s.access FROM stu s INNER JOIN users u ON u.user_id = s.user_id WHERE u.phone = ?'
         stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
 
         if not stu:
@@ -735,7 +735,7 @@ async def get_ag_second_pdf(phone: str, kind: str):
             )
         conn, cursor = await db_helper.db_connection()
         # Check the access of the student for this kind - should have permission = 1
-        query = 'SELECT user_id, access FROM stu WHERE phone = ?'
+        query = 'SELECT s.user_id, s.access FROM stu s INNER JOIN users u ON u.user_id = s.user_id WHERE u.phone = ?'
         stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
 
         if not stu:
@@ -866,7 +866,7 @@ async def get_scl_first_pdf(phone: str, kind: str):
             )
         conn, cursor = await db_helper.db_connection()
         # Check the access of the student for this kind - should have permission = 1
-        query = 'SELECT user_id, access FROM stu WHERE phone = ?'
+        query = 'SELECT s.user_id, s.access FROM stu s INNER JOIN users u ON u.user_id = s.user_id WHERE u.phone = ?'
         stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
 
         if not stu:
@@ -997,7 +997,7 @@ async def get_scl_second_pdf(phone: str, kind: str):
             )
         conn, cursor = await db_helper.db_connection()
         # Check the access of the student for this kind - should have permission = 1
-        query = 'SELECT user_id, access FROM stu WHERE phone = ?'
+        query = 'SELECT s.user_id, s.access FROM stu s INNER JOIN users u ON u.user_id = s.user_id WHERE u.phone = ?'
         stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
 
         if not stu:
@@ -1128,7 +1128,7 @@ async def get_scl_third_pdf(phone: str, kind: str):
             )
         conn, cursor = await db_helper.db_connection()
         # Check the access of the student for this kind - should have permission = 1
-        query = 'SELECT user_id, access FROM stu WHERE phone = ?'
+        query = 'SELECT s.user_id, s.access FROM stu s INNER JOIN users u ON u.user_id = s.user_id WHERE u.phone = ?'
         stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
 
         if not stu:

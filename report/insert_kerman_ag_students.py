@@ -229,14 +229,13 @@ def insert_student(cursor, student: Student, args) -> dict[str, Any]:
     cursor.execute(
         """
         INSERT INTO stu (
-            user_id, phone, first_name, last_name, sex, city, ins_id, con_id,
-            adder_id, editor_id, password, comment, birth_date, ins_role,
+            user_id, first_name, last_name, sex, city, ins_id, con_id,
+            adder_id, editor_id, comment, birth_date, ins_role,
             created_time, edited_time, access
         )
-        VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         user_id,
-        phone,
         student.first_name,
         student.last_name,
         args.city,
@@ -244,7 +243,6 @@ def insert_student(cursor, student: Student, args) -> dict[str, Any]:
         args.con_id,
         args.ins_id,
         args.ins_id,
-        encrypted_password,
         None,
         student.birth_year,
         args.ins_role,
