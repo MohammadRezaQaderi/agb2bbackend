@@ -1,4 +1,9 @@
+import base64
+import hashlib
+import hmac
+import os
 import pyodbc
+import secrets
 import string
 import random
 import json
@@ -13,9 +18,114 @@ from cryptography.fernet import Fernet, InvalidToken
 
 import helper.db.db_helper as db_helper
 from config import PASSWORD_SECRET_KEY, DB_DRIVER, DB_SERVER, DB_DATABASE, DB_UID, DB_PWD, DB_TRUST_CERT, REDIS_HOST, \
-    REDIS_PORT, REDIS_DB, REDIS_PASSWORD
+    REDIS_PORT, REDIS_DB, REDIS_PASSWORD, DEVELOP_TOKEN
 
 _PASSWORD_FERNET: Optional[Fernet] = None
+PASSWORD_HASH_PREFIX = "pbkdf2_sha256"
+PASSWORD_HASH_ITERATIONS = 260000
+
+ACTION_TYPE_ALIASES = {
+    "signin": "ag_sign_in",
+    "signup": "ag_sign_up",
+    "send_otp": "ag_send_otp",
+    "check_otp": "ag_check_otp",
+    "insert_comment": "ag_add_comment",
+    "insert_order_payment": "ag_add_payment_order",
+    "insert_consultant": "ag_add_consultant",
+    "insert_student": "ag_add_student",
+    "select_comments": "ag_get_comments",
+    "select_dashboard": "ag_get_dashboard",
+    "select_consultants": "ag_get_consultants",
+    "select_students": "ag_get_students",
+    "select_report": "ag_get_report",
+    "select_management_report": "ag_get_management_report",
+    "select_quiz_setting": "ag_get_quiz_setting",
+    "select_quiz_info": "ag_get_quiz_info",
+    "select_users_transactions": "ag_get_transactions",
+    "select_report_data": "ag_get_report_data",
+    "apply_discount": "ag_apply_discount",
+    "update_user": "ag_change_user_info",
+    "update_password": "ag_change_password",
+    "update_setting": "ag_change_setting",
+    "update_consultant": "ag_change_consultant",
+    "update_student": "ag_change_student",
+    "update_comment": "ag_change_comment",
+    "update_user_quiz_setting": "ag_change_user_quiz_setting",
+    "update_student_access": "ag_change_student_access",
+    "update_user_file_image": "ag_change_user_image",
+    "delete_token": "ag_remove_token",
+    "update_capacity": "ag_change_capacity",
+    "get_user_info": "ag_get_user_info",
+    "check_student_quiz_answer": "ag_check_student_quiz_answer",
+}
+
+
+def get_tracking_code() -> str:
+    return str(uuid.uuid4())
+
+
+def normalize_action_type(action_type: str | None) -> str | None:
+    if action_type is None:
+        return None
+    return ACTION_TYPE_ALIASES.get(action_type, action_type)
+
+
+def save_base64_image(pic_value: str | None, last_pic: str | None, storage_dir: str) -> str | None:
+    if not pic_value:
+        return None
+
+    if not pic_value.startswith("data:image") and "," not in pic_value:
+        return pic_value
+
+    if "," in pic_value:
+        header, encoded_data = pic_value.split(",", 1)
+        ext = header.split(";")[0].split("/")[-1] if "/" in header else "jpg"
+    else:
+        encoded_data = pic_value
+        ext = "jpg"
+
+    if ext == "jpeg":
+        ext = "jpg"
+
+    os.makedirs(storage_dir, exist_ok=True)
+    new_file_name = f"{get_tracking_code()}.{ext}"
+    file_path = os.path.join(storage_dir, new_file_name)
+
+    with open(file_path, "wb") as fh:
+        fh.write(base64.b64decode(encoded_data))
+
+    if last_pic:
+        last_path = os.path.join(storage_dir, os.path.basename(last_pic))
+        if os.path.exists(last_path):
+            os.remove(last_path)
+
+    return new_file_name
+
+
+def authorize_admin(token: str | None) -> bool:
+    return bool(token and token == DEVELOP_TOKEN)
+
+
+async def health_payload(service_name: str):
+    instance_name = os.getenv("INSTANCE_NAME", "unknown")
+    port = os.getenv("PORT", "unknown")
+
+    try:
+        conn, cursor = await db_helper.db_connection()
+        await db_helper.close_db_connection(conn=conn, cursor=cursor)
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+
+    return {
+        "status": "healthy" if db_status == "connected" else "degraded",
+        "timestamp": datetime.now().isoformat(),
+        "service": service_name,
+        "instance": instance_name,
+        "port": port,
+        "database": db_status,
+        "version": "1.0.0"
+    }
 
 AG_QUIZ_NAME_TITLE = [
     "کتل", "گاردنر", "نئو", "کلیفتون", "هالند",
@@ -233,21 +343,50 @@ def _get_password_fernet() -> Fernet:
     return _PASSWORD_FERNET
 
 
+def hash_password(plain_password: str) -> str:
+    if plain_password is None:
+        return ""
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        str(plain_password).encode("utf-8"),
+        salt.encode("utf-8"),
+        PASSWORD_HASH_ITERATIONS,
+    ).hex()
+    return f"{PASSWORD_HASH_PREFIX}${PASSWORD_HASH_ITERATIONS}${salt}${digest}"
+
+
+def is_password_hash(stored_password: str | None) -> bool:
+    return bool(stored_password and str(stored_password).startswith(f"{PASSWORD_HASH_PREFIX}$"))
+
+
+def verify_password_hash(plain_password: str, stored_password: str) -> bool:
+    try:
+        prefix, iterations, salt, expected_digest = str(stored_password).split("$", 3)
+        if prefix != PASSWORD_HASH_PREFIX:
+            return False
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            str(plain_password).encode("utf-8"),
+            salt.encode("utf-8"),
+            int(iterations),
+        ).hex()
+        return hmac.compare_digest(digest, expected_digest)
+    except Exception:
+        return False
+
+
 def encrypt_password(plain_password: str) -> str:
     """
-    Encrypt a plain-text password for storage.
+    Hash a plain-text password for storage.
 
     Args:
         plain_password: The user-facing password in plain text.
 
     Returns:
-        Encrypted string suitable for storing in the database.
+        Password hash suitable for storing in the database.
     """
-    if plain_password is None:
-        return ""
-    fernet = _get_password_fernet()
-    token = fernet.encrypt(str(plain_password).encode("utf-8"))
-    return token.decode("utf-8")
+    return hash_password(plain_password)
 
 
 def decrypt_password(stored_password: str) -> Optional[str]:
@@ -258,6 +397,8 @@ def decrypt_password(stored_password: str) -> Optional[str]:
     returns the original value as a fallback, or None on fatal error.
     """
     if not stored_password:
+        return None
+    if is_password_hash(stored_password):
         return None
     fernet = _get_password_fernet()
     try:
@@ -272,12 +413,86 @@ def decrypt_password(stored_password: str) -> Optional[str]:
 
 def verify_password(plain_password: str, stored_password: str) -> bool:
     """
-    Verify that a plain-text password matches the stored (encrypted) password.
+    Verify that a plain-text password matches the stored password.
     """
+    if is_password_hash(stored_password):
+        return verify_password_hash(plain_password, stored_password)
+
     decrypted = decrypt_password(stored_password)
     if decrypted is None:
         return False
     return str(plain_password) == str(decrypted)
+
+
+def upsert_student_package_access(
+        conn: pyodbc.Connection,
+        cursor: pyodbc.Cursor,
+        stu_user_id: int,
+        owner_user_id: int | None,
+        consultant_user_id: int | None,
+        package_name: str,
+        permission: int,
+        limit: int,
+) -> None:
+    try:
+        query = """
+            SELECT id
+            FROM student_package_access
+            WHERE stu_user_id = ? AND package_name = ?
+        """
+        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu_user_id, package_name))
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if res:
+            db_helper.update_record(
+                conn,
+                cursor,
+                "student_package_access",
+                ["owner_user_id", "consultant_user_id", "permission", "[limit]", "edited_time"],
+                [owner_user_id, consultant_user_id, permission, limit, now_str],
+                "id = ?",
+                [res.id],
+            )
+            return
+
+        db_helper.insert_value(
+            conn=conn,
+            cursor=cursor,
+            table_name="student_package_access",
+            fields="([stu_user_id], [owner_user_id], [consultant_user_id], [package_name], [permission], [limit])",
+            values=(stu_user_id, owner_user_id, consultant_user_id, package_name, permission, limit),
+        )
+    except Exception as e:
+        # The new table is additive. Keep the old JSON path working if a deployment
+        # temporarily runs before the schema migration.
+        print(f"[student_package_access] sync skipped: {e}")
+
+
+def get_student_package_access_counts(
+        conn: pyodbc.Connection,
+        cursor: pyodbc.Cursor,
+        user_id: int,
+        relation_column: str,
+) -> dict[str, int] | None:
+    if relation_column not in {"owner_user_id", "consultant_user_id"}:
+        return None
+
+    try:
+        query = f"""
+            SELECT package_name, COUNT(*) AS total
+            FROM student_package_access
+            WHERE {relation_column} = ? AND permission = 1
+            GROUP BY package_name
+        """
+        rows = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query, field=user_id)
+        counts = {"AG": 0, "SCL": 0}
+        for row in rows:
+            package_name = str(row.get("package_name", "")).upper()
+            if package_name in counts:
+                counts[package_name] = row.get("total", 0)
+        return counts
+    except Exception as e:
+        print(f"[student_package_access] count fallback: {e}")
+        return None
 
 
 async def db_connection() -> tuple[pyodbc.Connection, pyodbc.Cursor]:
@@ -441,13 +656,13 @@ def service_exception_error_logging(
         func_name: str,
         error_message: str,
         data: Mapping[str, Any],
-        info: Mapping[str, Any],
+        user_info: Mapping[str, Any],
 ) -> None:
     """Log service-level exceptions using an existing connection."""
     try:
         field_log = '([user_id], [phone], [end_point], [func_name], [data], [error_p])'
         values_log = (
-            info.get("user_id"), info.get("phone"), end_point, func_name,
+            user_info.get("user_id"), user_info.get("phone"), end_point, func_name,
             json.dumps(data, ensure_ascii=False), str(error_message))
         db_helper.insert_value(conn=conn, cursor=cursor, table_name='api_logs', fields=field_log,
                                values=values_log)
@@ -528,7 +743,7 @@ def insert_user(
         conn: pyodbc.Connection,
         cursor: pyodbc.Cursor,
         request_data: Mapping[str, Any],
-        info: Mapping[str, Any],
+        user_info: Mapping[str, Any],
 ) -> Tuple[Optional[int], Optional[str], str]:
     """Insert a new consultant user into the database with a randomly generated password."""
     try:
@@ -548,7 +763,7 @@ def insert_user(
         conn.rollback()
         field_log = '([user_id], [phone], [end_point], [func_name], [data], [error_p])'
         values_log = (
-            info.get("user_id"), info.get("phone"), "ag_api/func_helper", "insert_user",
+            user_info.get("user_id"), user_info.get("phone"), "ag_api/func_helper", "insert_user",
             json.dumps(request_data), str(e))
         db_helper.insert_value(conn=conn, cursor=cursor, table_name='api_logs', fields=field_log,
                                values=values_log)
@@ -558,7 +773,7 @@ def insert_user(
 def insert_user_student(
         conn: pyodbc.Connection,
         cursor: pyodbc.Cursor,
-        info: Mapping[str, Any],
+        user_info: Mapping[str, Any],
 ) -> Tuple[Optional[int], Optional[str], Optional[str], str]:
     """Insert a new student user with a randomly generated phone number and password."""
     try:
@@ -574,7 +789,7 @@ def insert_user_student(
         conn.rollback()
         field_log = '([user_id], [phone], [end_point], [func_name], [data], [error_p])'
         values_log = (
-            info.get("user_id"), info.get("phone"), "ag_api/func_helper", "insert_user",
+            user_info.get("user_id"), user_info.get("phone"), "ag_api/func_helper", "insert_user",
             None, str(e))
         db_helper.insert_value(conn=conn, cursor=cursor, table_name='api_logs', fields=field_log,
                                values=values_log)
@@ -648,9 +863,9 @@ def add_capacity_signup(
 
     capacity_id = response["id"]
 
-    field_package = '([capacity_id], [user_id], [phone], [package_name], [allowed])'
+    field_package = '([capacity_id], [user_id], [phone], [package_name], [total_allowed], [allowed])'
     for package_name in PACKAGES_DATA.keys():
-        values_package = (capacity_id, user_id, phone, package_name, 1)
+        values_package = (capacity_id, user_id, phone, package_name, 1, 1)
         db_helper.insert_value(
             conn=conn,
             cursor=cursor,
@@ -666,33 +881,32 @@ def update_user_and_role_password(
         conn: pyodbc.Connection,
         cursor: pyodbc.Cursor,
         request_data: Mapping[str, Any],
-        info: Mapping[str, Any],
+        user_info: Mapping[str, Any],
         role_table: str,
 ) -> Optional[str]:
     """
-    Update password in both `users` table and a role-specific table.
+    Update password in the canonical `users` table.
 
     This helper encapsulates the common pattern used by:
     - update_ins_password
     - update_sch_password
-    - update_wcon_password
+    - update_ocon_password
     - update_con_password
 
     Args:
         conn: Active database connection.
         cursor: Active database cursor.
         request_data: Request payload containing at least the new 'password'.
-        info: Context information containing 'user_id'.
-        role_table: Name of the role-specific table ('ins', 'sch', 'wCon', 'con').
+        user_info: Context information containing 'user_id'.
+        role_table: Kept for backward-compatible caller signatures.
 
     Returns:
         New tracking token (str) on success, or None on failure.
     """
     try:
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        user_id = str(info["user_id"])
+        user_id = str(user_info["user_id"])
         encrypted_password = encrypt_password(request_data["password"])
-        # Update main users table
         db_helper.update_record(
             conn, cursor, 'users',
             ['password', 'edited_time'],
@@ -700,21 +914,13 @@ def update_user_and_role_password(
             'user_id = ?', [user_id]
         )
 
-        # Update role-specific table
-        db_helper.update_record(
-            conn, cursor, role_table,
-            ['password', 'edited_time'],
-            [encrypted_password, now_str],
-            'user_id = ?', [user_id]
-        )
-
-        token = str(uuid.uuid4())
+        token = get_tracking_code()
         return token
     except Exception as e:
         conn.rollback()
         service_exception_error_logging(
             conn, cursor, "ag_api/password", f"update_{role_table}_password",
-            str(e), request_data, info
+            str(e), request_data, user_info
         )
         return None
 
@@ -741,11 +947,11 @@ def update_student_access_and_capacity(
         conn: pyodbc.Connection,
         cursor: pyodbc.Cursor,
         request_data: Mapping[str, Any],
-        info: Mapping[str, Any],
+        user_info: Mapping[str, Any],
         role_type: str,
         id_field: str,
         end_point: str,
-) -> Tuple[Optional[str], str]:
+) -> Tuple[Optional[str], Optional[dict], str]:
     """
     Update student access permissions and manage capacity tracking.
 
@@ -759,13 +965,13 @@ def update_student_access_and_capacity(
             - kind: Package name (key from PACKAGES_DATA, e.g., "AG", "SCL")
             - permission: Permission flag (1 or 0) indicating grant/revoke access
             - limit: Limit flag (1 or 0) for the package
-        info: Context info containing user_id
-        role_type: Role type ("ins", "sch", or "wCon") for error logging
+        user_info: Context user_info containing user_id
+        role_type: Role type ("ins", "sch", or "ocon") for error logging
         id_field: Field name to check ownership ("ins_id" for all three)
         end_point: API endpoint for error logging
 
     Returns:
-        Tuple of (token, message) on success, (None, error_message) on failure
+        Tuple of (tracking_token, response_data, response_message) on success/failure.
 
     Note:
         Access is stored in format: {"AG": {"permission": 1, "limit": 1}}
@@ -773,21 +979,21 @@ def update_student_access_and_capacity(
         If kind doesn't exist, it's added with both permission and limit.
     """
     try:
-        user_id = info["user_id"]
+        user_id = user_info["user_id"]
         stu_id = request_data.get("stu_id")
 
         if not stu_id:
-            return None, "شناسه دانش‌آموز ارسال نشده است."
+            return None, None, "شناسه دانش‌آموز ارسال نشده است."
 
-        query_check = f'SELECT {id_field}, access FROM stu WHERE user_id = ?'
+        query_check = 'SELECT ins_id, con_id, access FROM stu WHERE user_id = ?'
         res_stu = db_helper.search_table(conn=conn, cursor=cursor, query=query_check, field=stu_id)
 
         if res_stu is None:
-            return None, "دانش‌آموز یافت نشد."
+            return None, None, "دانش‌آموز یافت نشد."
 
         org_id = getattr(res_stu, id_field, None)
         if org_id != user_id:
-            return None, "این دانش‌آموز به شما تعلق ندارد."
+            return None, None, "این دانش‌آموز به شما تعلق ندارد."
 
         current_access_str = res_stu.access or '{}'
         try:
@@ -797,11 +1003,11 @@ def update_student_access_and_capacity(
 
         kind = request_data.get("kind")
         if not kind:
-            return None, "نوع بسته (kind) ارسال نشده است."
+            return None, None, "نوع بسته (kind) ارسال نشده است."
 
         if kind not in PACKAGES_DATA:
             valid_packages = "، ".join(f"{package} ({get_kind_name(package)})" for package in PACKAGES_DATA.keys())
-            return None, f"نوع بسته {kind} معتبر نیست. بسته‌های معتبر: {valid_packages}"
+            return None, None, f"نوع بسته {kind} معتبر نیست. بسته‌های معتبر: {valid_packages}"
 
         permission = request_data.get("permission", 0)
         limit = request_data.get("limit", 0)
@@ -857,7 +1063,7 @@ def update_student_access_and_capacity(
             )
 
             if not res_capacity:
-                return None, f"بسته {get_kind_name(kind=kind)} برای شما تعریف نشده است."
+                return None, None, f"بسته {get_kind_name(kind=kind)} برای شما تعریف نشده است."
 
             capacity_info = res_capacity[0]
             allowed = capacity_info.get("allowed", 0)
@@ -865,7 +1071,7 @@ def update_student_access_and_capacity(
 
             if is_granting:
                 if allowed <= 0:
-                    return None, f"ظرفیت بسته {get_kind_name(kind=kind)} تکمیل شده است."
+                    return None, None, f"ظرفیت بسته {get_kind_name(kind=kind)} تکمیل شده است."
 
                 db_helper.update_record(
                     conn, cursor, 'capacity_package',
@@ -893,18 +1099,28 @@ def update_student_access_and_capacity(
             'user_id = ?',
             [str(stu_id)]
         )
+        upsert_student_package_access(
+            conn=conn,
+            cursor=cursor,
+            stu_user_id=int(stu_id),
+            owner_user_id=getattr(res_stu, "ins_id", None),
+            consultant_user_id=getattr(res_stu, "con_id", None),
+            package_name=kind,
+            permission=permission,
+            limit=limit,
+        )
 
-        token = str(uuid.uuid4())
-        return token, "دسترسی دانش‌آموز با موفقیت به‌روزرسانی شد."
+        token = get_tracking_code()
+        return token, None, "دسترسی دانش‌آموز با موفقیت به‌روزرسانی شد."
 
     except Exception as e:
         conn.rollback()
         service_exception_error_logging(
             conn, cursor, end_point,
             f"update_student_access_and_capacity_{role_type}",
-            str(e), request_data, info
+            str(e), request_data, user_info
         )
-        return None, "مشکلی در به‌روزرسانی دسترسی دانش‌آموز رخ داده است."
+        return None, None, "مشکلی در به‌روزرسانی دسترسی دانش‌آموز رخ داده است."
 
 
 def get_quiz_name(kind, quiz_id) -> str | None:

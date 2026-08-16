@@ -36,7 +36,7 @@
 						"admin_request"
 					]
 				},
-				"description": "Update capacity for a user (ins, sch, wCon). Kind should be AG or SCL. Count must be a positive integer."
+				"description": "Update capacity for a user (ins, sch, ocon). Kind should be AG or SCL. Count must be a positive integer."
 			},
 			"response": []
 		},
@@ -70,7 +70,7 @@
 						"admin_request"
 					]
 				},
-				"description": "Get user information by phone number. Returns info from users, ins, sch, wCon, con, stu tables. For ins, sch, wCon also returns capacity."
+				"description": "Get user information by phone number. Returns info from users, ins, sch, ocon, con, stu tables. For ins, sch, ocon also returns capacity."
 			},
 			"response": []
 		},

@@ -718,7 +718,7 @@ def parse_args():
     parser.add_argument("--ins-id", type=int, default=DEFAULT_INS_ID)
     parser.add_argument("--con-id", type=int, default=DEFAULT_CON_ID)
     parser.add_argument("--city", default=DEFAULT_CITY)
-    parser.add_argument("--ins-role", default=DEFAULT_INS_ROLE, choices=["ins", "sch", "wCon"])
+    parser.add_argument("--ins-role", default=DEFAULT_INS_ROLE, choices=["ins", "sch", "ocon"])
     parser.add_argument("--output-dir", type=Path, default=Path("report/outputs"))
     parser.add_argument("--limit", type=int, default=None, help="Process only the first N valid rows.")
     parser.add_argument("--parse-only", action="store_true", help="Parse Excel and write report without DB access.")

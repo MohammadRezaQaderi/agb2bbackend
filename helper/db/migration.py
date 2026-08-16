@@ -4,6 +4,16 @@ import os
 from cryptography.fernet import Fernet, InvalidToken
 from typing import Optional, Sequence
 
+try:
+    from config import DB_DRIVER, DB_SERVER, DB_DATABASE, DB_UID, DB_PWD, DB_TRUST_CERT
+except ImportError:
+    DB_DRIVER = "ODBC Driver 17 for SQL Server"
+    DB_SERVER = "localhost,1433"
+    DB_DATABASE = "AGB2B_COPY"
+    DB_UID = "mgh27"
+    DB_PWD = "m2711gH9985"
+    DB_TRUST_CERT = "yes"
+
 TABLE_DEFINITIONS = {
     "users": """
         CREATE TABLE users (
@@ -41,13 +51,14 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
-    "wCon": """
-        CREATE TABLE wCon (
-            wCon_id INT IDENTITY(1, 1),
+    "ocon": """
+        CREATE TABLE ocon (
+            ocon_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
             phone NVARCHAR(12),
             first_name NVARCHAR(50),
             last_name NVARCHAR(50),
+            logo VARCHAR(MAX),
             password NVARCHAR(255),
             sex INT DEFAULT 1,
             verify INT DEFAULT 0,
@@ -141,16 +152,29 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
-    "quiz_answer": """
-        CREATE TABLE quiz_answer (
-            quiz_answer_id INT IDENTITY(1, 1) PRIMARY KEY,
-            user_id INT,
-            quiz_id INT,
-            quiz_kind VARCHAR(25), 
-            answers NVARCHAR(MAX),
-            state INT,
-            ins_id INT,
-            con_id INT,
+    "quiz_attempt": """
+        CREATE TABLE quiz_attempt (
+            id INT IDENTITY(1, 1) PRIMARY KEY,
+            user_id INT NOT NULL,
+            quiz_kind VARCHAR(25) NOT NULL,
+            quiz_id INT NOT NULL,
+            state INT NOT NULL DEFAULT 1,
+            remain_time INT NULL,
+            ins_id INT NULL,
+            con_id INT NULL,
+            created_time DATETIME DEFAULT GETDATE(),
+            edited_time DATETIME DEFAULT GETDATE()
+        )
+    """,
+    "quiz_question_answer": """
+        CREATE TABLE quiz_question_answer (
+            id INT IDENTITY(1, 1) PRIMARY KEY,
+            attempt_id INT NOT NULL,
+            user_id INT NOT NULL,
+            quiz_kind VARCHAR(25) NOT NULL,
+            quiz_id INT NOT NULL,
+            question_id INT NOT NULL,
+            answer_value NVARCHAR(MAX) NOT NULL,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
         )
@@ -262,8 +286,8 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
-    "discount": """
-        CREATE TABLE discount (
+    "discounts": """
+        CREATE TABLE discounts (
             id INT IDENTITY(1, 1) PRIMARY KEY,
             code VARCHAR(10),
             status NVARCHAR(100),
@@ -314,8 +338,8 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE(),
         )
     """,
-    "redis_log": """
-        CREATE TABLE redis_log (
+    "redis_logs": """
+        CREATE TABLE redis_logs (
             id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
             kind NVARCHAR(20),
@@ -326,11 +350,11 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
-    "error_log": """
-        CREATE TABLE error_log (
+    "quiz_missing_answers": """
+        CREATE TABLE quiz_missing_answers (
             id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
-            q_id INT,
+            question_id INT,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
         )
@@ -351,9 +375,9 @@ TABLE_DEFINITIONS = {
 }
 
 DEFAULT_TABLES: Sequence[str] = (
-    'users', 'ins', 'sch', 'wCon', 'con', 'stu', 'setting', 'capacity', 'capacity_package', 'capacity_logs',
-    'quiz_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications', 'payment',
-    'payment_log', 'discount', 'using_discount', 'tokens', 'redis_log', 'error_log', 'api_logs'
+    'users', 'ins', 'sch', 'ocon', 'con', 'stu', 'setting', 'capacity', 'capacity_package', 'capacity_logs',
+    'quiz_attempt', 'quiz_question_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications', 'payment',
+    'payment_log', 'discounts', 'using_discount', 'tokens', 'redis_logs', 'quiz_missing_answers', 'api_logs'
 )
 
 PASSWORD_SECRET_KEY = os.getenv(
@@ -433,12 +457,12 @@ def decrypt_password(stored_password: str) -> Optional[str]:
 
 # Database configuration
 DB_CONFIG = {
-    "driver": "{ODBC Driver 17 for SQL Server}",
-    "host": "localhost,1433",
-    "database": "AGB2B",
-    "UID": "mgh27",
-    "PWD": "m2711gH9985",
-    "TrustServerCertificate": "yes",
+    "driver": f"{{{DB_DRIVER.strip('{}')}}}",
+    "host": DB_SERVER,
+    "database": DB_DATABASE,
+    "UID": DB_UID,
+    "PWD": DB_PWD,
+    "TrustServerCertificate": DB_TRUST_CERT,
 }
 
 
@@ -484,7 +508,7 @@ def migrate():
     cursor.execute("SELECT * FROM users_old")
     for row in cursor.fetchall():
         formatted_phone = row.phone
-        if row.role in ["ins", "sch", "wCon", "con"]:
+        if row.role in ["ins", "sch", "ocon", "con"]:
             formatted_phone = format_phone(row.phone)
         raw_pwd = decrypt_password(row.password) or row.password
         new_pwd = encrypt_password(raw_pwd)
@@ -495,10 +519,10 @@ def migrate():
     cursor.execute("SET IDENTITY_INSERT users OFF")
     conn.commit()
 
-    # 4. Migrate Role Tables (ins, sch, wCon)
+    # 4. Migrate Role Tables (ins, sch, ocon)
     # Since these tables in db_creator use user_id as a PRIMARY KEY (not identity),
     # we just insert the value directly.
-    for role_table in ['ins', 'sch', 'wCon']:
+    for role_table in ['ins', 'sch', 'ocon']:
         print(f"Migrating {role_table} table...")
         cursor.execute(f"SELECT * FROM {role_table}_old")
         columns = [column[0] for column in cursor.description]
@@ -521,9 +545,9 @@ def migrate():
             if role_table in ['ins', 'sch']:
                 fields.extend(['name', 'logo'])
                 values.extend([data['name'], data['logo']])
-            else:  # wCon
-                fields.extend(['first_name', 'last_name'])
-                values.extend([data['first_name'], data['last_name']])
+            else:  # ocon
+                fields.extend(['first_name', 'last_name', 'logo'])
+                values.extend([data['first_name'], data['last_name'], data.get('logo')])
 
             placeholders = ", ".join(["?"] * len(values))
             try:
@@ -615,31 +639,49 @@ def migrate():
     cursor.execute("SET IDENTITY_INSERT capacity OFF")
     conn.commit()
 
-    print("Migrating quiz_answer...")
+    print("Migrating quiz_attempt and quiz_question_answer...")
     cursor.execute("SELECT * FROM quiz_answer_old")
     for row in cursor.fetchall():
+        quiz_kind = getattr(row, "quiz_kind", None) or "AG"
         cursor.execute("""
-                INSERT INTO quiz_answer (user_id, quiz_id, quiz_kind, answers, state, ins_id, con_id, created_time, edited_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (row.user_id, row.quiz_id, "AG", row.answers, row.state, row.ins_id, row.con_id,
+                INSERT INTO quiz_attempt (user_id, quiz_id, quiz_kind, state, ins_id, con_id, created_time, edited_time)
+                OUTPUT INSERTED.id
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (row.user_id, row.quiz_id, quiz_kind, row.state, row.ins_id, row.con_id,
                   row.DC_Created_Time, row.DC_Edited_Time))
+        attempt_id = cursor.fetchone()[0]
+        try:
+            answers = json.loads(row.answers) if row.answers else {}
+        except (TypeError, json.JSONDecodeError):
+            answers = {}
+        for question_id, answer_value in answers.items():
+            try:
+                question_id = int(question_id)
+            except (TypeError, ValueError):
+                continue
+            cursor.execute("""
+                    INSERT INTO quiz_question_answer
+                        (attempt_id, user_id, quiz_kind, quiz_id, question_id, answer_value, created_time, edited_time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (attempt_id, row.user_id, quiz_kind, row.quiz_id, question_id,
+                      json.dumps(answer_value, ensure_ascii=False), row.DC_Created_Time, row.DC_Edited_Time))
     conn.commit()
 
-    # 9. Migrate remaining tables (scores, result_state, redis_log, error_log, setting)
+    # 9. Migrate remaining tables (scores, result_state, redis_logs, quiz_missing_answers, setting)
     # Note: result_state uses user_id as PK, so no identity insert needed.
-    # setting, scores, redis_log, error_log use Identity for their own IDs.
+    # setting, scores, redis_logs, quiz_missing_answers use Identity for their own IDs.
 
     identity_tables = {
-        "setting": "setting_id",
-        "scores": "scores_id",
-        "redis_log": "id",
-        "error_log": "id"
+        "setting": ("setting_id", "setting_old"),
+        "scores": ("scores_id", "scores_old"),
+        "redis_logs": ("id", "redis_log_old"),
+        "quiz_missing_answers": ("id", "error_log_old"),
     }
 
-    for table, id_col in identity_tables.items():
+    for table, (id_col, source_table) in identity_tables.items():
         print(f"Migrating {table} with Identity...")
         cursor.execute(f"SET IDENTITY_INSERT {table} ON")
-        cursor.execute(f"SELECT * FROM {table}_old")
+        cursor.execute(f"SELECT * FROM {source_table}")
         cols = [c[0] for c in cursor.description]
         for row in cursor.fetchall():
             data = dict(zip(cols, row))
@@ -657,16 +699,16 @@ def migrate():
                     f"INSERT INTO {table} ({id_col}, user_id, phone, quiz_score, brain_fields, brain_categories, brain_branches, created_time, edited_time) VALUES (?,?,?,?,?,?,?,?,?)",
                     (data[id_col], data['user_id'], data['phone'], data['quiz_score'], data['brain_fields'],
                      data['brain_categories'], data['brain_branches'], c_time, e_time))
-            elif table == "redis_log":
+            elif table == "redis_logs":
                 cursor.execute(
                     f"INSERT INTO {table} ({id_col}, user_id, kind, result, status, phone, created_time, edited_time) VALUES (?,?,?,?,?,?,?,?)",
                     (
                         data[id_col], data['user_id'], "AG", data['result'], data['status'], data['phone'], c_time,
                         e_time))
-            elif table == "error_log":
+            elif table == "quiz_missing_answers":
                 cursor.execute(
-                    f"INSERT INTO {table} ({id_col}, user_id, q_id, created_time, edited_time) VALUES (?,?,?,?,?)",
-                    (data[id_col], data['user_id'], data['q_id'], c_time, e_time))
+                    f"INSERT INTO {table} ({id_col}, user_id, question_id, created_time, edited_time) VALUES (?,?,?,?,?)",
+                    (data[id_col], data['user_id'], data.get('question_id') or data.get('q_id'), c_time, e_time))
         cursor.execute(f"SET IDENTITY_INSERT {table} OFF")
 
     print("Migrating result_state...")

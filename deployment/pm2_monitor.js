@@ -1,12 +1,11 @@
 /**
  * PM2 Health Check Monitor
- * 
- * This script monitors all PM2 instances and restarts them if they become unhealthy.
- * Run this as a PM2 process itself or as a scheduled task.
- * 
+ *
+ * This script monitors all configured PM2 instances and restarts unhealthy ones.
+ *
  * Usage:
  *   node pm2_monitor.js
- *   pm2 start pm2_monitor.js --name health-monitor
+ *   pm2 start pm2_monitor.js --name ag-health-monitor
  */
 
 const pm2 = require('pm2');
@@ -14,7 +13,6 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-// Load instance configuration
 const instancesConfig = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'instances.json'), 'utf8')
 );
@@ -22,14 +20,34 @@ const instancesConfig = JSON.parse(
 const checkInterval = instancesConfig.health_check_interval || 30000;
 const timeout = instancesConfig.health_check_timeout || 5000;
 
-function checkHealth(port) {
+function getServiceInstances(config) {
+  if (!config.services) {
+    return (config.instances || []).map(instance => ({
+      ...instance,
+      serviceName: 'ag_api',
+      health_check_path: config.health_check_path || '/ag_api/health',
+    }));
+  }
+
+  return Object.entries(config.services).flatMap(([serviceName, service]) => {
+    return (service.instances || []).map(instance => ({
+      ...instance,
+      serviceName,
+      health_check_path: service.health_check_path || `/${serviceName}/health`,
+    }));
+  });
+}
+
+const monitoredInstances = getServiceInstances(instancesConfig);
+
+function checkHealth(port, healthPath) {
   return new Promise((resolve) => {
     const options = {
       hostname: 'localhost',
       port: port,
-      path: '/ag_api/health',
+      path: healthPath,
       method: 'GET',
-      timeout: timeout
+      timeout: timeout,
     };
 
     const req = http.request(options, (res) => {
@@ -67,7 +85,7 @@ function restartInstance(name) {
         console.error(`Failed to restart ${name}:`, err);
         reject(err);
       } else {
-        console.log(`✓ Restarted ${name}`);
+        console.log(`Restarted ${name}`);
         resolve();
       }
     });
@@ -77,13 +95,14 @@ function restartInstance(name) {
 async function monitorInstances() {
   console.log(`[${new Date().toISOString()}] Checking instance health...`);
 
-  for (const instance of instancesConfig.instances) {
-    const isHealthy = await checkHealth(instance.port);
+  for (const instance of monitoredInstances) {
+    const isHealthy = await checkHealth(instance.port, instance.health_check_path);
+    const target = `${instance.port}${instance.health_check_path}`;
 
     if (isHealthy) {
-      console.log(`[${instance.name}] Port ${instance.port}: ✓ Healthy`);
+      console.log(`[${instance.name}] ${target}: Healthy`);
     } else {
-      console.log(`[${instance.name}] Port ${instance.port}: ✗ Unhealthy - Restarting...`);
+      console.log(`[${instance.name}] ${target}: Unhealthy - Restarting...`);
       try {
         await restartInstance(instance.name);
       } catch (error) {
@@ -93,7 +112,6 @@ async function monitorInstances() {
   }
 }
 
-// Connect to PM2
 pm2.connect((err) => {
   if (err) {
     console.error('Failed to connect to PM2:', err);
@@ -102,19 +120,14 @@ pm2.connect((err) => {
 
   console.log('PM2 Health Monitor started');
   console.log(`Check interval: ${checkInterval}ms`);
-  console.log(`Monitoring ${instancesConfig.instances.length} instances\n`);
+  console.log(`Monitoring ${monitoredInstances.length} instances\n`);
 
-  // Initial check
   monitorInstances();
-
-  // Set up interval
   setInterval(monitorInstances, checkInterval);
 });
 
-// Handle graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down monitor...');
   pm2.disconnect();
   process.exit(0);
 });
-

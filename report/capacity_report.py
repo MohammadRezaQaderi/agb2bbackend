@@ -78,7 +78,7 @@ def generate_capacity_report(conn, from_date=None, to_date=None, to_date_is_excl
         CASE 
             WHEN u.role = 'ins' THEN N'موسسه'
             WHEN u.role = 'sch' THEN N'مدرسه'
-            WHEN u.role = 'wCon' THEN N'مشاور'
+            WHEN u.role = 'ocon' THEN N'مشاور'
             ELSE u.role 
         END AS [نقش],
         u.created_time AS [تاریخ ایجاد],
@@ -86,7 +86,7 @@ def generate_capacity_report(conn, from_date=None, to_date=None, to_date_is_excl
         CASE 
             WHEN u.role = 'ins' THEN i.name
             WHEN u.role = 'sch' THEN s.name
-            WHEN u.role = 'wCon' THEN CONCAT(w.first_name, N' ', w.last_name)
+            WHEN u.role = 'ocon' THEN CONCAT(w.first_name, N' ', w.last_name)
             ELSE N''
         END AS [نام],
 
@@ -102,11 +102,11 @@ def generate_capacity_report(conn, from_date=None, to_date=None, to_date_is_excl
     FROM users u
     LEFT JOIN ins i ON u.user_id = i.user_id AND u.role = 'ins'
     LEFT JOIN sch s ON u.user_id = s.user_id AND u.role = 'sch'
-    LEFT JOIN wCon w ON u.user_id = w.user_id AND u.role = 'wCon'
+    LEFT JOIN ocon w ON u.user_id = w.user_id AND u.role = 'ocon'
     LEFT JOIN capacity c ON u.user_id = c.user_id
     LEFT JOIN capacity_package cp ON c.capacity_id = cp.capacity_id
 
-    WHERE u.role IN ('ins', 'sch', 'wCon')
+    WHERE u.role IN ('ins', 'sch', 'ocon')
     {date_filter}
     GROUP BY 
         u.user_id, 
@@ -132,14 +132,14 @@ def generate_capacity_logs_report(conn, from_date=None, to_date=None, to_date_is
         CASE
             WHEN u.role = 'ins' THEN N'موسسه'
             WHEN u.role = 'sch' THEN N'مدرسه'
-            WHEN u.role = 'wCon' THEN N'مشاور'
+            WHEN u.role = 'ocon' THEN N'مشاور'
             ELSE u.role
         END AS [نقش],
         cl.created_time AS [تاریخ تغییر ظرفیت],
         CASE
             WHEN u.role = 'ins' THEN i.name
             WHEN u.role = 'sch' THEN s.name
-            WHEN u.role = 'wCon' THEN CONCAT(w.first_name, N' ', w.last_name)
+            WHEN u.role = 'ocon' THEN CONCAT(w.first_name, N' ', w.last_name)
             ELSE N''
         END AS [نام],
         CASE
@@ -154,8 +154,8 @@ def generate_capacity_logs_report(conn, from_date=None, to_date=None, to_date_is
     INNER JOIN users u ON cl.user_id = u.user_id
     LEFT JOIN ins i ON u.user_id = i.user_id AND u.role = 'ins'
     LEFT JOIN sch s ON u.user_id = s.user_id AND u.role = 'sch'
-    LEFT JOIN wCon w ON u.user_id = w.user_id AND u.role = 'wCon'
-    WHERE u.role IN ('ins', 'sch', 'wCon')
+    LEFT JOIN ocon w ON u.user_id = w.user_id AND u.role = 'ocon'
+    WHERE u.role IN ('ins', 'sch', 'ocon')
     {date_filter}
     ORDER BY cl.created_time, [نقش], [نام];
     """.format(date_filter=date_filter)

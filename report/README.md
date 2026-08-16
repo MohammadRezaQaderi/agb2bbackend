@@ -33,12 +33,12 @@ All scripts use configuration from `config.py` and environment variables:
 - `REPORT_DEFAULT_CON_ID`: Default consultant ID (default: `11359`)
 
 Database configuration uses environment variables:
-- `KS_DB_DRIVER`: Database driver (default: `{ODBC Driver 17 for SQL Server}`)
-- `KS_DB_HOST`: Database host (default: `localhost,1433`)
-- `KS_DB_NAME`: Database name (default: `AGB2B`)
-- `KS_DB_USER`: Database username
-- `KS_DB_PASSWORD`: Database password
-- `KS_DB_TRUST_CERT`: Trust server certificate (default: `yes`)
+- `AG_DB_DRIVER`: Database driver (default: `ODBC Driver 17 for SQL Server`)
+- `AG_DB_SERVER`: Database host (default: `localhost,1433`)
+- `AG_DB_DATABASE`: Database name (default: `AGB2B_COPY`)
+- `AG_DB_UID`: Database username
+- `AG_DB_PWD`: Database password
+- `AG_DB_TRUST_CERT`: Trust server certificate (default: `yes`)
 
 ## Scripts
 

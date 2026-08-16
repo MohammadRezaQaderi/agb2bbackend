@@ -1,3 +1,61 @@
+from __future__ import annotations
+
+import pyodbc
+from walrus import Database
+
+from config import DB_DRIVER, DB_SERVER, DB_DATABASE, DB_UID, DB_PWD, DB_TRUST_CERT, REDIS_HOST, REDIS_PORT, REDIS_DB, \
+    REDIS_PASSWORD
+
+
+def _db_config() -> dict:
+    return {
+        "driver": DB_DRIVER,
+        "host": DB_SERVER,
+        "database": DB_DATABASE,
+        "UID": DB_UID,
+        "PWD": DB_PWD,
+        "TrustServerCertificate": DB_TRUST_CERT,
+    }
+
+
+async def db_connection() -> tuple[pyodbc.Connection, pyodbc.Cursor]:
+    conn = pyodbc.connect(**_db_config())
+    return conn, conn.cursor()
+
+
+async def close_db_connection(conn: pyodbc.Connection | None, cursor: pyodbc.Cursor | None) -> None:
+    try:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+    except pyodbc.Error as e:
+        print(f"[DB] Error closing connection: {e}")
+
+
+async def redis_connection() -> Database:
+    try:
+        redis_db: Database = Database(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=REDIS_DB,
+            password=REDIS_PASSWORD if REDIS_PASSWORD else None,
+        )
+        redis_db.ping()
+        return redis_db
+    except Exception as e:
+        print(f"[Redis] Connection failed: {e}")
+        raise
+
+
+async def close_redis_connection(redis_db: Database | None) -> None:
+    try:
+        if redis_db is not None:
+            redis_db.close()
+    except Exception as e:
+        print(f"[Redis] Error closing connection: {e}")
+
+
 def insert_value(conn, cursor, table_name, fields, values, id_column=None):
     """
     Inserts a record into the given table and optionally returns the new record's ID.

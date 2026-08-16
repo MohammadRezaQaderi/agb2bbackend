@@ -1,7 +1,7 @@
 """
 Discount insertion script with static configuration.
 
-This script inserts discount codes into the discount table. It uses static 
+This script inserts discount codes into the discounts table. It uses static
 configuration to define discount data.
 """
 import os
@@ -62,7 +62,7 @@ def insert_discount(
     expire_time: Optional[str] = None,
 ) -> Optional[int]:
     """
-    Insert a discount into the discount table.
+    Insert a discount into the discounts table.
 
     Args:
         conn: Database connection.
@@ -83,7 +83,7 @@ def insert_discount(
         # Prepare the SQL query
         if expire_time is not None:
             query = """
-                INSERT INTO discount 
+                INSERT INTO discounts 
                 (code, status, discount_percentage, count, count_apply, expire_time, created_time, edited_time)
                 OUTPUT INSERTED.id
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -94,7 +94,7 @@ def insert_discount(
             ))
         else:
             query = """
-                INSERT INTO discount 
+                INSERT INTO discounts 
                 (code, status, discount_percentage, count, count_apply, created_time, edited_time)
                 OUTPUT INSERTED.id
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -162,7 +162,7 @@ def insert_discounts_from_config(
     try:
         for idx, discount in enumerate(discounts, 1):
             print(f"\n[{idx}/{total_count}] Inserting discount: {discount['code']}")
-            
+
             discount_id = insert_discount(
                 conn=conn,
                 cursor=cursor,
@@ -300,4 +300,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-
