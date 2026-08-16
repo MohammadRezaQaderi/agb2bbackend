@@ -90,8 +90,8 @@ def generate_capacity_report(conn, from_date=None, to_date=None, to_date_is_excl
             ELSE N''
         END AS [نام],
 
-        (SELECT COUNT(*) FROM con WHERE con.ins_id = u.user_id) AS [تعداد مشاور],
-        (SELECT COUNT(*) FROM stu WHERE stu.ins_id = u.user_id) AS [تعداد دانش آموز],
+        (SELECT COUNT(*) FROM con WHERE con.owner_user_id = u.user_id) AS [تعداد مشاور],
+        (SELECT COUNT(*) FROM stu WHERE stu.owner_user_id = u.user_id) AS [تعداد دانش آموز],
 
         MAX(CASE WHEN cp.package_name = 'AG' THEN cp.allowed END) AS [ذره‌بین - مجاز],
         MAX(CASE WHEN cp.package_name = 'AG' THEN cp.used END) AS [ذره‌بین - استفاده شده],

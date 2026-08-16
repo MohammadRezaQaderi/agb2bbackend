@@ -269,7 +269,13 @@ def get_user_info(conn, cursor, request_data):
                 user_info["capacity"] = capacity_info
 
         elif role == "con":
-            query_role = 'SELECT con_id, first_name, last_name, sex, ins_id, ins_role FROM con WHERE user_id = ?'
+            query_role = '''
+                SELECT c.con_id, c.first_name, c.last_name, c.sex,
+                       c.owner_user_id, owner.role AS owner_role
+                FROM con c
+                LEFT JOIN users owner ON owner.user_id = c.owner_user_id
+                WHERE c.user_id = ?
+            '''
             role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=user_id)
             if role_res:
                 user_info.update({
@@ -277,12 +283,19 @@ def get_user_info(conn, cursor, request_data):
                     "first_name": role_res.first_name,
                     "last_name": role_res.last_name,
                     "sex": role_res.sex,
-                    "ins_id": role_res.ins_id,
-                    "ins_role": role_res.ins_role
+                    "owner_user_id": role_res.owner_user_id,
+                    "ins_id": role_res.owner_user_id,
+                    "owner_role": role_res.owner_role,
                 })
 
         elif role == "stu":
-            query_role = 'SELECT stu_id, first_name, last_name, sex, city, birth_date, ins_id, con_id, ins_role, access FROM stu WHERE user_id = ?'
+            query_role = '''
+                SELECT s.stu_id, s.first_name, s.last_name, s.sex, s.city, s.birth_date,
+                       s.owner_user_id, s.consultant_user_id, owner.role AS owner_role, s.access
+                FROM stu s
+                LEFT JOIN users owner ON owner.user_id = s.owner_user_id
+                WHERE s.user_id = ?
+            '''
             role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=user_id)
             if role_res:
                 user_info.update({
@@ -292,9 +305,11 @@ def get_user_info(conn, cursor, request_data):
                     "sex": role_res.sex,
                     "city": role_res.city,
                     "birth_date": role_res.birth_date,
-                    "ins_id": role_res.ins_id,
-                    "con_id": role_res.con_id,
-                    "ins_role": role_res.ins_role
+                    "owner_user_id": role_res.owner_user_id,
+                    "consultant_user_id": role_res.consultant_user_id,
+                    "ins_id": role_res.owner_user_id,
+                    "con_id": role_res.consultant_user_id,
+                    "owner_role": role_res.owner_role,
                 })
 
                 # Get access field

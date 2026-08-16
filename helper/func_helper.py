@@ -502,7 +502,7 @@ async def authorizer(conn: pyodbc.Connection | None, cursor: pyodbc.Cursor | Non
         if request_data.get("token"):
             if request_data["token"] is not None:
                 query = """
-                    SELECT t.user_id, u.phone, t.role
+                    SELECT t.user_id, u.phone, u.role
                     FROM tokens t
                     INNER JOIN users u ON u.user_id = t.user_id
                     WHERE t.token = ?
@@ -931,7 +931,7 @@ def update_student_access_and_capacity(
             - limit: Limit flag (1 or 0) for the package
         user_info: Context user_info containing user_id
         role_type: Role type ("ins", "sch", or "ocon") for error logging
-        id_field: Field name to check ownership ("ins_id" for all three)
+        id_field: Field name to check ownership ("owner_user_id" or "consultant_user_id")
         end_point: API endpoint for error logging
 
     Returns:
@@ -949,7 +949,7 @@ def update_student_access_and_capacity(
         if not stu_id:
             return None, None, "شناسه دانش‌آموز ارسال نشده است."
 
-        query_check = 'SELECT ins_id, con_id, access FROM stu WHERE user_id = ?'
+        query_check = 'SELECT owner_user_id, consultant_user_id, access FROM stu WHERE user_id = ?'
         res_stu = db_helper.search_table(conn=conn, cursor=cursor, query=query_check, field=stu_id)
 
         if res_stu is None:
@@ -1067,8 +1067,8 @@ def update_student_access_and_capacity(
             conn=conn,
             cursor=cursor,
             stu_user_id=int(stu_id),
-            owner_user_id=getattr(res_stu, "ins_id", None),
-            consultant_user_id=getattr(res_stu, "con_id", None),
+            owner_user_id=getattr(res_stu, "owner_user_id", None),
+            consultant_user_id=getattr(res_stu, "consultant_user_id", None),
             package_name=kind,
             permission=permission,
             limit=limit,

@@ -79,39 +79,41 @@ def select_student_info(conn, cursor, user_id):
     try:
         query = '''
             SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex, s.city,
-                   s.access, s.ins_id, s.con_id, s.birth_date, s.ins_role
+                   s.access, s.owner_user_id, s.consultant_user_id, s.birth_date,
+                   owner.role AS owner_role
             FROM stu s
             INNER JOIN users u ON u.user_id = s.user_id
+            LEFT JOIN users owner ON owner.user_id = s.owner_user_id
             WHERE s.user_id = ?
         '''
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
         token = str(uuid.uuid4())
-        if res.ins_role in ["ins", "sch"]:
-            if res.ins_role == "ins":
+        if res.owner_role in ["ins", "sch"]:
+            if res.owner_role == "ins":
                 query_ins = 'SELECT name, logo, user_id FROM ins WHERE user_id = ?'
-                res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.ins_id)
+                res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.owner_user_id)
             else:
                 query_ins = 'SELECT name, logo, user_id FROM sch WHERE user_id = ?'
-                res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.ins_id)
+                res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.owner_user_id)
             query_con = 'SELECT first_name, last_name FROM con WHERE user_id = ?'
-            res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query_con, field=res.con_id)
+            res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query_con, field=res.consultant_user_id)
             con_name = ""
             if res_con and len(res_con) >= 2:
                 con_name = f"{res_con.first_name} {res_con.last_name}"
             return token, {"phone": res.phone, "user_id": user_id, "id": res.stu_id, "first_name": res.first_name,
                            "last_name": res.last_name, "sex": res.sex, "city": res.city,
                            "access": res.access, "role": "stu", "name": res_ins.name, "con_name": con_name,
-                           "pic": res_ins.logo, "ins_id": res_ins.user_id, }, ""
+                           "pic": res_ins.logo, "owner_user_id": res_ins.user_id, "ins_id": res_ins.user_id}, ""
         else:
             query_con = 'SELECT first_name, last_name FROM ocon WHERE user_id = ?'
-            res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query_con, field=res.con_id)
+            res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query_con, field=res.consultant_user_id)
             con_name = ""
             if res_con and len(res_con) >= 2:
                 con_name = f"{res_con.first_name} {res_con.last_name}"
             return token, {"phone": res.phone, "user_id": user_id, "id": res.stu_id, "first_name": res.first_name,
                            "last_name": res.last_name, "sex": res.sex, "city": res.city,
                            "access": res.access, "role": "stu", "name": "هدایت تحصیلی", "con_name": con_name,
-                           "pic": None, "ins_id": res.con_id}, ""
+                           "pic": None, "owner_user_id": res.owner_user_id, "ins_id": res.owner_user_id}, ""
     except Exception as e:
         conn.rollback()
         service_exception_error_logging(conn, cursor, "ags_api/stu", "select_student_info", str(e), {},
@@ -359,7 +361,7 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
         if not quiz_kind:
             return None, None, "quiz_kind is required"
 
-        query_stu = 'SELECT ins_id FROM stu WHERE user_id = ?'
+        query_stu = 'SELECT owner_user_id FROM stu WHERE user_id = ?'
         res_stu = db_helper.search_table(conn=conn, cursor=cursor, query=query_stu, field=info["user_id"])
         stu_access = _load_student_access(conn, cursor, info["user_id"])
         permission, _ = _package_permission(stu_access, quiz_kind)
@@ -370,7 +372,7 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
         # Limit answers to this user and this quiz kind (support legacy NULL quiz_kind)
         all_attempts = answer_store.get_attempts(conn, cursor, info["user_id"], quiz_kind)
 
-        query_quiz = 'SELECT * FROM setting WHERE user_id = ' + str(res_stu.ins_id) + ' and quiz_id = ' + str(
+        query_quiz = 'SELECT * FROM setting WHERE user_id = ' + str(res_stu.owner_user_id) + ' and quiz_id = ' + str(
             quiz_id) + ''
         response_quiz_setting = cursor.execute(query_quiz)
         res_quiz_setting = response_quiz_setting.fetchone()
@@ -529,9 +531,11 @@ def submit_quiz_answer(conn, cursor, request_data, info):
             if first_q_id is not None and question_number != first_q_id:
                 return None, None, "this question number is not valid reload quiz"
 
-            ins_id, con_id = get_stu_other_info(conn=conn, cursor=cursor, user_id=info["user_id"])
+            owner_user_id, consultant_user_id = get_stu_other_info(conn=conn, cursor=cursor, user_id=info["user_id"])
             state = 2 if last_question_id is not None and question_number == last_question_id else 1
-            attempt = answer_store.upsert_attempt(conn, cursor, info["user_id"], quiz_kind, quiz_id, state, ins_id, con_id)
+            attempt = answer_store.upsert_attempt(
+                conn, cursor, info["user_id"], quiz_kind, quiz_id, state, owner_user_id, consultant_user_id
+            )
         else:
             state = attempt["state"]
             if last_question_id is not None and question_number == last_question_id:
@@ -544,8 +548,8 @@ def submit_quiz_answer(conn, cursor, request_data, info):
                     quiz_kind,
                     quiz_id,
                     state,
-                    attempt.get("ins_id"),
-                    attempt.get("con_id"),
+                    attempt.get("owner_user_id"),
+                    attempt.get("consultant_user_id"),
                     attempt.get("remain_time"),
                 )
 
@@ -581,11 +585,11 @@ def submit_quiz_answer(conn, cursor, request_data, info):
 
 
 def get_stu_other_info(conn, cursor, user_id):
-    query = 'SELECT con_id, ins_id FROM stu WHERE user_id = ?'
+    query = 'SELECT consultant_user_id, owner_user_id FROM stu WHERE user_id = ?'
     res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
-    if res.ins_id is None:
-        return res.con_id, res.con_id
-    return res.ins_id, res.con_id
+    if res.owner_user_id is None:
+        return res.consultant_user_id, res.consultant_user_id
+    return res.owner_user_id, res.consultant_user_id
 
 
 def select_student_access_info(conn, cursor, request_data, info):

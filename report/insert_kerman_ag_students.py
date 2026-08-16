@@ -31,7 +31,6 @@ DEFAULT_FILES = [
 DEFAULT_INS_ID = 16070
 DEFAULT_CON_ID = 16349
 DEFAULT_CITY = "کرمان,21"
-DEFAULT_INS_ROLE = "ins"
 DEFAULT_ACCESS = {"AG": {"permission": 1, "limit": 0}}
 REQUIRED_COLUMNS = ["نام", "نام خانوادگی", "تاریخ تولد"]
 OPTIONAL_COLUMNS = ["شماره ملی", "نام پدر", "پایه تحصیلی", "کلاس درس"]
@@ -195,7 +194,7 @@ def find_existing_student(cursor, student: Student, ins_id: int, con_id: int):
         """
         SELECT TOP 1 user_id, phone
         FROM stu
-        WHERE first_name = ? AND last_name = ? AND birth_date = ? AND ins_id = ? AND con_id = ?
+        WHERE first_name = ? AND last_name = ? AND birth_date = ? AND owner_user_id = ? AND consultant_user_id = ?
         """,
         student.first_name,
         student.last_name,
@@ -229,11 +228,11 @@ def insert_student(cursor, student: Student, args) -> dict[str, Any]:
     cursor.execute(
         """
         INSERT INTO stu (
-            user_id, first_name, last_name, sex, city, ins_id, con_id,
-            adder_id, editor_id, comment, birth_date, ins_role,
+            user_id, first_name, last_name, sex, city, owner_user_id, consultant_user_id,
+            adder_id, editor_id, comment, birth_date,
             created_time, edited_time, access
         )
-        VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         user_id,
         student.first_name,
@@ -245,7 +244,6 @@ def insert_student(cursor, student: Student, args) -> dict[str, Any]:
         args.ins_id,
         None,
         student.birth_year,
-        args.ins_role,
         now,
         now,
         access_json,
@@ -716,7 +714,6 @@ def parse_args():
     parser.add_argument("--ins-id", type=int, default=DEFAULT_INS_ID)
     parser.add_argument("--con-id", type=int, default=DEFAULT_CON_ID)
     parser.add_argument("--city", default=DEFAULT_CITY)
-    parser.add_argument("--ins-role", default=DEFAULT_INS_ROLE, choices=["ins", "sch", "ocon"])
     parser.add_argument("--output-dir", type=Path, default=Path("report/outputs"))
     parser.add_argument("--limit", type=int, default=None, help="Process only the first N valid rows.")
     parser.add_argument("--parse-only", action="store_true", help="Parse Excel and write report without DB access.")

@@ -7,6 +7,8 @@ otherwise the script prints a warning so the data can be fixed first.
 
 Usage:
     python3 helper/db/architecture_migration.py --dry-run
+    python3 helper/db/architecture_migration.py --migrate-password-hash
+    python3 helper/db/architecture_migration.py --drop-legacy-old-tables
     python3 helper/db/architecture_migration.py
 """
 from __future__ import annotations
@@ -157,6 +159,40 @@ def drop_column_if_exists(
         print(f"WARN: skipped drop {table_name}.{column_name}: {exc}")
 
 
+def legacy_old_tables(cursor: Any) -> list[str]:
+    cursor.execute(
+        """
+        SELECT TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = 'dbo'
+          AND TABLE_TYPE = 'BASE TABLE'
+          AND TABLE_NAME LIKE '%[_]old'
+        ORDER BY TABLE_NAME
+        """
+    )
+    return [row[0] for row in cursor.fetchall()]
+
+
+def drop_legacy_old_tables(conn: Any, cursor: Any, dry_run: bool) -> None:
+    tables = legacy_old_tables(cursor)
+    if not tables:
+        print("SKIP: no legacy *_old tables found")
+        return
+
+    for table_name in tables:
+        try:
+            run_sql(
+                conn,
+                cursor,
+                f"DROP TABLE dbo.{quote_name(table_name)}",
+                dry_run,
+                f"drop legacy table {table_name}",
+            )
+        except Exception as exc:
+            conn.rollback()
+            print(f"WARN: skipped drop legacy table {table_name}: {exc}")
+
+
 def remove_role_identity_mirrors(conn: Any, cursor: Any, dry_run: bool) -> None:
     role_tables = ("ins", "sch", "ocon", "con", "stu")
     user_id_identity_tables = (
@@ -216,10 +252,25 @@ def remove_role_identity_mirrors(conn: Any, cursor: Any, dry_run: bool) -> None:
         drop_column_if_exists(conn, cursor, table_name, "phone", dry_run)
 
 
+def normalize_relation_columns(conn: Any, cursor: Any, dry_run: bool) -> None:
+    renames = (
+        ("con", "ins_id", "owner_user_id"),
+        ("stu", "ins_id", "owner_user_id"),
+        ("stu", "con_id", "consultant_user_id"),
+        ("quiz_attempt", "ins_id", "owner_user_id"),
+        ("quiz_attempt", "con_id", "consultant_user_id"),
+    )
+    for table_name, old_name, new_name in renames:
+        rename_column_if_needed(conn, cursor, table_name, old_name, new_name, dry_run)
+
+    drop_column_if_exists(conn, cursor, "con", "ins_role", dry_run)
+    drop_column_if_exists(conn, cursor, "stu", "ins_role", dry_run)
+    drop_column_if_exists(conn, cursor, "tokens", "role", dry_run)
+
+
 def normalize_ocon_role_names(conn: Any, cursor: Any, dry_run: bool) -> None:
     exact_role_columns = (
         ("users", "role"),
-        ("tokens", "role"),
         ("comments", "role"),
         ("stu", "ins_role"),
         ("con", "ins_role"),
@@ -373,8 +424,8 @@ def ensure_quiz_attempt_tables(conn: Any, cursor: Any, dry_run: bool) -> None:
                 [quiz_id] INT NOT NULL,
                 [state] INT NOT NULL DEFAULT 1,
                 [remain_time] INT NULL,
-                [ins_id] INT NULL,
-                [con_id] INT NULL,
+                [owner_user_id] INT NULL,
+                [consultant_user_id] INT NULL,
                 [created_time] DATETIME DEFAULT GETDATE(),
                 [edited_time] DATETIME DEFAULT GETDATE()
             )
@@ -414,7 +465,16 @@ def backfill_student_package_access(conn: Any, cursor: Any, dry_run: bool) -> No
         print("WARN: student_package_access does not exist; cannot backfill")
         return
 
-    cursor.execute("SELECT user_id, ins_id, con_id, access FROM stu WHERE access IS NOT NULL")
+    owner_column = "owner_user_id" if column_exists(cursor, "stu", "owner_user_id") else "ins_id"
+    consultant_column = "consultant_user_id" if column_exists(cursor, "stu", "consultant_user_id") else "con_id"
+    cursor.execute(
+        f"""
+        SELECT user_id, {quote_name(owner_column)} AS owner_user_id,
+               {quote_name(consultant_column)} AS consultant_user_id, access
+        FROM stu
+        WHERE access IS NOT NULL
+        """
+    )
     rows = cursor.fetchall()
     inserts = 0
     updates = 0
@@ -469,8 +529,8 @@ def backfill_student_package_access(conn: Any, cursor: Any, dry_run: bool) -> No
                     SET owner_user_id = ?, consultant_user_id = ?, permission = ?, [limit] = ?, edited_time = GETDATE()
                     WHERE id = ?
                     """,
-                    row.ins_id,
-                    row.con_id,
+                    row.owner_user_id,
+                    row.consultant_user_id,
                     permission,
                     limit,
                     existing.id,
@@ -484,8 +544,8 @@ def backfill_student_package_access(conn: Any, cursor: Any, dry_run: bool) -> No
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     row.user_id,
-                    row.ins_id,
-                    row.con_id,
+                    row.owner_user_id,
+                    row.consultant_user_id,
                     str(package_name).upper(),
                     permission,
                     limit,
@@ -501,33 +561,52 @@ def backfill_student_package_access(conn: Any, cursor: Any, dry_run: bool) -> No
 
 
 def migrate_passwords_to_hash(conn: Any, cursor: Any, dry_run: bool) -> None:
-    from helper.func_helper import decrypt_password, hash_password, is_password_hash
+    password_hash_like = "pbkdf2_sha256$%"
 
-    cursor.execute("SELECT user_id, password FROM users WHERE password IS NOT NULL")
+    if dry_run:
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM users
+            WHERE password IS NOT NULL
+              AND password NOT LIKE ?
+            """,
+            password_hash_like,
+        )
+        row = cursor.fetchone()
+        changed = int(row[0] or 0) if row else 0
+        print(f"DRY RUN: migrate users.password to hash for {changed} users")
+        return
+
+    from helper.func_helper import decrypt_password, hash_password
+
+    cursor.execute(
+        """
+        SELECT user_id, password
+        FROM users
+        WHERE password IS NOT NULL
+          AND password NOT LIKE ?
+        """,
+        password_hash_like,
+    )
     rows = cursor.fetchall()
     changed = 0
 
     for row in rows:
         stored_password = row.password
-        if is_password_hash(stored_password):
-            continue
-
         plain_password = decrypt_password(stored_password)
         if plain_password is None:
             plain_password = stored_password
 
         new_password = hash_password(plain_password)
         changed += 1
-        if not dry_run:
-            cursor.execute(
-                "UPDATE users SET password = ?, edited_time = GETDATE() WHERE user_id = ?",
-                new_password,
-                row.user_id,
-            )
-
-    if dry_run:
-        print(f"DRY RUN: migrate users.password to hash for {changed} users")
-        return
+        cursor.execute(
+            "UPDATE users SET password = ?, edited_time = GETDATE() WHERE user_id = ?",
+            new_password,
+            row.user_id,
+        )
+        if changed % 500 == 0:
+            print(f"PROGRESS: migrated users.password hashes for {changed} users")
 
     conn.commit()
     print(f"APPLIED: migrated users.password to hash for {changed} users")
@@ -556,7 +635,7 @@ def alter_text_columns(conn: Any, cursor: Any, dry_run: bool) -> None:
                 print(f"WARN: skipped alter {table_name}.{column_name}: {exc}")
 
 
-def run_migration(dry_run: bool) -> None:
+def run_migration(dry_run: bool, migrate_password_hash: bool, drop_legacy_tables: bool) -> None:
     try:
         import pyodbc
     except ModuleNotFoundError as exc:
@@ -573,6 +652,7 @@ def run_migration(dry_run: bool) -> None:
         rename_column_if_needed(conn, cursor, "ocon", "wCon_id", "ocon_id", dry_run)
         rename_column_if_needed(conn, cursor, "quiz_missing_answers", "q_id", "question_id", dry_run)
         normalize_ocon_role_names(conn, cursor, dry_run)
+        normalize_relation_columns(conn, cursor, dry_run)
         remove_role_identity_mirrors(conn, cursor, dry_run)
 
         ensure_column(conn, cursor, "capacity_package", "total_allowed", "INT NULL", dry_run)
@@ -594,7 +674,10 @@ def run_migration(dry_run: bool) -> None:
         ensure_quiz_attempt_tables(conn, cursor, dry_run)
         backfill_student_package_access(conn, cursor, dry_run)
         alter_text_columns(conn, cursor, dry_run)
-        migrate_passwords_to_hash(conn, cursor, dry_run)
+        if migrate_password_hash:
+            migrate_passwords_to_hash(conn, cursor, dry_run)
+        else:
+            print("SKIP: users.password hash migration")
 
         ensure_index_if_clean(
             conn,
@@ -690,15 +773,17 @@ def run_migration(dry_run: bool) -> None:
             where_sql="user_id IS NOT NULL",
         )
 
-        ensure_index_if_clean(conn, cursor, "stu", "ix_stu_ins_id", "ins_id", None, dry_run, unique=False)
-        ensure_index_if_clean(conn, cursor, "stu", "ix_stu_con_id", "con_id", None, dry_run, unique=False)
-        ensure_index_if_clean(conn, cursor, "con", "ix_con_ins_id", "ins_id", None, dry_run, unique=False)
+        ensure_index_if_clean(conn, cursor, "stu", "ix_stu_owner_user_id", "owner_user_id", None, dry_run, unique=False)
+        ensure_index_if_clean(
+            conn, cursor, "stu", "ix_stu_consultant_user_id", "consultant_user_id", None, dry_run, unique=False
+        )
+        ensure_index_if_clean(conn, cursor, "con", "ix_con_owner_user_id", "owner_user_id", None, dry_run, unique=False)
         ensure_index_if_clean(
             conn,
             cursor,
             "quiz_attempt",
             "ix_quiz_attempt_dashboard",
-            "ins_id, con_id, quiz_kind, state, quiz_id",
+            "owner_user_id, consultant_user_id, quiz_kind, state, quiz_id",
             None,
             dry_run,
             unique=False,
@@ -770,6 +855,11 @@ def run_migration(dry_run: bool) -> None:
             dry_run,
         )
 
+        if drop_legacy_tables:
+            drop_legacy_old_tables(conn, cursor, dry_run)
+        else:
+            print("SKIP: legacy *_old table cleanup")
+
         print("Architecture migration finished.")
     except Exception:
         conn.rollback()
@@ -782,9 +872,23 @@ def run_migration(dry_run: bool) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Apply additive architecture migrations to AGB2B.")
     parser.add_argument("--dry-run", action="store_true", help="Print planned changes without applying them.")
+    parser.add_argument(
+        "--migrate-password-hash",
+        action="store_true",
+        help="Opt in to migrating users.password values from encrypted/plain text to pbkdf2 hashes.",
+    )
+    parser.add_argument(
+        "--drop-legacy-old-tables",
+        action="store_true",
+        help="Drop dbo tables whose names end with _old after the architecture migration finishes.",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    run_migration(dry_run=args.dry_run)
+    run_migration(
+        dry_run=args.dry_run,
+        migrate_password_hash=args.migrate_password_hash,
+        drop_legacy_tables=args.drop_legacy_old_tables,
+    )

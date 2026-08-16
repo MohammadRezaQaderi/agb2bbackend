@@ -76,7 +76,7 @@ def get_students_by_ins_id(
         SELECT {select_clause}
         FROM stu s
         INNER JOIN users u ON u.user_id = s.user_id
-        WHERE s.ins_id = ?
+        WHERE s.owner_user_id = ?
         ORDER BY s.first_name, s.last_name
         """
 

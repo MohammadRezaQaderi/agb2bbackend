@@ -77,7 +77,7 @@ def get_or_create_attempt(cursor, row, dry_run: bool) -> int | None:
             cursor.execute(
                 """
                 UPDATE quiz_attempt
-                SET state = ?, ins_id = ?, con_id = ?, edited_time = ?
+                SET state = ?, owner_user_id = ?, consultant_user_id = ?, edited_time = ?
                 WHERE id = ?
                 """,
                 row.state,
@@ -91,7 +91,7 @@ def get_or_create_attempt(cursor, row, dry_run: bool) -> int | None:
     cursor.execute(
         """
         INSERT INTO quiz_attempt
-            ([user_id], [quiz_kind], [quiz_id], [state], [ins_id], [con_id], [created_time], [edited_time])
+            ([user_id], [quiz_kind], [quiz_id], [state], [owner_user_id], [consultant_user_id], [created_time], [edited_time])
         OUTPUT INSERTED.id
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,

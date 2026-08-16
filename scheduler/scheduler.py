@@ -224,9 +224,12 @@ class AGReportScheduler:
         """Retrieve student information with institute and consultant details."""
         try:
             student_query = '''
-                SELECT user_id, first_name, last_name, phone, ins_id, con_id, ins_role 
-                FROM stu 
-                WHERE user_id = ?
+                SELECT s.user_id, s.first_name, s.last_name, u.phone,
+                       s.owner_user_id, s.consultant_user_id, owner.role AS owner_role
+                FROM stu s
+                INNER JOIN users u ON u.user_id = s.user_id
+                LEFT JOIN users owner ON owner.user_id = s.owner_user_id
+                WHERE s.user_id = ?
             '''
             student = db_helper.search_table(
                 self.db_conn, self.db_cursor, student_query, user_id
@@ -239,8 +242,7 @@ class AGReportScheduler:
             consultant_name = ""
             logo_path = None
 
-            # if student[4]:  # ins_id field
-            if student[6] == "ins":  # ins_role
+            if student[6] == "ins":
                 ins_query = 'SELECT user_id, name, logo FROM ins WHERE user_id = ?'
                 institute = db_helper.search_table(self.db_conn, self.db_cursor, ins_query, student[4])
                 institute_name = institute[1] if institute else ""
@@ -261,8 +263,7 @@ class AGReportScheduler:
                 institute_name = f"{consultant[0]} {consultant[1]}" if consultant else ""
                 consultant_name = f"{consultant[0]} {consultant[1]}" if consultant else ""
 
-            # Get consultant name if con_id exists
-            if student[5] and student[6] not in ["ocon"]:  # con_id field
+            if student[5] and student[6] not in ["ocon"]:
                 con_query = 'SELECT user_id, first_name, last_name FROM con WHERE user_id = ?'
                 consultant = db_helper.search_table(self.db_conn, self.db_cursor, con_query, student[5])
                 consultant_name = f"{consultant[1]} {consultant[2]}" if consultant else ""

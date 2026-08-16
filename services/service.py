@@ -485,12 +485,12 @@ def get_students(conn, cursor, request_data, user_info):
 def check_student_access(conn, cursor, student_user_id, user_info):
     """
     Check if the current user has access to the specified student.
-    For ins/sch roles: check if student's ins_id matches user_id
-    For con/ocon roles: check if student's con_id matches user_id
+    For ins/sch roles: check if student's owner_user_id matches user_id.
+    For con/ocon roles: check if student's consultant_user_id matches user_id.
     Returns True if access is granted, False otherwise.
     """
     try:
-        query = 'SELECT ins_id, con_id FROM stu WHERE user_id = ?'
+        query = 'SELECT owner_user_id, consultant_user_id FROM stu WHERE user_id = ?'
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=student_user_id)
         if not res:
             return False
@@ -499,11 +499,9 @@ def check_student_access(conn, cursor, student_user_id, user_info):
         user_id = user_info.get("user_id")
         
         if role in ["ins", "sch"]:
-            # For institute/school, check if student's ins_id matches user_id
-            return res.ins_id == user_id
+            return res.owner_user_id == user_id
         elif role in ["con", "ocon"]:
-            # For consultant/owner consultant, check if student's con_id matches user_id
-            return res.con_id == user_id
+            return res.consultant_user_id == user_id
         
         return False
     except Exception as e:

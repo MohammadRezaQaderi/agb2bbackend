@@ -36,7 +36,10 @@ def normalize_answer_value(value: Any) -> Any:
 
 def get_attempts(conn, cursor, user_id: int, quiz_kind: str):
     query = """
-        SELECT id, user_id, quiz_kind, quiz_id, state, remain_time, ins_id, con_id, created_time, edited_time
+        SELECT id, user_id, quiz_kind, quiz_id, state, remain_time,
+               owner_user_id, consultant_user_id,
+               owner_user_id AS ins_id, consultant_user_id AS con_id,
+               created_time, edited_time
         FROM quiz_attempt
         WHERE user_id = ? AND quiz_kind = ?
         ORDER BY quiz_id ASC
@@ -46,7 +49,10 @@ def get_attempts(conn, cursor, user_id: int, quiz_kind: str):
 
 def get_attempt(conn, cursor, user_id: int, quiz_kind: str, quiz_id: int):
     query = """
-        SELECT id, user_id, quiz_kind, quiz_id, state, remain_time, ins_id, con_id, created_time, edited_time
+        SELECT id, user_id, quiz_kind, quiz_id, state, remain_time,
+               owner_user_id, consultant_user_id,
+               owner_user_id AS ins_id, consultant_user_id AS con_id,
+               created_time, edited_time
         FROM quiz_attempt
         WHERE user_id = ? AND quiz_kind = ? AND quiz_id = ?
     """
@@ -60,7 +66,7 @@ def get_attempt(conn, cursor, user_id: int, quiz_kind: str, quiz_id: int):
 
 
 def upsert_attempt(conn, cursor, user_id: int, quiz_kind: str, quiz_id: int, state: int,
-                   ins_id: int | None, con_id: int | None, remain_time: int | None = None):
+                   owner_user_id: int | None, consultant_user_id: int | None, remain_time: int | None = None):
     quiz_kind = normalize_quiz_kind(quiz_kind)
     attempt = get_attempt(conn, cursor, user_id, quiz_kind, quiz_id)
     edited_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -84,8 +90,8 @@ def upsert_attempt(conn, cursor, user_id: int, quiz_kind: str, quiz_id: int, sta
             attempt["remain_time"] = remain_time
         return attempt
 
-    fields = '([user_id], [quiz_kind], [quiz_id], [state], [remain_time], [ins_id], [con_id])'
-    values = (user_id, quiz_kind, quiz_id, state, remain_time, ins_id, con_id)
+    fields = '([user_id], [quiz_kind], [quiz_id], [state], [remain_time], [owner_user_id], [consultant_user_id])'
+    values = (user_id, quiz_kind, quiz_id, state, remain_time, owner_user_id, consultant_user_id)
     result = db_helper.insert_value(conn, cursor, "quiz_attempt", fields, values, id_column="id")
     attempt_id = result.get("id") if result else None
     return {
@@ -95,8 +101,10 @@ def upsert_attempt(conn, cursor, user_id: int, quiz_kind: str, quiz_id: int, sta
         "quiz_id": quiz_id,
         "state": state,
         "remain_time": remain_time,
-        "ins_id": ins_id,
-        "con_id": con_id,
+        "owner_user_id": owner_user_id,
+        "consultant_user_id": consultant_user_id,
+        "ins_id": owner_user_id,
+        "con_id": consultant_user_id,
     }
 
 

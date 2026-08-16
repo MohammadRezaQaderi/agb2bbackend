@@ -304,14 +304,14 @@ def insert_student_to_db(
 
         cursor.execute("""
             INSERT INTO stu (user_id, first_name, last_name, sex,
-                            city, ins_id, con_id, adder_id,
-                            editor_id, comment, birth_date, ins_role,
+                            city, owner_user_id, consultant_user_id, adder_id,
+                            editor_id, comment, birth_date,
                             created_time, edited_time, access)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
                        user_id, first_name, last_name, sex,
                        city_str, ins_id, con_id, adder_id, adder_id,
-                       None, birth_date, 'sch',
+                       None, birth_date,
                        current_time, current_time, '{"AG": {"permission": 1, "limit": 0}}')
 
         return user_id
