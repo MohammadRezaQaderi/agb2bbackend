@@ -56,8 +56,8 @@ def change_capacity(conn, cursor, request_data):
             capacity_id = capacity_res.capacity_id
         else:
             # Create capacity record if it doesn't exist
-            field = '([user_id], [phone])'
-            values = (user_id, phone)
+            field = '([user_id])'
+            values = (user_id,)
             capacity_result = db_helper.insert_value(
                 conn=conn,
                 cursor=cursor,
@@ -116,8 +116,8 @@ def change_capacity(conn, cursor, request_data):
 
         else:
             # Insert new record
-            field_package = '([capacity_id], [user_id], [phone], [package_name], [total_allowed], [allowed])'
-            values_package = (capacity_id, user_id, phone, kind, count, count)
+            field_package = '([capacity_id], [user_id], [package_name], [total_allowed], [allowed])'
+            values_package = (capacity_id, user_id, kind, count, count)
 
             # Pass id_column to capture the newly generated capacity_package_id
             insert_result = db_helper.insert_value(
@@ -208,8 +208,8 @@ def get_user_info(conn, cursor, request_data):
 
         # Get role-specific information
         if role == "ins":
-            query_role = 'SELECT ins_id, name, logo, verify FROM ins WHERE phone = ?'
-            role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=phone)
+            query_role = 'SELECT ins_id, name, logo, verify FROM ins WHERE user_id = ?'
+            role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=user_id)
             if role_res:
                 user_info.update({
                     "ins_id": role_res.ins_id,
@@ -228,8 +228,8 @@ def get_user_info(conn, cursor, request_data):
                 user_info["capacity"] = capacity_info
 
         elif role == "sch":
-            query_role = 'SELECT sch_id, name, logo, verify FROM sch WHERE phone = ?'
-            role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=phone)
+            query_role = 'SELECT sch_id, name, logo, verify FROM sch WHERE user_id = ?'
+            role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=user_id)
             if role_res:
                 user_info.update({
                     "sch_id": role_res.sch_id,
@@ -248,8 +248,8 @@ def get_user_info(conn, cursor, request_data):
                 user_info["capacity"] = capacity_info
 
         elif role == "ocon":
-            query_role = 'SELECT ocon_id, first_name, last_name, sex, verify FROM ocon WHERE phone = ?'
-            role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=phone)
+            query_role = 'SELECT ocon_id, first_name, last_name, sex, verify FROM ocon WHERE user_id = ?'
+            role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=user_id)
             if role_res:
                 user_info.update({
                     "ocon_id": role_res.ocon_id,
@@ -269,8 +269,8 @@ def get_user_info(conn, cursor, request_data):
                 user_info["capacity"] = capacity_info
 
         elif role == "con":
-            query_role = 'SELECT con_id, first_name, last_name, sex, ins_id, ins_role FROM con WHERE phone = ?'
-            role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=phone)
+            query_role = 'SELECT con_id, first_name, last_name, sex, ins_id, ins_role FROM con WHERE user_id = ?'
+            role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=user_id)
             if role_res:
                 user_info.update({
                     "con_id": role_res.con_id,
@@ -282,8 +282,8 @@ def get_user_info(conn, cursor, request_data):
                 })
 
         elif role == "stu":
-            query_role = 'SELECT stu_id, first_name, last_name, sex, city, birth_date, ins_id, con_id, ins_role FROM stu WHERE phone = ?'
-            role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=phone)
+            query_role = 'SELECT stu_id, first_name, last_name, sex, city, birth_date, ins_id, con_id, ins_role, access FROM stu WHERE user_id = ?'
+            role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=user_id)
             if role_res:
                 user_info.update({
                     "stu_id": role_res.stu_id,
@@ -298,15 +298,12 @@ def get_user_info(conn, cursor, request_data):
                 })
 
                 # Get access field
-                query_access = 'SELECT access FROM stu WHERE phone = ?'
-                access_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_access, field=phone)
-                if access_res:
-                    raw_access = getattr(access_res, "access", None) or "{}"
-                    try:
-                        access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-                    except (json.JSONDecodeError, TypeError):
-                        access_data = {}
-                    user_info["access"] = access_data
+                raw_access = getattr(role_res, "access", None) or "{}"
+                try:
+                    access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
+                except (json.JSONDecodeError, TypeError):
+                    access_data = {}
+                user_info["access"] = access_data
 
         token = func_helper.get_tracking_code()
         return token, user_info, ""
@@ -334,7 +331,12 @@ def check_student_quiz_answer(conn, cursor, request_data):
             return None, None, "شماره تلفن الزامی است."
 
         # Get student user_info
-        query_stu = 'SELECT user_id, first_name, last_name, access FROM stu WHERE phone = ?'
+        query_stu = '''
+            SELECT s.user_id, s.first_name, s.last_name, s.access
+            FROM stu s
+            INNER JOIN users u ON u.user_id = s.user_id
+            WHERE u.phone = ?
+        '''
         stu_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_stu, field=phone)
 
         if not stu_res:

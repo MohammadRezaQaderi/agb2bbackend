@@ -8,7 +8,12 @@ import helper.func_helper as func_helper
 
 def get_info(conn, cursor, user_id):
     try:
-        query = 'SELECT ocon_id, phone, first_name, last_name, logo FROM ocon WHERE user_id = ?'
+        query = '''
+            SELECT o.ocon_id, u.phone, o.first_name, o.last_name, o.logo
+            FROM ocon o
+            INNER JOIN users u ON u.user_id = o.user_id
+            WHERE o.user_id = ?
+        '''
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
         token = func_helper.get_tracking_code()
         user_info = {"phone": res.phone, "user_id": user_id, "id": res.ocon_id, "first_name": res.first_name, "role": "ocon",
@@ -169,10 +174,9 @@ def add_owner_consultant(conn, cursor, request_data, user_id):
         sex = request_data.get("sex")
         if not sex:
             sex = 1
-        field = '([first_name], [last_name], [phone], [user_id], [sex])'
+        field = '([first_name], [last_name], [user_id], [sex])'
         values = (
-            request_data["first_name"], request_data["last_name"], request_data["phone"],
-            user_id, sex)
+            request_data["first_name"], request_data["last_name"], user_id, sex)
         db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
                                values=values)
         func_helper.add_capacity_signup(conn, cursor, user_id, request_data["phone"])
@@ -187,7 +191,13 @@ def add_owner_consultant(conn, cursor, request_data, user_id):
 
 def get_report(conn, cursor, request_data, user_info):
     try:
-        query = 'SELECT stu_id, user_id, phone, first_name, last_name, sex, city, access, comment, password FROM stu WHERE con_id = ?'
+        query = '''
+            SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex,
+                   s.city, s.access, s.comment
+            FROM stu s
+            INNER JOIN users u ON u.user_id = s.user_id
+            WHERE s.con_id = ?
+        '''
         res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
         report_info = []
         if res is not None:
@@ -199,7 +209,7 @@ def get_report(conn, cursor, request_data, user_info):
                     access_data = {}
                 user_info = {"id": stu.stu_id, "student_id": stu.user_id, "phone": stu.phone, "first_name": stu.first_name,
                         "last_name": stu.last_name,
-                        "password": func_helper.decrypt_password(stu.password), "sex": stu.sex, "city": stu.city,
+                        "password": None, "sex": stu.sex, "city": stu.city,
                         "access": access_data, "full_name": stu.first_name + " " + stu.last_name,
                         "consultant_comment": stu.comment, "report_id": stu.user_id}
                 report_info.append(user_info)
@@ -213,7 +223,12 @@ def get_report(conn, cursor, request_data, user_info):
 
 def get_management_report(conn, cursor, request_data, user_info):
     try:
-        query = 'SELECT stu_id, user_id, phone, first_name, last_name, sex, city, access, password FROM stu WHERE con_id = ?'
+        query = '''
+            SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex, s.city, s.access
+            FROM stu s
+            INNER JOIN users u ON u.user_id = s.user_id
+            WHERE s.con_id = ?
+        '''
         res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
 
         report_info = []
@@ -302,10 +317,9 @@ def get_management_report(conn, cursor, request_data, user_info):
 def add_student(conn, cursor, request_data, stu_user_id, user_info):
     try:
         table = "stu"
-        field = '([user_id], [first_name], [last_name], [phone], [sex], [city], [ins_id], [con_id], [adder_id], [editor_id], [birth_date], [ins_role])'
+        field = '([user_id], [first_name], [last_name], [sex], [city], [ins_id], [con_id], [adder_id], [editor_id], [birth_date], [ins_role])'
         values = (
-            stu_user_id, request_data["first_name"], request_data["last_name"], request_data["phone"],
-            request_data["sex"], request_data["city"],
+            stu_user_id, request_data["first_name"], request_data["last_name"], request_data["sex"], request_data["city"],
             request_data["user_id"],
             user_info["user_id"], user_info["user_id"], user_info["user_id"], request_data["birth_date"], "ocon",)
         db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
@@ -390,14 +404,20 @@ def get_students(conn, cursor, request_data, user_info):
         con_name = ""
         if res_con and len(res_con) >= 2:
             con_name = f"{res_con.first_name} {res_con.last_name}"
-        query = 'SELECT stu_id, user_id, phone, first_name, last_name, password, sex, city, birth_date, access, con_id FROM stu WHERE con_id = ?'
+        query = '''
+            SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex,
+                   s.city, s.birth_date, s.access, s.con_id
+            FROM stu s
+            INNER JOIN users u ON u.user_id = s.user_id
+            WHERE s.con_id = ?
+        '''
         res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
         stu_info = []
         if res is not None:
             for stu in res:
                 user_info = {"stu_id": stu.stu_id, "user_id": stu.user_id, "phone": stu.phone, "first_name": stu.first_name,
                         "last_name": stu.last_name, "con_name": con_name,
-                        "con_id": stu.con_id, "password": func_helper.decrypt_password(stu.password), "sex": stu.sex,
+                        "con_id": stu.con_id, "password": None, "sex": stu.sex,
                         "city": stu.city, "full_name": stu.first_name + " " + stu.last_name,
                         "birth_date": stu.birth_date, "access": json.loads(stu.access)}
                 stu_info.append(user_info)
@@ -465,7 +485,12 @@ def verify_user(conn, cursor, user_id):
                                 [1, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                                 'user_id = ?', [str(user_id)])
         token = func_helper.get_tracking_code()
-        query = 'SELECT ocon_id, phone, first_name, last_name, logo FROM ocon WHERE user_id = ?'
+        query = '''
+            SELECT o.ocon_id, u.phone, o.first_name, o.last_name, o.logo
+            FROM ocon o
+            INNER JOIN users u ON u.user_id = o.user_id
+            WHERE o.user_id = ?
+        '''
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
         user_info = {"phone": res.phone, "user_id": user_id, "id": res.ocon_id, "first_name": res.first_name, "role": "ocon",
                 "last_name": res.last_name, "pic": res.logo}

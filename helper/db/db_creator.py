@@ -31,10 +31,8 @@ TABLE_DEFINITIONS = {
         CREATE TABLE ins (
             ins_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
-            phone NVARCHAR(12),
             name NVARCHAR(100),
             logo VARCHAR(MAX),
-            password NVARCHAR(255),
             verify INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE(),
@@ -45,10 +43,8 @@ TABLE_DEFINITIONS = {
         CREATE TABLE sch (
             sch_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
-            phone NVARCHAR(12),
             name NVARCHAR(100),
             logo VARCHAR(MAX),
-            password NVARCHAR(255),
             verify INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE(),
@@ -59,11 +55,9 @@ TABLE_DEFINITIONS = {
         CREATE TABLE ocon (
             ocon_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
-            phone NVARCHAR(12),
             first_name NVARCHAR(50),
             last_name NVARCHAR(50),
             logo VARCHAR(MAX),
-            password NVARCHAR(255),
             sex INT DEFAULT 1,
             verify INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
@@ -75,13 +69,11 @@ TABLE_DEFINITIONS = {
         CREATE TABLE con (
             con_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
-            phone NVARCHAR(12),
             first_name NVARCHAR(50),
             last_name NVARCHAR(50),
             sex INT DEFAULT 1,
             ins_id INT,
             editor_id INT,
-            password NVARCHAR(255),
             ins_role NVARCHAR(15),
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE(),
@@ -93,13 +85,11 @@ TABLE_DEFINITIONS = {
         CREATE TABLE stu (
             stu_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
-            phone NVARCHAR(12),
             first_name NVARCHAR(50),
             last_name NVARCHAR(50),
             sex INT,
             city NVARCHAR(100),
             access VARCHAR(MAX) DEFAULT '{}',
-            password NVARCHAR(255),
             comment NVARCHAR(MAX),
             birth_date NVARCHAR(4),
             ins_role NVARCHAR(15),
@@ -130,7 +120,6 @@ TABLE_DEFINITIONS = {
         CREATE TABLE capacity (
             capacity_id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT UNIQUE,
-            phone NVARCHAR(12),
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE(),
             CONSTRAINT fk_capacity_user FOREIGN KEY (user_id) REFERENCES users(user_id)
@@ -142,7 +131,6 @@ TABLE_DEFINITIONS = {
             capacity_id INT FOREIGN KEY REFERENCES capacity(capacity_id),
             package_name NVARCHAR(50),
             user_id INT,
-            phone NVARCHAR(12),
             total_allowed INT DEFAULT 0,
             allowed INT DEFAULT 0,
             used INT DEFAULT 0,
@@ -208,7 +196,6 @@ TABLE_DEFINITIONS = {
         CREATE TABLE scores (
             scores_id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
-            phone NVARCHAR(12),
             quiz_score NVARCHAR(MAX),
             brain_fields NVARCHAR(MAX),
             brain_categories NVARCHAR(MAX),
@@ -223,7 +210,6 @@ TABLE_DEFINITIONS = {
         CREATE TABLE scl_scores (
             scores_id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
-            phone NVARCHAR(12),
             scl_date NVARCHAR(MAX),
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE(),
@@ -235,7 +221,6 @@ TABLE_DEFINITIONS = {
         CREATE TABLE result_state (
             result_state_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
-            phone NVARCHAR(12),
             t_state NVARCHAR(100),
             r_state NVARCHAR(100),
             e_state NVARCHAR(100),
@@ -252,7 +237,6 @@ TABLE_DEFINITIONS = {
         CREATE TABLE hedayat_fields (
             id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
-            phone NVARCHAR(12),
             suggested NVARCHAR(MAX),
             other NVARCHAR(MAX),
             created_time DATETIME DEFAULT GETDATE(),
@@ -348,7 +332,6 @@ TABLE_DEFINITIONS = {
             token_id INT IDENTITY(1, 1) PRIMARY KEY,
             token VARCHAR(MAX),
             user_id INT UNIQUE,
-            phone NVARCHAR(12),
             role NVARCHAR(100) NULL,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE(),
