@@ -1,12 +1,12 @@
 import json
-import uuid
 from datetime import datetime
 
 import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
+from helper.quiz import answer_store
 
 
-def update_capacity(conn, cursor, request_data):
+def change_capacity(conn, cursor, request_data):
     """
     Update capacity with phone number of the user and log the changes.
     """
@@ -16,36 +16,36 @@ def update_capacity(conn, cursor, request_data):
         count = request_data.get("count")
 
         if not phone:
-            return None, "شماره تلفن الزامی است."
+            return None, None, "شماره تلفن الزامی است."
 
         if not kind:
-            return None, "نوع بسته الزامی است."
+            return None, None, "نوع بسته الزامی است."
 
         kind = kind.upper()
         if kind not in func_helper.PACKAGES_DATA:
             valid_packages = "، ".join(f"{package} ({func_helper.get_kind_name(package)})" for package in func_helper.PACKAGES_DATA.keys())
-            return None, f"نوع بسته معتبر نیست. بسته‌های معتبر: {valid_packages}"
+            return None, None, f"نوع بسته معتبر نیست. بسته‌های معتبر: {valid_packages}"
 
         if not isinstance(count, int):
-            return None, "تعداد باید یک عدد صحیح مثبت باشد."
+            return None, None, "تعداد باید یک عدد صحیح مثبت باشد."
 
         if count <= 0:
-            return None, "تعداد باید یک عدد صحیح مثبت باشد."
+            return None, None, "تعداد باید یک عدد صحیح مثبت باشد."
 
-        # Get user info from users table
+        # Get user user_info from users table
         query_user = 'SELECT user_id, role FROM users WHERE phone = ?'
         # Assuming the field name in users is 'id'. In your original snippet, you queried user_id,
         # so make sure this matches your actual schema.
         user_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_user, field=phone)
 
         if not user_res:
-            return None, "کاربری با این شماره تلفن یافت نشد."
+            return None, None, "کاربری با این شماره تلفن یافت نشد."
 
         user_id = user_res.user_id
         role = user_res.role
 
-        if role not in ["ins", "sch", "wCon"]:
-            return None, "نقش کاربر باید ins، sch یا wCon باشد."
+        if role not in ["ins", "sch", "ocon"]:
+            return None, None, "نقش کاربر باید ins، sch یا ocon باشد."
 
         # Check if capacity record exists
         query_capacity = 'SELECT capacity_id FROM capacity WHERE user_id = ?'
@@ -69,11 +69,14 @@ def update_capacity(conn, cursor, request_data):
             if capacity_result and capacity_result.get("id"):
                 capacity_id = capacity_result["id"]
             else:
-                return None, "خطا در ایجاد رکورد ظرفیت."
+                return None, None, "خطا در ایجاد رکورد ظرفیت."
 
         # Check if capacity_package record exists for this kind
         # NOTE: Added 'used' to the SELECT statement to capture it for logging
-        query_package = 'SELECT capacity_package_id, allowed, used FROM capacity_package WHERE user_id = ? AND package_name = ?'
+        query_package = (
+            'SELECT capacity_package_id, total_allowed, allowed, used '
+            'FROM capacity_package WHERE user_id = ? AND package_name = ?'
+        )
         package_res = db_helper.search_table(
             conn=conn,
             cursor=cursor,
@@ -87,14 +90,18 @@ def update_capacity(conn, cursor, request_data):
             # Update existing record
             capacity_package_id = package_res.capacity_package_id
             current_used = getattr(package_res, 'used', 0)
+            current_total_allowed = getattr(package_res, 'total_allowed', None)
+            if current_total_allowed is None:
+                current_total_allowed = package_res.allowed + current_used
             new_allowed = package_res.allowed + count
+            new_total_allowed = current_total_allowed + count
 
             db_helper.update_record(
                 conn=conn,
                 cursor=cursor,
                 table_name="capacity_package",
-                update_fields=["allowed", "edited_time"],
-                update_values=[new_allowed, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
+                update_fields=["total_allowed", "allowed", "edited_time"],
+                update_values=[new_total_allowed, new_allowed, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
                 condition="capacity_package_id = ?",
                 condition_values=[capacity_package_id]
             )
@@ -109,8 +116,8 @@ def update_capacity(conn, cursor, request_data):
 
         else:
             # Insert new record
-            field_package = '([capacity_id], [user_id], [phone], [package_name], [allowed])'
-            values_package = (capacity_id, user_id, phone, kind, count)
+            field_package = '([capacity_id], [user_id], [phone], [package_name], [total_allowed], [allowed])'
+            values_package = (capacity_id, user_id, phone, kind, count, count)
 
             # Pass id_column to capture the newly generated capacity_package_id
             insert_result = db_helper.insert_value(
@@ -154,41 +161,41 @@ def update_capacity(conn, cursor, request_data):
                 capacity_result[pkg_name] = pkg.get("allowed", 0) if isinstance(pkg, dict) else getattr(pkg, "allowed",
                                                                                                         0)
 
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, {
             "phone": phone,
             "capacity": capacity_result
-        }
+        }, ""
 
     except Exception as e:
         func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/admin_request", "update_capacity", str(e), request_data, {}
+            conn, cursor, "ag_api/admin_request", "change_capacity", str(e), request_data, {}
         )
-        return None, f"خطا در به‌روزرسانی ظرفیت: {str(e)}"
+        return None, None, f"خطا در به‌روزرسانی ظرفیت: {str(e)}"
 
 
 def get_user_info(conn, cursor, request_data):
     """
-    Get user info by phone number.
+    Get user user_info by phone number.
     
     Requirements:
     - Request data has phone
-    - Get information from users and ins, sch, wCon, con, stu tables
-    - For wcon, sch, ins return capacity
-    - Return user info
+    - Get information from users and ins, sch, ocon, con, stu tables
+    - For ocon, sch, ins return capacity
+    - Return user user_info
     """
     try:
         phone = request_data.get("phone")
 
         if not phone:
-            return None, "شماره تلفن الزامی است."
+            return None, None, "شماره تلفن الزامی است."
 
-        # Get user info from users table
+        # Get user user_info from users table
         query_user = 'SELECT user_id, role FROM users WHERE phone = ?'
         user_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_user, field=phone)
 
         if not user_res:
-            return None, "کاربری با این شماره تلفن یافت نشد."
+            return None, None, "کاربری با این شماره تلفن یافت نشد."
 
         user_id = user_res.user_id
         role = user_res.role
@@ -240,19 +247,19 @@ def get_user_info(conn, cursor, request_data):
                 }
                 user_info["capacity"] = capacity_info
 
-        elif role == "wCon":
-            query_role = 'SELECT wCon_id, first_name, last_name, sex, verify FROM wCon WHERE phone = ?'
+        elif role == "ocon":
+            query_role = 'SELECT ocon_id, first_name, last_name, sex, verify FROM ocon WHERE phone = ?'
             role_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_role, field=phone)
             if role_res:
                 user_info.update({
-                    "wCon_id": role_res.wCon_id,
+                    "ocon_id": role_res.ocon_id,
                     "first_name": role_res.first_name,
                     "last_name": role_res.last_name,
                     "sex": role_res.sex,
                     "verify": role_res.verify
                 })
 
-                # Get capacity for wCon
+                # Get capacity for ocon
                 query_capacity = 'SELECT package_name, allowed, used FROM capacity_package WHERE user_id = ?'
                 capacity_res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query_capacity, field=user_id)
                 capacity_info = {
@@ -301,14 +308,14 @@ def get_user_info(conn, cursor, request_data):
                         access_data = {}
                     user_info["access"] = access_data
 
-        token = str(uuid.uuid4())
-        return token, user_info
+        token = func_helper.get_tracking_code()
+        return token, user_info, ""
 
     except Exception as e:
         func_helper.service_exception_error_logging(
             conn, cursor, "ag_api/admin_request", "get_user_info", str(e), request_data, {}
         )
-        return None, f"خطا در دریافت اطلاعات کاربر: {str(e)}"
+        return None, None, f"خطا در دریافت اطلاعات کاربر: {str(e)}"
 
 
 def check_student_quiz_answer(conn, cursor, request_data):
@@ -316,7 +323,7 @@ def check_student_quiz_answer(conn, cursor, request_data):
     Check student quiz answer and student state.
     
     Requirements:
-    - With quiz_answer table check student quiz answer
+    - With quiz_attempt and quiz_question_answer tables check student quiz answer
     - Check student state (in stu table with access field for permission and limits)
     - Return object of student quiz answer and student state
     """
@@ -324,14 +331,14 @@ def check_student_quiz_answer(conn, cursor, request_data):
         phone = request_data.get("phone")
 
         if not phone:
-            return None, "شماره تلفن الزامی است."
+            return None, None, "شماره تلفن الزامی است."
 
-        # Get student info
+        # Get student user_info
         query_stu = 'SELECT user_id, first_name, last_name, access FROM stu WHERE phone = ?'
         stu_res = db_helper.search_table(conn=conn, cursor=cursor, query=query_stu, field=phone)
 
         if not stu_res:
-            return None, "دانش‌آموزی با این شماره تلفن یافت نشد."
+            return None, None, "دانش‌آموزی با این شماره تلفن یافت نشد."
 
         user_id = stu_res.user_id
 
@@ -342,8 +349,12 @@ def check_student_quiz_answer(conn, cursor, request_data):
         except (json.JSONDecodeError, TypeError):
             access_data = {}
 
-        # Get quiz answers
-        query_quiz = 'SELECT quiz_id, quiz_kind, answers, state FROM quiz_answer WHERE user_id = ? ORDER BY quiz_id ASC'
+        query_quiz = """
+            SELECT id, quiz_id, quiz_kind, state
+            FROM quiz_attempt
+            WHERE user_id = ?
+            ORDER BY quiz_kind ASC, quiz_id ASC
+        """
         quiz_res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query_quiz, field=user_id)
 
         quiz_answers = []
@@ -351,7 +362,7 @@ def check_student_quiz_answer(conn, cursor, request_data):
             quiz_answers.append({
                 "quiz_id": quiz.get("quiz_id"),
                 "quiz_kind": quiz.get("quiz_kind"),
-                "answers": quiz.get("answers"),
+                "answers": answer_store.get_answers_for_attempt(conn, cursor, quiz.get("id")),
                 "state": quiz.get("state")
             })
 
@@ -388,11 +399,11 @@ def check_student_quiz_answer(conn, cursor, request_data):
             "access": access_data
         }
 
-        token = str(uuid.uuid4())
-        return token, result
+        token = func_helper.get_tracking_code()
+        return token, result, ""
 
     except Exception as e:
         func_helper.service_exception_error_logging(
             conn, cursor, "ag_api/admin_request", "check_student_quiz_answer", str(e), request_data, {}
         )
-        return None, f"خطا در بررسی پاسخ‌های آزمون دانش‌آموز: {str(e)}"
+        return None, None, f"خطا در بررسی پاسخ‌های آزمون دانش‌آموز: {str(e)}"

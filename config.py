@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 """
 Central configuration for paths and tokens used across the backend.
@@ -8,7 +9,7 @@ deployment environments without changing code.
 """
 
 # Base path for all file storage
-BASE_PATH = os.getenv("AG_BASE_PATH", "D:/WebSites/AGB2B")
+BASE_PATH = os.getenv("AG_BASE_PATH", "D:/WebSites/TestProjects")
 
 # Media / file storage directories
 INS_PIC_DIR = os.getenv("AG_INS_PIC_DIR", os.path.join(BASE_PATH, "Media", "InsPic"))
@@ -32,6 +33,32 @@ DEFAULT_REPORT_PATH = os.getenv(
 DEFAULT_REPORT2_PATH = os.getenv(
     "AG_DEFAULT_REPORT2_PATH",
     os.path.join(REPORTS_DIR, "default", "Report2.pdf"),
+)
+
+# Report templates used by the background scheduler.
+REPORT1_TEMPLATE_PATH = Path(
+    os.getenv("AG_REPORT1_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report1.docx"))
+)
+REPORT2_TEMPLATE_PATH = Path(
+    os.getenv("AG_REPORT2_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report2.docx"))
+)
+REPORT3_TEMPLATE_PATH = Path(
+    os.getenv("AG_REPORT3_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report3.docx"))
+)
+REPORT5_TEMPLATE_PATH = Path(
+    os.getenv("AG_REPORT5_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report5.docx"))
+)
+OCD_TEMPLATE_PATH = Path(
+    os.getenv("AG_OCD_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "ocd.docx"))
+)
+ANX_TEMPLATE_PATH = Path(
+    os.getenv("AG_ANX_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "anx.docx"))
+)
+DEP_TEMPLATE_PATH = Path(
+    os.getenv("AG_DEP_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "dep.docx"))
+)
+BRAIN_EXCEL_PATH = Path(
+    os.getenv("AG_BRAIN_EXCEL_PATH", str(Path(BASE_PATH) / "FileAG" / "Brain.xlsx"))
 )
 
 # Developer token (for internal/testing use)
@@ -69,11 +96,12 @@ REDIS_PORT = int(os.getenv("AG_REDIS_PORT", "6379"))
 REDIS_PASSWORD = os.getenv("AG_REDIS_PASSWORD", "")
 REDIS_DB = int(os.getenv("AG_REDIS_DB", "1"))
 REDIS_CACHE_OTP = str(os.getenv("AG_REDIS_CACHE_OTP", "verify_cache_AG"))
+REDIS_QUEUE_NAME = os.getenv("AG_REDIS_QUEUE_NAME", "userAGB2BReport")
 
 # Database Configuration
 DB_DRIVER = os.getenv("AG_DB_DRIVER", "ODBC Driver 17 for SQL Server")
 DB_SERVER = os.getenv("AG_DB_SERVER", "localhost,1433")
-DB_DATABASE = os.getenv("AG_DB_DATABASE", "AGB2B")
+DB_DATABASE = os.getenv("AG_DB_DATABASE", "AGB2B_COPY")
 DB_UID = os.getenv("AG_DB_UID", "mgh27")
 DB_PWD = os.getenv("AG_DB_PWD", "m2711gH9985")
 DB_TRUST_CERT = os.getenv("AG_DB_TRUST_CERT", "yes")

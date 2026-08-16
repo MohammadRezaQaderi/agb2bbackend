@@ -9,3 +9,13 @@ openpyxl
 prometheus_client
 httpx
 cryptography
+redis==5.2.1
+arabic_reshaper==3.0.0
+docx2pdf==0.1.8
+lxml==5.3.0
+matplotlib==3.10.0
+numpy==2.2.2
+python-bidi
+python-docx
+pywin32; platform_system == "Windows"
+xlwings==0.33.6

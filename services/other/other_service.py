@@ -1,4 +1,4 @@
-import uuid, json, httpx
+import json, httpx
 from datetime import datetime
 
 import helper.db.db_helper as db_helper
@@ -47,7 +47,7 @@ def normalize_persian_text(text):
     text = text.replace("\u0643", "\u06A9")
     return text
 
-def select_all_products(conn, cursor):
+def get_all_products(conn, cursor):
     query = """
         SELECT 
             product_id AS id, 
@@ -69,11 +69,11 @@ def select_all_products(conn, cursor):
         }
         for p in res
     ]
-    token = str(uuid.uuid4())
-    return token, products_info
+    token = func_helper.get_tracking_code()
+    return token, products_info, ""
 
 
-def select_users_transactions(conn, cursor, request_data, info):
+def get_transactions(conn, cursor, request_data, user_info):
     try:
         query = """
                 SELECT 
@@ -87,7 +87,7 @@ def select_users_transactions(conn, cursor, request_data, info):
                 WHERE user_id = ? 
                 ORDER BY created_time DESC
             """
-        res = db_helper.search_allin_table(conn, cursor, query, str(info["user_id"]))
+        res = db_helper.search_allin_table(conn, cursor, query, str(user_info["user_id"]))
         transactions_info = []
         for p in res:
             try:
@@ -126,14 +126,49 @@ def select_users_transactions(conn, cursor, request_data, info):
                     "result": p[4],
                     "date": p[5]
                 })
-        token = str(uuid.uuid4())
-        return token, transactions_info
+        token = func_helper.get_tracking_code()
+        return token, transactions_info, ""
     except Exception as e:
         print(e)
-        return None, None
+        return None, None, "مشکلی در دریافت لیست تراکنش‌ها رخ داده است."
 
 
-def get_order_status(conn, cursor, data, info):
+def apply_discount(conn, cursor, request_data, user_info):
+    try:
+        query = 'SELECT id, discount_percentage, count, status, count_apply, expire_time FROM discounts WHERE code = ?'
+        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["discount_code"])
+        if not res:
+            return None, None, "کد تخفیف مد نظر شما موجود نیست."
+
+        if res.expire_time and datetime.now() > res.expire_time:
+            return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
+        if res.status == 'expired':
+            return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
+        if res.count == 0:
+            return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
+
+        field = '([code], [status], [phone], [user_id])'
+        values = (request_data["discount_code"], "APPLY CODE", user_info["phone"], user_info["user_id"])
+        db_helper.insert_value(conn=conn, cursor=cursor, table_name='using_discount', fields=field, values=values)
+        db_helper.update_record(
+            conn, cursor, "discounts", ["count_apply", "edited_time"], [
+                res.count_apply + 1,
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ], "id = ?", [res.id]
+        )
+
+        token = func_helper.get_tracking_code()
+        new_total = (round(int(request_data["total_value"]) * (1 - res.discount_percentage))) / 100
+        return token, {"new_total": new_total}, ""
+    except Exception as e:
+        print("error occurred in apply discounts", e)
+        func_helper.service_exception_error_logging(
+            conn, cursor, "ag_api/other", "apply_discount", str(e), request_data, user_info
+        )
+        return None, None, "در پردازش کد تخفیف مشکلی پیش آمده"
+
+
+def get_order_status(conn, cursor, data, user_info):
     try:
         query = """
                     SELECT 
@@ -149,7 +184,7 @@ def get_order_status(conn, cursor, data, info):
                     ORDER BY created_time DESC
                 """
 
-        res = db_helper.search_allin_table(conn, cursor, query, [str(info["user_id"]), str(data["payment_id"])])
+        res = db_helper.search_allin_table(conn, cursor, query, [str(user_info["user_id"]), str(data["payment_id"])])
         if len(res) != 0:
             status = res[0][2]
             transactions_info = {
@@ -164,20 +199,20 @@ def get_order_status(conn, cursor, data, info):
         else:
             status = "UNDIFINE"
             transactions_info = {}
-        token = str(uuid.uuid4())
+        token = func_helper.get_tracking_code()
         return token, transactions_info, status
     except Exception as e:
         print(e)
-        return None, None, None
+        return None, None, "مشکلی در دریافت وضعیت سفارش رخ داده است."
 
 
-def mellat_request_created(conn, cursor, data, info):
+def mellat_request_created(conn, cursor, data, user_info):
     try:
         token = 'eyJhbGciOiJIUzI1NiJ9.eyJSb2xlIjoiQWRtaW4iLCJJc3N1ZXIiOiIwMUZhcmRha2hlaWxpc2FieiIsIlVzZXJuYW1lIjoiTXJxMjciLCJleHAiOjE3NTMwODc5NzcsImlhdCI6MTc1MzA4Nzk3N30.mlcxgBMXIjmw04DPeMkSL5Ijqlg-ifZXQnw_d889qvM'
         endpoint = "b2b"
         try:
-            data["user_id"] = info.get("user_id")
-            data["phone"] = info.get("phone")
+            data["user_id"] = user_info.get("user_id")
+            data["phone"] = user_info.get("phone")
             with httpx.Client() as client:
                 request_data = {
                     "token": token,
@@ -207,8 +242,8 @@ def mellat_request_created(conn, cursor, data, info):
             field = '([payment_id], [user_id], [phone], [state], [status], [price], [discount_price], [track_id], [result], [discount_id], [message], [product_data], [token])'
             values = (
                 data["payment_id"],
-                info["user_id"],
-                info["phone"],
+                user_info["user_id"],
+                user_info["phone"],
                 "SendPaymentGateway",
                 "PEND",
                 data["price"],
@@ -228,7 +263,7 @@ def mellat_request_created(conn, cursor, data, info):
             message = result.get("message", "Unknown error from payment gateway")
             field = '([payment_id], [user_id], [phone], [state], [status], [price], [discount_price], [track_id], [result], [discount_id], [message], [product_data], [token])'
             values = (
-                data["payment_id"], info["user_id"], info["phone"], "NOTREFID", "Error", data["price"],
+                data["payment_id"], user_info["user_id"], user_info["phone"], "NOTREFID", "Error", data["price"],
                 data["discount_price"], None, "", data["discount_id"], message,
                 json.dumps(data, ensure_ascii=False), None)
             db_helper.insert_value(conn=conn, cursor=cursor, table_name='payment_log', fields=field,
@@ -238,7 +273,7 @@ def mellat_request_created(conn, cursor, data, info):
     except Exception as e:
         field = '([payment_id], [user_id], [phone], [state], [status], [price], [discount_price], [track_id], [result], [discount_id], [message], [product_data], [token])'
         values = (
-            data["payment_id"], info["user_id"], info["phone"], "MellatGatewayException", "Bug", data["price"],
+            data["payment_id"], user_info["user_id"], user_info["phone"], "MellatGatewayException", "Bug", data["price"],
             data["discount_price"], None, "مشکل در درگاه بانک ملت", data["discount_id"], str(e),
             json.dumps(data, ensure_ascii=False), None)
         db_helper.insert_value(conn=conn, cursor=cursor, table_name='payment_log', fields=field,
@@ -246,9 +281,9 @@ def mellat_request_created(conn, cursor, data, info):
         return None, str(e), None
 
 
-def order_payment(conn, cursor, request_data, info):
+def order_payment(conn, cursor, request_data, user_info):
     try:
-        phone = info["phone"]
+        phone = user_info["phone"]
 
         # Expected request_data example:
         # {
@@ -274,29 +309,29 @@ def order_payment(conn, cursor, request_data, info):
         discount_id = None
         discount_percentage = None
         if request_data.get("discount_code"):
-            query = 'SELECT id, discount_percentage, count, status, used_apply, expire_time FROM discount WHERE code = ?'
+            query = 'SELECT id, discount_percentage, count, status, used_apply, expire_time FROM discounts WHERE code = ?'
             res_discount = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["discount_code"])
             if not res_discount:
-                return None, None, "کد تخفیف شما موجود نیست.", None
+                return None, None, "کد تخفیف شما موجود نیست."
             elif res_discount:
                 if datetime.now() > res_discount.expire_time:
-                    return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده.", None
+                    return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
                 elif res_discount.status == 'EXPIRED':
-                    return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده.", None
+                    return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
                 elif res_discount.count == 0:
-                    return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته.", None
+                    return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
                 else:
                     discount_id = res_discount.id
                     discount_percentage = res_discount.discount_percentage
                     field = '([code], [status], [phone], [user_id])'
-                    values = (request_data["discount_code"], "GOPAYMENT", info["phone"], info["user_id"])
+                    values = (request_data["discount_code"], "GOPAYMENT", user_info["phone"], user_info["user_id"])
                     res_cap = db_helper.insert_value(conn=conn, cursor=cursor, table_name='using_discount',
                                                      fields=field,
                                                      values=values)
                     db_helper.update_record(
                         conn,
                         cursor,
-                        "discount",
+                        "discounts",
                         ["used_apply", "edited_time"],
                         [
                             res_discount.used_apply + 1,
@@ -306,7 +341,7 @@ def order_payment(conn, cursor, request_data, info):
                         [res_discount.id],
                     )
 
-        # Calculate price based on selected packages and discount.
+        # Calculate price based on selected packages and discounts.
         price, discount_price, ag_count, scl_count = func_helper.get_price_payment(
             request_data, discount_percentage=discount_percentage
         )
@@ -330,21 +365,21 @@ def order_payment(conn, cursor, request_data, info):
             "gateway": "mellat",
             "discount_id": discount_id,
         }
-        return None, None, "متاسفانه فعلا درگاه پرداخت در دسترس نیست", None
-        ref_id, message, url = mellat_request_created(conn, cursor, product_data, info)
-        return token, ref_id, message, url
+        return None, None, "متاسفانه فعلا درگاه پرداخت در دسترس نیست"
+        ref_id, message, url = mellat_request_created(conn, cursor, product_data, user_info)
+        return func_helper.get_tracking_code(), {"ref_id": ref_id, "url": url}, message
     except Exception as e:
         print(e)
-        return None, None, "خطا در دسترسی به پرداخت", None
+        return None, None, "خطا در دسترسی به پرداخت"
 
 
-def get_report_data(conn, cursor, request_data, info):
+def get_report_data(conn, cursor, request_data, user_info):
     try:
         kind = request_data.get("report_type", "").upper()
         student_id = request_data.get("student_id")
         
         if not student_id:
-            return None, None
+            return None, None, "شناسه دانش‌آموز ارسال نشده است."
         
         if kind == "AG":
             # Fetch result_state from result_state table
@@ -436,8 +471,8 @@ def get_report_data(conn, cursor, request_data, info):
                 "brain_categories": brain_categories_data
             }
             
-            token = str(uuid.uuid4())
-            return token, report_data
+            token = func_helper.get_tracking_code()
+            return token, report_data, ""
         elif kind == "SCL":
             # Fetch scl_date from scl_scores table
             query_scl_scores = """
@@ -471,11 +506,93 @@ def get_report_data(conn, cursor, request_data, info):
                 "scl_date": scl_date_data
             }
             
-            token = str(uuid.uuid4())
-            return token, report_data
+            token = func_helper.get_tracking_code()
+            return token, report_data, ""
         else:
-            token = str(uuid.uuid4())
-            return token, {}
+            token = func_helper.get_tracking_code()
+            return token, {}, ""
     except Exception as e:
         print(e)
-        return None, None
+        return None, None, "خطا در دریافت اطلاعات گزارش."
+
+
+def get_comments(conn, cursor):
+    try:
+        query = """
+            SELECT TOP 100
+                id,
+                name,
+                comment,
+                rating,
+                persian_date
+            FROM comments
+            ORDER BY created_time DESC
+        """
+        res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query)
+        comments = [
+            {
+                "id": p["id"],
+                "name": p["name"],
+                "comment": p["comment"],
+                "rating": p["rating"],
+                "persian_date": p["persian_date"],
+            }
+            for p in res
+        ]
+        return func_helper.get_tracking_code(), comments, ""
+    except Exception as e:
+        print("error occurred in get comments", e)
+        func_helper.service_exception_error_logging(
+            conn, cursor, "ag_api/other", "get_comments", str(e), {}, {}
+        )
+        return None, None, "خطا در دریافت نظرات."
+
+
+def add_comment(conn, cursor, request_data):
+    try:
+        query = 'SELECT role, user_id FROM users WHERE phone = ?'
+        res_role = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
+        if res_role is None:
+            return None, None, "کاربر یافت نشد."
+
+        user_role = res_role[0]
+        db_name = ""
+        if user_role in ["ins", "sch"]:
+            if user_role == "ins":
+                query = 'SELECT user_id, name, phone FROM ins WHERE phone = ?'
+            else:
+                query = 'SELECT user_id, name, phone FROM sch WHERE phone = ?'
+            res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
+            if res_user is None:
+                return None, None, "اطلاعات کاربر یافت نشد."
+            db_name = res_user[1]
+        elif user_role in ["con", "ocon"]:
+            if user_role == "con":
+                query = 'SELECT user_id, first_name, last_name, phone FROM con WHERE phone = ?'
+            else:
+                query = 'SELECT user_id, first_name, last_name, phone FROM ocon WHERE phone = ?'
+            res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
+            if res_user is None:
+                return None, None, "اطلاعات کاربر یافت نشد."
+            db_name = res_user[1] + " " + res_user[2]
+
+        field = '([name], [comment], [rating], [persian_date], [user_id], [phone], [db_name], [role])'
+        values = (
+            request_data["first_name"] + " " + request_data["last_name"],
+            request_data["comment"],
+            request_data["rating"],
+            request_data["date"],
+            res_role[1],
+            request_data["phone"],
+            db_name,
+            user_role,
+        )
+        db_helper.insert_value(conn=conn, cursor=cursor, table_name='comments', fields=field, values=values)
+        return func_helper.get_tracking_code(), None, "نظر شما با موفقیت ثبت شد."
+    except Exception as e:
+        conn.rollback()
+        print("error occurred in add comment", e)
+        func_helper.service_exception_error_logging(
+            conn, cursor, "ag_api/other", "add_comment", str(e), request_data, {}
+        )
+        return None, None, "خطا در ثبت نظر."
