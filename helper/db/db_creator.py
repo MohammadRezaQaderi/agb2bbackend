@@ -72,13 +72,12 @@ TABLE_DEFINITIONS = {
             first_name NVARCHAR(50),
             last_name NVARCHAR(50),
             sex INT DEFAULT 1,
-            ins_id INT,
+            owner_user_id INT,
             editor_id INT,
-            ins_role NVARCHAR(15),
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE(),
             CONSTRAINT fk_con_user FOREIGN KEY (user_id) REFERENCES users(user_id),
-            CONSTRAINT fk_con_owner_user FOREIGN KEY (ins_id) REFERENCES users(user_id)
+            CONSTRAINT fk_con_owner_user FOREIGN KEY (owner_user_id) REFERENCES users(user_id)
         )
     """,
     "stu": """
@@ -92,16 +91,15 @@ TABLE_DEFINITIONS = {
             access VARCHAR(MAX) DEFAULT '{}',
             comment NVARCHAR(MAX),
             birth_date NVARCHAR(4),
-            ins_role NVARCHAR(15),
-            ins_id INT,
-            con_id INT,
+            owner_user_id INT,
+            consultant_user_id INT,
             adder_id INT,
             editor_id INT,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE(),
             CONSTRAINT fk_stu_user FOREIGN KEY (user_id) REFERENCES users(user_id),
-            CONSTRAINT fk_stu_owner_user FOREIGN KEY (ins_id) REFERENCES users(user_id),
-            CONSTRAINT fk_stu_consultant_user FOREIGN KEY (con_id) REFERENCES users(user_id)
+            CONSTRAINT fk_stu_owner_user FOREIGN KEY (owner_user_id) REFERENCES users(user_id),
+            CONSTRAINT fk_stu_consultant_user FOREIGN KEY (consultant_user_id) REFERENCES users(user_id)
         )
     """,
     "setting": """
@@ -168,8 +166,8 @@ TABLE_DEFINITIONS = {
             quiz_id INT NOT NULL,
             state INT NOT NULL DEFAULT 1,
             remain_time INT NULL,
-            ins_id INT NULL,
-            con_id INT NULL,
+            owner_user_id INT NULL,
+            consultant_user_id INT NULL,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE(),
             CONSTRAINT uq_quiz_attempt_user_kind_quiz UNIQUE (user_id, quiz_kind, quiz_id),
@@ -332,7 +330,6 @@ TABLE_DEFINITIONS = {
             token_id INT IDENTITY(1, 1) PRIMARY KEY,
             token VARCHAR(MAX),
             user_id INT UNIQUE,
-            role NVARCHAR(100) NULL,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE(),
             CONSTRAINT uq_tokens_user UNIQUE (user_id),

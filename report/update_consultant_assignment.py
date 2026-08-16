@@ -108,7 +108,7 @@ def find_student(
         Tuple of (user_id, stu_id, current_con_id, phone, password) if found, None otherwise.
     """
     cursor.execute("""
-        SELECT s.user_id, s.stu_id, s.con_id, u.phone, CAST(NULL AS NVARCHAR(255)) AS password
+        SELECT s.user_id, s.stu_id, s.consultant_user_id AS con_id, u.phone, CAST(NULL AS NVARCHAR(255)) AS password
         FROM stu s
         INNER JOIN users u ON u.user_id = s.user_id
         WHERE s.user_id BETWEEN ? AND ? 
@@ -144,7 +144,7 @@ def update_student_consultant(
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("""
             UPDATE stu
-            SET con_id = ?, editor_id = ?, DC_Edited_Time = ?
+            SET consultant_user_id = ?, editor_id = ?, DC_Edited_Time = ?
             WHERE stu_id = ?
         """, con_id, editor_id, current_time, stu_id)
         return True

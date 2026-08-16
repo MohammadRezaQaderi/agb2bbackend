@@ -67,9 +67,8 @@ TABLE_DEFINITIONS = {
             first_name NVARCHAR(50),
             last_name NVARCHAR(50),
             sex INT DEFAULT 1,
-            ins_id INT,
+            owner_user_id INT,
             editor_id INT,
-            ins_role NVARCHAR(15),
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
         )
@@ -85,9 +84,8 @@ TABLE_DEFINITIONS = {
             access VARCHAR(MAX) DEFAULT '{}',
             comment NVARCHAR(MAX),
             birth_date NVARCHAR(4),
-            ins_role NVARCHAR(15),
-            ins_id INT,
-            con_id INT,
+            owner_user_id INT,
+            consultant_user_id INT,
             adder_id INT,
             editor_id INT,
             created_time DATETIME DEFAULT GETDATE(),
@@ -148,8 +146,8 @@ TABLE_DEFINITIONS = {
             quiz_id INT NOT NULL,
             state INT NOT NULL DEFAULT 1,
             remain_time INT NULL,
-            ins_id INT NULL,
-            con_id INT NULL,
+            owner_user_id INT NULL,
+            consultant_user_id INT NULL,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
         )
@@ -301,7 +299,6 @@ TABLE_DEFINITIONS = {
             token_id INT IDENTITY(1, 1) PRIMARY KEY,
             token VARCHAR(MAX),
             user_id INT UNIQUE,
-            role NVARCHAR(100) NULL,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
         )
@@ -546,11 +543,11 @@ def migrate():
 
         cursor.execute("""
             INSERT INTO stu (user_id, first_name, last_name, sex, city, access,
-                             comment, birth_date, ins_role, ins_id, con_id, adder_id, editor_id,
+                             comment, birth_date, owner_user_id, consultant_user_id, adder_id, editor_id,
                              created_time, edited_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (row.user_id, row.first_name, row.last_name, row.sex, row.city, access_json,
-              row.comment, row.birth_date, row.ins_role, row.ins_id, row.con_id,
+              row.comment, row.birth_date, row.ins_id, row.con_id,
               row.adder_id, row.editor_id, row.DC_Created_Time, row.DC_Edited_Time))
     conn.commit()
 
@@ -564,11 +561,11 @@ def migrate():
 
         cursor.execute("""
             INSERT INTO con (user_id, first_name, last_name, sex,
-                             ins_id, editor_id, ins_role,
+                             owner_user_id, editor_id,
                              created_time, edited_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (data['user_id'], data['first_name'], data['last_name'], sex_value,
-              data['ins_id'], data['editor_id'], data['ins_role'],
+              data['ins_id'], data['editor_id'],
               data['DC_Created_Time'], data['DC_Edited_Time']))
     conn.commit()
 
@@ -576,16 +573,15 @@ def migrate():
     print("Migrating tokens...")
     cursor.execute("SET IDENTITY_INSERT tokens ON")
     cursor.execute("""
-        SELECT t.*, u.role FROM tokens_old t 
-        LEFT JOIN users_old u ON t.user_id = u.user_id
+        SELECT t.* FROM tokens_old t
     """)
     migrated_token_user_ids = set()
     for row in cursor.fetchall():
         if row.user_id in migrated_token_user_ids: continue
         cursor.execute("""
-            INSERT INTO tokens (token_id, token, user_id, role, created_time, edited_time)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (row.token_id, row.token, row.user_id, row.role, row.DC_Created_Time, row.DC_Edited_Time))
+            INSERT INTO tokens (token_id, token, user_id, created_time, edited_time)
+            VALUES (?, ?, ?, ?, ?)
+        """, (row.token_id, row.token, row.user_id, row.DC_Created_Time, row.DC_Edited_Time))
         migrated_token_user_ids.add(row.user_id)
     cursor.execute("SET IDENTITY_INSERT tokens OFF")
     conn.commit()
@@ -619,7 +615,7 @@ def migrate():
     for row in cursor.fetchall():
         quiz_kind = getattr(row, "quiz_kind", None) or "AG"
         cursor.execute("""
-                INSERT INTO quiz_attempt (user_id, quiz_id, quiz_kind, state, ins_id, con_id, created_time, edited_time)
+                INSERT INTO quiz_attempt (user_id, quiz_id, quiz_kind, state, owner_user_id, consultant_user_id, created_time, edited_time)
                 OUTPUT INSERTED.id
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (row.user_id, row.quiz_id, quiz_kind, row.state, row.ins_id, row.con_id,
