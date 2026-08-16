@@ -8,22 +8,24 @@ import helper.func_helper as func_helper
 def get_info(conn, cursor, user_id):
     try:
         query = '''
-            SELECT c.con_id, u.phone, c.first_name, c.last_name, c.ins_id, c.ins_role
+            SELECT c.con_id, u.phone, c.first_name, c.last_name, c.owner_user_id,
+                   owner.role AS owner_role
             FROM con c
             INNER JOIN users u ON u.user_id = c.user_id
+            LEFT JOIN users owner ON owner.user_id = c.owner_user_id
             WHERE c.user_id = ?
         '''
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
-        if res.ins_role == "ins":
+        if res.owner_role == "ins":
             query_ins = 'SELECT name, logo FROM ins WHERE user_id = ?'
-            res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.ins_id)
+            res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.owner_user_id)
         else:
             query_ins = 'SELECT name, logo FROM sch WHERE user_id = ?'
-            res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.ins_id)
+            res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.owner_user_id)
         token = func_helper.get_tracking_code()
         response_info = {"phone": res.phone, "user_id": user_id, "id": res.con_id, "first_name": res.first_name,
                          "last_name": res.last_name, "role": 'con', "name": res_ins.name, "pic": res_ins.logo,
-                         "ins_id": res.ins_id}
+                         "owner_user_id": res.owner_user_id, "ins_id": res.owner_user_id}
         return token, response_info, ""
     except Exception as e:
         conn.rollback()
@@ -43,7 +45,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
     try:
         user_id = user_info["user_id"]
 
-        query = 'SELECT ins_id FROM con WHERE user_id = ?'
+        query = 'SELECT owner_user_id FROM con WHERE user_id = ?'
         res_info_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
 
         query_capacity = """
@@ -52,7 +54,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
                     WHERE user_id = ?
                 """
         res_capacity = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query_capacity,
-                                                 field=res_info_ins.ins_id)
+                                                 field=res_info_ins.owner_user_id)
 
         capacity_info = {
             row["package_name"]: {"allowed": row["allowed"], "used": row["used"]}
@@ -65,7 +67,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
         }
 
         queries = {
-            "stu_count": "SELECT COUNT(*) AS total FROM stu WHERE con_id = ?"
+            "stu_count": "SELECT COUNT(*) AS total FROM stu WHERE consultant_user_id = ?"
         }
 
         results = {key: db_helper.search_fetchall(conn, cursor, query, field=user_id) for key, query in queries.items()}
@@ -76,7 +78,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
             conn, cursor, user_id, "consultant_user_id"
         )
         if stu_package_count is None:
-            query_stu_access = "SELECT access FROM stu WHERE con_id = ?"
+            query_stu_access = "SELECT access FROM stu WHERE consultant_user_id = ?"
             res_stu_access = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query_stu_access, field=user_id)
 
             stu_package_count = {"AG": 0, "SCL": 0}
@@ -113,7 +115,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
             query_finish_quiz = """
                 SELECT COUNT(DISTINCT user_id) AS total 
                 FROM quiz_attempt 
-                WHERE con_id = ? AND quiz_kind = ? AND state = 2 AND quiz_id = ?
+                WHERE consultant_user_id = ? AND quiz_kind = ? AND state = 2 AND quiz_id = ?
             """
             res_finish_quiz = db_helper.search_fetchall(conn, cursor, query_finish_quiz,
                                                         field=(user_id, package_name, total_quizzes))
@@ -123,7 +125,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
             query_started_quiz = """
                 SELECT COUNT(DISTINCT user_id) AS total 
                 FROM quiz_attempt 
-                WHERE con_id = ? AND quiz_kind = ?
+                WHERE consultant_user_id = ? AND quiz_kind = ?
             """
             res_started_quiz = db_helper.search_fetchall(conn, cursor, query_started_quiz,
                                                          field=(user_id, package_name))
@@ -133,7 +135,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
             query_c_quiz = """
                 SELECT COUNT(*) AS total 
                 FROM quiz_attempt 
-                WHERE con_id = ? AND quiz_kind = ? AND state = 2
+                WHERE consultant_user_id = ? AND quiz_kind = ? AND state = 2
             """
             res_c_quiz = db_helper.search_fetchall(conn, cursor, query_c_quiz, field=(user_id, package_name))
             c_quiz = res_c_quiz[0]["total"] if res_c_quiz and res_c_quiz[0]["total"] else 0
@@ -142,7 +144,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
             query_total_first = """
                 SELECT COUNT(*) AS total 
                 FROM quiz_attempt 
-                WHERE con_id = ? AND quiz_kind = ?
+                WHERE consultant_user_id = ? AND quiz_kind = ?
             """
             res_total_first = db_helper.search_fetchall(conn, cursor, query_total_first, field=(user_id, package_name))
             total_first = res_total_first[0]["total"] if res_total_first and res_total_first[0]["total"] else 0
@@ -190,7 +192,7 @@ def get_report(conn, cursor, request_data, user_info):
                    s.city, s.access, s.comment
             FROM stu s
             INNER JOIN users u ON u.user_id = s.user_id
-            WHERE s.con_id = ?
+            WHERE s.consultant_user_id = ?
         '''
         res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
         report_info = []
@@ -222,7 +224,7 @@ def get_management_report(conn, cursor, request_data, user_info):
             SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex, s.city, s.access
             FROM stu s
             INNER JOIN users u ON u.user_id = s.user_id
-            WHERE s.con_id = ?
+            WHERE s.consultant_user_id = ?
         '''
         res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
 
@@ -326,7 +328,7 @@ def get_students(conn, cursor, request_data, user_info):
                    s.city, s.birth_date, s.access
             FROM stu s
             INNER JOIN users u ON u.user_id = s.user_id
-            WHERE s.con_id = ?
+            WHERE s.consultant_user_id = ?
         '''
         res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
         stu_info = []

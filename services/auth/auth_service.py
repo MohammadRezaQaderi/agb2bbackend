@@ -21,8 +21,8 @@ def _create_token(conn, cursor, user_info):
                 token_check_query = "SELECT token FROM tokens WHERE token = ?"
                 token_exists = db_helper.search_table(conn=conn, cursor=cursor, query=token_check_query, field=token)
                 if not token_exists:
-                    field = '([token], [user_id], [role])'
-                    values = (token, user_info[0], user_info[2])
+                    field = '([token], [user_id])'
+                    values = (token, user_info[0])
                     db_helper.insert_value(conn=conn, cursor=cursor, table_name="tokens", fields=field, values=values)
                     return token
         else:
