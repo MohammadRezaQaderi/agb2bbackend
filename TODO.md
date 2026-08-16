@@ -55,6 +55,21 @@ stable.
 
 ## P1 - Database And Transactions
 
+- [ ] Resolve duplicate database rows after architecture migration.
+  - `users.phone` still has duplicates, including same-role duplicates
+    (`ins+ins`, `ocon+ocon`, `sch+sch`) and cross-role duplicates
+    (`ins+con`, `ins+sch`).
+  - Decide whether one phone can own multiple roles. If yes, change the auth
+    model before adding a unique index on `users.phone`; if no, merge users and
+    move dependent rows intentionally.
+  - Known orphan duplicate users from `AGB2B_COPY`: `1685`, `3897`, `3898`,
+    `3899`; verify again before deleting in production data.
+  - `capacity` has duplicate `user_id` rows for `1684` and `3896`.
+    `capacity_package` has duplicate `(user_id, package_name)` rows for
+    `(1684, AG)`, `(1684, SCL)`, `(3896, AG)`, and `(3896, SCL)`.
+  - After cleanup, rerun the architecture migration so `ux_users_phone`,
+    `ux_capacity_user_id`, and `ux_capacity_package_user_package` can be
+    created when data is clean.
 - [ ] Stop committing after read queries in `helper/db/db_helper.py`.
   - `search_table`, `search_allin_table`, and `search_fetchall` call
     `conn.commit()` after SELECTs.
