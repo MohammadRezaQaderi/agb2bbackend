@@ -159,6 +159,38 @@ def drop_column_if_exists(
         print(f"WARN: skipped drop {table_name}.{column_name}: {exc}")
 
 
+def drop_default_constraints_for_column(
+    conn: Any,
+    cursor: Any,
+    table_name: str,
+    column_name: str,
+    dry_run: bool,
+) -> None:
+    cursor.execute(
+        """
+        SELECT dc.name
+        FROM sys.default_constraints dc
+        INNER JOIN sys.tables t ON t.object_id = dc.parent_object_id
+        INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+        INNER JOIN sys.columns c
+            ON c.object_id = t.object_id
+           AND c.column_id = dc.parent_column_id
+        WHERE s.name = 'dbo' AND t.name = ? AND c.name = ?
+        """,
+        table_name,
+        column_name,
+    )
+    for row in cursor.fetchall():
+        constraint_name = row[0]
+        run_sql(
+            conn,
+            cursor,
+            f"ALTER TABLE dbo.{quote_name(table_name)} DROP CONSTRAINT {quote_name(constraint_name)}",
+            dry_run,
+            f"drop default constraint {constraint_name} on {table_name}.{column_name}",
+        )
+
+
 def legacy_old_tables(cursor: Any) -> list[str]:
     cursor.execute(
         """
@@ -623,6 +655,7 @@ def alter_text_columns(conn: Any, cursor: Any, dry_run: bool) -> None:
     for table_name, column_name, definition in changes:
         if table_exists(cursor, table_name) and column_exists(cursor, table_name, column_name):
             try:
+                drop_default_constraints_for_column(conn, cursor, table_name, column_name, dry_run)
                 run_sql(
                     conn,
                     cursor,
@@ -635,7 +668,11 @@ def alter_text_columns(conn: Any, cursor: Any, dry_run: bool) -> None:
                 print(f"WARN: skipped alter {table_name}.{column_name}: {exc}")
 
 
-def run_migration(dry_run: bool, migrate_password_hash: bool, drop_legacy_tables: bool) -> None:
+def run_migration(
+    dry_run: bool,
+    migrate_password_hash: bool,
+    drop_legacy_tables: bool,
+) -> None:
     try:
         import pyodbc
     except ModuleNotFoundError as exc:
