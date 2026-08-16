@@ -108,8 +108,9 @@ def find_student(
         Tuple of (user_id, stu_id, current_con_id, phone, password) if found, None otherwise.
     """
     cursor.execute("""
-        SELECT s.user_id, s.stu_id, s.con_id, s.phone, s.password
+        SELECT s.user_id, s.stu_id, s.con_id, u.phone, CAST(NULL AS NVARCHAR(255)) AS password
         FROM stu s
+        INNER JOIN users u ON u.user_id = s.user_id
         WHERE s.user_id BETWEEN ? AND ? 
         AND s.first_name = ? 
         AND s.last_name = ?
@@ -479,4 +480,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-

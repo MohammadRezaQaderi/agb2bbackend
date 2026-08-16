@@ -39,7 +39,7 @@ class CapacityValidator:
         """
         try:
             self.cursor.execute("""
-                SELECT capacity_id, user_id, phone 
+                SELECT capacity_id, user_id
                 FROM capacity 
                 WHERE user_id = ?
             """, self.ins_id)
@@ -59,7 +59,6 @@ class CapacityValidator:
             return {
                 'capacity_id': capacity[0],
                 'user_id': capacity[1],
-                'phone': capacity[2],
                 'packages': [
                     {
                         'package_id': p[0],
@@ -304,15 +303,15 @@ def insert_student_to_db(
         user_id = cursor.fetchone()[0]
 
         cursor.execute("""
-            INSERT INTO stu (user_id, phone, first_name, last_name, sex,
+            INSERT INTO stu (user_id, first_name, last_name, sex,
                             city, ins_id, con_id, adder_id,
-                            editor_id, password, comment, birth_date, ins_role,
+                            editor_id, comment, birth_date, ins_role,
                             created_time, edited_time, access)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-                       user_id, phone, first_name, last_name, sex,
+                       user_id, first_name, last_name, sex,
                        city_str, ins_id, con_id, adder_id, adder_id,
-                       password, None, birth_date, 'sch',
+                       None, birth_date, 'sch',
                        current_time, current_time, '{"AG": {"permission": 1, "limit": 0}}')
 
         return user_id

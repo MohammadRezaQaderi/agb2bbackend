@@ -24,8 +24,8 @@ from config import REPORT_OUTPUT_DIR, REPORT_DEFAULT_INS_ID
 COLUMN_MAPPING: Dict[str, str] = {
     'first_name': 's.first_name',
     'last_name': 's.last_name',
-    'phone': 's.phone',
-    'password': 's.password',
+    'phone': 'u.phone',
+    'password': 'CAST(NULL AS NVARCHAR(255)) as password',
     'gender': """
         CASE 
             WHEN s.sex = 1 THEN 'پسر'
@@ -75,6 +75,7 @@ def get_students_by_ins_id(
         query = f"""
         SELECT {select_clause}
         FROM stu s
+        INNER JOIN users u ON u.user_id = s.user_id
         WHERE s.ins_id = ?
         ORDER BY s.first_name, s.last_name
         """

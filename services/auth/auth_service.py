@@ -21,8 +21,8 @@ def _create_token(conn, cursor, user_info):
                 token_check_query = "SELECT token FROM tokens WHERE token = ?"
                 token_exists = db_helper.search_table(conn=conn, cursor=cursor, query=token_check_query, field=token)
                 if not token_exists:
-                    field = '([token], [user_id], [phone], [role])'
-                    values = (token, user_info[0], user_info[1], user_info[2])
+                    field = '([token], [user_id], [role])'
+                    values = (token, user_info[0], user_info[2])
                     db_helper.insert_value(conn=conn, cursor=cursor, table_name="tokens", fields=field, values=values)
                     return token
         else:
@@ -64,24 +64,24 @@ def sign_in(conn, cursor, request_data):
         else:
             return None, None, "رمز عبور شما درست نمی‌باشد."
         if res.role == "ins":
-            query = 'SELECT verify FROM ins WHERE phone = ?'
-            res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
+            query = 'SELECT verify FROM ins WHERE user_id = ?'
+            res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=res.user_id)
             if res_verify.verify == 0:
                 remove_token(conn=conn, cursor=cursor, request_data={"user_id": res.user_id},
                              user_info={"user_id": res.user_id, "phone": phone})
                 return None, None, "شما هنوز احراز هویت انجام نداده‌اید."
             _, user_info, _ = institute_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
         elif res.role == "sch":
-            query = 'SELECT verify FROM sch WHERE phone = ?'
-            res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
+            query = 'SELECT verify FROM sch WHERE user_id = ?'
+            res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=res.user_id)
             if res_verify.verify == 0:
                 remove_token(conn=conn, cursor=cursor, request_data={"user_id": res.user_id},
                              user_info={"user_id": res.user_id, "phone": phone})
                 return None, None, "شما هنوز احراز هویت انجام نداده‌اید."
             _, user_info, _ = school_service.get_info(conn=conn, cursor=cursor, user_id=res.user_id)
         elif res.role == "ocon":
-            query = 'SELECT verify FROM ocon WHERE phone = ?'
-            res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
+            query = 'SELECT verify FROM ocon WHERE user_id = ?'
+            res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=res.user_id)
             if res_verify.verify == 0:
                 remove_token(conn=conn, cursor=cursor, request_data={"user_id": res.user_id},
                              user_info={"user_id": res.user_id, "phone": phone})
@@ -200,26 +200,26 @@ def send_otp(conn, cursor, redis_db, request_data):
         if not func_helper.check_security_code(code=request_data["code"], check=request_data["check"]):
             return None, None, "کد امنیتی وارد شده اشتباه است."
 
-        query = 'SELECT phone, role FROM users WHERE phone = ?'
+        query = 'SELECT user_id, phone, role FROM users WHERE phone = ?'
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
         if res is None:
             return None, None, "کاربری با این شماره تلفن موجود نمی‌باشد."
 
         if res.role == "ins" and type_otp == "verify":
-            query = 'SELECT verify FROM ins WHERE phone = ?'
-            res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
+            query = 'SELECT verify FROM ins WHERE user_id = ?'
+            res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=res.user_id)
             if res_verify.verify == 1:
                 return None, None, "شما از قبل احراز هویت نموده‌اید."
 
         if res.role == "sch" and type_otp == "verify":
-            query = 'SELECT verify FROM sch WHERE phone = ?'
-            res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
+            query = 'SELECT verify FROM sch WHERE user_id = ?'
+            res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=res.user_id)
             if res_verify.verify == 1:
                 return None, None, "شما از قبل احراز هویت نموده‌اید."
 
         if res.role == "ocon" and type_otp == "verify":
-            query = 'SELECT verify FROM ocon WHERE phone = ?'
-            res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
+            query = 'SELECT verify FROM ocon WHERE user_id = ?'
+            res_verify = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=res.user_id)
             if res_verify.verify == 1:
                 return None, None, "شما از قبل احراز هویت نموده‌اید."
 

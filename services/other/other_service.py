@@ -556,22 +556,23 @@ def add_comment(conn, cursor, request_data):
             return None, None, "کاربر یافت نشد."
 
         user_role = res_role[0]
+        user_id = res_role[1]
         db_name = ""
         if user_role in ["ins", "sch"]:
             if user_role == "ins":
-                query = 'SELECT user_id, name, phone FROM ins WHERE phone = ?'
+                query = 'SELECT user_id, name FROM ins WHERE user_id = ?'
             else:
-                query = 'SELECT user_id, name, phone FROM sch WHERE phone = ?'
-            res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
+                query = 'SELECT user_id, name FROM sch WHERE user_id = ?'
+            res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
             if res_user is None:
                 return None, None, "اطلاعات کاربر یافت نشد."
             db_name = res_user[1]
         elif user_role in ["con", "ocon"]:
             if user_role == "con":
-                query = 'SELECT user_id, first_name, last_name, phone FROM con WHERE phone = ?'
+                query = 'SELECT user_id, first_name, last_name FROM con WHERE user_id = ?'
             else:
-                query = 'SELECT user_id, first_name, last_name, phone FROM ocon WHERE phone = ?'
-            res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
+                query = 'SELECT user_id, first_name, last_name FROM ocon WHERE user_id = ?'
+            res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
             if res_user is None:
                 return None, None, "اطلاعات کاربر یافت نشد."
             db_name = res_user[1] + " " + res_user[2]

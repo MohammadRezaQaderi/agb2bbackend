@@ -77,7 +77,13 @@ def _package_permission(access, kind):
 
 def select_student_info(conn, cursor, user_id):
     try:
-        query = 'SELECT stu_id, user_id, phone, first_name, last_name, sex, city, access, ins_id, con_id, birth_date, ins_role FROM stu WHERE user_id = ?'
+        query = '''
+            SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex, s.city,
+                   s.access, s.ins_id, s.con_id, s.birth_date, s.ins_role
+            FROM stu s
+            INNER JOIN users u ON u.user_id = s.user_id
+            WHERE s.user_id = ?
+        '''
         res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
         token = str(uuid.uuid4())
         if res.ins_role in ["ins", "sch"]:

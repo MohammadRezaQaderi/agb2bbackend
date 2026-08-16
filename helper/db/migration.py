@@ -29,10 +29,8 @@ TABLE_DEFINITIONS = {
         CREATE TABLE ins (
             ins_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
-            phone NVARCHAR(12),
             name NVARCHAR(100),
             logo VARCHAR(MAX),
-            password NVARCHAR(255),
             verify INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
@@ -42,10 +40,8 @@ TABLE_DEFINITIONS = {
         CREATE TABLE sch (
             sch_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
-            phone NVARCHAR(12),
             name NVARCHAR(100),
             logo VARCHAR(MAX),
-            password NVARCHAR(255),
             verify INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
@@ -55,11 +51,9 @@ TABLE_DEFINITIONS = {
         CREATE TABLE ocon (
             ocon_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
-            phone NVARCHAR(12),
             first_name NVARCHAR(50),
             last_name NVARCHAR(50),
             logo VARCHAR(MAX),
-            password NVARCHAR(255),
             sex INT DEFAULT 1,
             verify INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
@@ -70,13 +64,11 @@ TABLE_DEFINITIONS = {
         CREATE TABLE con (
             con_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
-            phone NVARCHAR(12),
             first_name NVARCHAR(50),
             last_name NVARCHAR(50),
             sex INT DEFAULT 1,
             ins_id INT,
             editor_id INT,
-            password NVARCHAR(255),
             ins_role NVARCHAR(15),
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
@@ -86,13 +78,11 @@ TABLE_DEFINITIONS = {
         CREATE TABLE stu (
             stu_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
-            phone NVARCHAR(12),
             first_name NVARCHAR(50),
             last_name NVARCHAR(50),
             sex INT,
             city NVARCHAR(100),
             access VARCHAR(MAX) DEFAULT '{}',
-            password NVARCHAR(255),
             comment NVARCHAR(MAX),
             birth_date NVARCHAR(4),
             ins_role NVARCHAR(15),
@@ -120,7 +110,6 @@ TABLE_DEFINITIONS = {
         CREATE TABLE capacity (
             capacity_id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
-            phone NVARCHAR(12),
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
         )
@@ -131,7 +120,6 @@ TABLE_DEFINITIONS = {
             capacity_id INT FOREIGN KEY REFERENCES capacity(capacity_id),
             package_name NVARCHAR(50),
             user_id INT,
-            phone NVARCHAR(12),
             allowed INT DEFAULT 0,
             used INT DEFAULT 0,
             created_time DATETIME DEFAULT GETDATE(),
@@ -183,7 +171,6 @@ TABLE_DEFINITIONS = {
         CREATE TABLE scores (
             scores_id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
-            phone NVARCHAR(12),
             quiz_score NVARCHAR(MAX),
             brain_fields NVARCHAR(MAX),
             brain_categories NVARCHAR(MAX),
@@ -196,7 +183,6 @@ TABLE_DEFINITIONS = {
         CREATE TABLE scl_scores (
             scores_id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
-            phone NVARCHAR(12),
             scl_date NVARCHAR(MAX),
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
@@ -206,7 +192,6 @@ TABLE_DEFINITIONS = {
         CREATE TABLE result_state (
             result_state_id INT IDENTITY(1, 1),
             user_id INT PRIMARY KEY,
-            phone NVARCHAR(12),
             t_state NVARCHAR(100),
             r_state NVARCHAR(100),
             e_state NVARCHAR(100),
@@ -222,7 +207,6 @@ TABLE_DEFINITIONS = {
         CREATE TABLE hedayat_fields (
             id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
-            phone NVARCHAR(12),
             suggested NVARCHAR(MAX),
             other NVARCHAR(MAX),
             created_time DATETIME DEFAULT GETDATE(),
@@ -317,7 +301,6 @@ TABLE_DEFINITIONS = {
             token_id INT IDENTITY(1, 1) PRIMARY KEY,
             token VARCHAR(MAX),
             user_id INT UNIQUE,
-            phone NVARCHAR(12),
             role NVARCHAR(100) NULL,
             created_time DATETIME DEFAULT GETDATE(),
             edited_time DATETIME DEFAULT GETDATE()
@@ -535,12 +518,9 @@ def migrate():
             if u_id in migrated_user_ids:
                 continue
 
-            raw_pwd = decrypt_password(data['password']) or data['password']
-            new_pwd = encrypt_password(raw_pwd)
-
             # verify = 1 for existing users
-            fields = ['user_id', 'phone', 'password', 'verify', 'created_time', 'edited_time']
-            values = [u_id, formatted_phone, new_pwd, 1, data['DC_Created_Time'], data['DC_Edited_Time']]
+            fields = ['user_id', 'verify', 'created_time', 'edited_time']
+            values = [u_id, 1, data['DC_Created_Time'], data['DC_Edited_Time']]
 
             if role_table in ['ins', 'sch']:
                 fields.extend(['name', 'logo'])
@@ -561,18 +541,16 @@ def migrate():
     print("Migrating stu table...")
     cursor.execute("SELECT * FROM stu_old")
     for row in cursor.fetchall():
-        raw_pwd = decrypt_password(row.password) or row.password
-        new_pwd = encrypt_password(raw_pwd)
         access_json = json.dumps({"AG": {"permission": 1, "limit": 1}}) if row.permission == 1 else json.dumps(
             {"AG": {"permission": 1, "limit": 0}})
 
         cursor.execute("""
-            INSERT INTO stu (user_id, phone, first_name, last_name, sex, city, access, password,
+            INSERT INTO stu (user_id, first_name, last_name, sex, city, access,
                              comment, birth_date, ins_role, ins_id, con_id, adder_id, editor_id,
                              created_time, edited_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (row.user_id, row.phone, row.first_name, row.last_name, row.sex, row.city, access_json,
-              new_pwd, row.comment, row.birth_date, row.ins_role, row.ins_id, row.con_id,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (row.user_id, row.first_name, row.last_name, row.sex, row.city, access_json,
+              row.comment, row.birth_date, row.ins_role, row.ins_id, row.con_id,
               row.adder_id, row.editor_id, row.DC_Created_Time, row.DC_Edited_Time))
     conn.commit()
 
@@ -582,18 +560,15 @@ def migrate():
     columns = [column[0] for column in cursor.description]
     for row in cursor.fetchall():
         data = dict(zip(columns, row))
-        formatted_phone = format_phone(data['phone'])
-        raw_pwd = decrypt_password(data['password']) or data['password']
-        new_pwd = encrypt_password(raw_pwd)
         sex_value = data.get('sex', 1)
 
         cursor.execute("""
-            INSERT INTO con (user_id, phone, first_name, last_name, sex,
-                             ins_id, editor_id, password, ins_role,
+            INSERT INTO con (user_id, first_name, last_name, sex,
+                             ins_id, editor_id, ins_role,
                              created_time, edited_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (data['user_id'], formatted_phone, data['first_name'], data['last_name'], sex_value,
-              data['ins_id'], data['editor_id'], new_pwd, data['ins_role'],
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (data['user_id'], data['first_name'], data['last_name'], sex_value,
+              data['ins_id'], data['editor_id'], data['ins_role'],
               data['DC_Created_Time'], data['DC_Edited_Time']))
     conn.commit()
 
@@ -608,9 +583,9 @@ def migrate():
     for row in cursor.fetchall():
         if row.user_id in migrated_token_user_ids: continue
         cursor.execute("""
-            INSERT INTO tokens (token_id, token, user_id, phone, role, created_time, edited_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (row.token_id, row.token, row.user_id, row.phone, row.role, row.DC_Created_Time, row.DC_Edited_Time))
+            INSERT INTO tokens (token_id, token, user_id, role, created_time, edited_time)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (row.token_id, row.token, row.user_id, row.role, row.DC_Created_Time, row.DC_Edited_Time))
         migrated_token_user_ids.add(row.user_id)
     cursor.execute("SET IDENTITY_INSERT tokens OFF")
     conn.commit()
@@ -621,20 +596,20 @@ def migrate():
     cursor.execute("SELECT c.*, u.phone FROM capacity_old c LEFT JOIN users_old u ON c.user_id = u.user_id")
     for row in cursor.fetchall():
         cursor.execute("""
-            INSERT INTO capacity (capacity_id, user_id, phone, created_time, edited_time)
-            VALUES (?, ?, ?, ?, ?)
-        """, (row.capacity_id, row.user_id, row.phone or "", row.DC_Created_Time, row.DC_Edited_Time))
+            INSERT INTO capacity (capacity_id, user_id, created_time, edited_time)
+            VALUES (?, ?, ?, ?)
+        """, (row.capacity_id, row.user_id, row.DC_Created_Time, row.DC_Edited_Time))
 
         # capacity_package uses identity for PK, so we don't need SET IDENTITY_INSERT here
         cursor.execute("""
-            INSERT INTO capacity_package (capacity_id, package_name, user_id, phone, allowed, used, created_time, edited_time)
-            VALUES (?, 'AG', ?, ?, ?, ?, ?, ?)
-        """, (row.capacity_id, row.user_id, row.phone or "", row.allowed_student, row.used_student,
+            INSERT INTO capacity_package (capacity_id, package_name, user_id, allowed, used, created_time, edited_time)
+            VALUES (?, 'AG', ?, ?, ?, ?, ?)
+        """, (row.capacity_id, row.user_id, row.allowed_student, row.used_student,
               row.DC_Created_Time, row.DC_Edited_Time))
         cursor.execute("""
-                    INSERT INTO capacity_package (capacity_id, package_name, user_id, phone, allowed, used, created_time, edited_time)
-                    VALUES (?, 'SCL', ?, ?, ?, ?, ?, ?)
-                """, (row.capacity_id, row.user_id, row.phone or "", 0, 0,
+                    INSERT INTO capacity_package (capacity_id, package_name, user_id, allowed, used, created_time, edited_time)
+                    VALUES (?, 'SCL', ?, ?, ?, ?, ?)
+                """, (row.capacity_id, row.user_id, 0, 0,
                       row.DC_Created_Time, row.DC_Edited_Time))
     cursor.execute("SET IDENTITY_INSERT capacity OFF")
     conn.commit()
@@ -696,8 +671,8 @@ def migrate():
                      data['editor_id'], c_time, e_time))
             elif table == "scores":
                 cursor.execute(
-                    f"INSERT INTO {table} ({id_col}, user_id, phone, quiz_score, brain_fields, brain_categories, brain_branches, created_time, edited_time) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (data[id_col], data['user_id'], data['phone'], data['quiz_score'], data['brain_fields'],
+                    f"INSERT INTO {table} ({id_col}, user_id, quiz_score, brain_fields, brain_categories, brain_branches, created_time, edited_time) VALUES (?,?,?,?,?,?,?,?)",
+                    (data[id_col], data['user_id'], data['quiz_score'], data['brain_fields'],
                      data['brain_categories'], data['brain_branches'], c_time, e_time))
             elif table == "redis_logs":
                 cursor.execute(
@@ -716,9 +691,9 @@ def migrate():
     for row in cursor.fetchall():
         try:
             cursor.execute("""
-                INSERT INTO result_state (user_id, phone, t_state, r_state, e_state, a_state, m_state, f_state, i_state, created_time, edited_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (row.user_id, row.phone, row.t_state, row.r_state, row.e_state, row.a_state, row.m_state, row.f_state,
+                INSERT INTO result_state (user_id, t_state, r_state, e_state, a_state, m_state, f_state, i_state, created_time, edited_time)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (row.user_id, row.t_state, row.r_state, row.e_state, row.a_state, row.m_state, row.f_state,
                   row.i_state, row.DC_Created_Time, row.DC_Edited_Time))
         except:
             pass

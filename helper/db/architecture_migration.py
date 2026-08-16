@@ -129,6 +129,93 @@ def rename_column_if_needed(
     run_sql(conn, cursor, sql, dry_run, f"rename column {table_name}.{old_name} to {new_name}")
 
 
+def drop_column_if_exists(
+    conn: Any,
+    cursor: Any,
+    table_name: str,
+    column_name: str,
+    dry_run: bool,
+) -> None:
+    if not table_exists(cursor, table_name):
+        print(f"SKIP: table {table_name} does not exist")
+        return
+
+    if not column_exists(cursor, table_name, column_name):
+        print(f"SKIP: column {table_name}.{column_name} does not exist")
+        return
+
+    try:
+        run_sql(
+            conn,
+            cursor,
+            f"ALTER TABLE {quote_name(table_name)} DROP COLUMN {quote_name(column_name)}",
+            dry_run,
+            f"drop duplicate identity column {table_name}.{column_name}",
+        )
+    except Exception as exc:
+        conn.rollback()
+        print(f"WARN: skipped drop {table_name}.{column_name}: {exc}")
+
+
+def remove_role_identity_mirrors(conn: Any, cursor: Any, dry_run: bool) -> None:
+    role_tables = ("ins", "sch", "ocon", "con", "stu")
+    user_id_identity_tables = (
+        "capacity",
+        "capacity_package",
+        "scores",
+        "scl_scores",
+        "result_state",
+        "hedayat_fields",
+        "tokens",
+    )
+
+    for table_name in role_tables:
+        if not table_exists(cursor, table_name):
+            print(f"SKIP: table {table_name} does not exist")
+            continue
+
+        if column_exists(cursor, table_name, "phone"):
+            run_sql(
+                conn,
+                cursor,
+                f"""
+                UPDATE u
+                SET u.phone = r.phone, u.edited_time = GETDATE()
+                FROM users u
+                INNER JOIN {quote_name(table_name)} r ON r.user_id = u.user_id
+                WHERE (u.phone IS NULL OR LTRIM(RTRIM(u.phone)) = '')
+                  AND r.phone IS NOT NULL
+                  AND LTRIM(RTRIM(r.phone)) <> ''
+                """,
+                dry_run,
+                f"backfill users.phone from {table_name}.phone where missing",
+            )
+
+        if column_exists(cursor, table_name, "password"):
+            run_sql(
+                conn,
+                cursor,
+                f"""
+                UPDATE u
+                SET u.password = r.password, u.edited_time = GETDATE()
+                FROM users u
+                INNER JOIN {quote_name(table_name)} r ON r.user_id = u.user_id
+                WHERE (u.password IS NULL OR LTRIM(RTRIM(u.password)) = '')
+                  AND r.password IS NOT NULL
+                  AND LTRIM(RTRIM(r.password)) <> ''
+                """,
+                dry_run,
+                f"backfill users.password from {table_name}.password where missing",
+            )
+
+    for table_name in role_tables:
+        drop_column_if_exists(conn, cursor, table_name, "password", dry_run)
+        drop_column_if_exists(conn, cursor, table_name, "phone", dry_run)
+
+    for table_name in user_id_identity_tables:
+        drop_column_if_exists(conn, cursor, table_name, "phone", dry_run)
+
+
 def normalize_ocon_role_names(conn: Any, cursor: Any, dry_run: bool) -> None:
     exact_role_columns = (
         ("users", "role"),
@@ -486,6 +573,7 @@ def run_migration(dry_run: bool) -> None:
         rename_column_if_needed(conn, cursor, "ocon", "wCon_id", "ocon_id", dry_run)
         rename_column_if_needed(conn, cursor, "quiz_missing_answers", "q_id", "question_id", dry_run)
         normalize_ocon_role_names(conn, cursor, dry_run)
+        remove_role_identity_mirrors(conn, cursor, dry_run)
 
         ensure_column(conn, cursor, "capacity_package", "total_allowed", "INT NULL", dry_run)
         if column_exists(cursor, "capacity_package", "total_allowed"):
