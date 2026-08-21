@@ -3,6 +3,9 @@ from datetime import datetime
 
 import config
 import helper.db.db_helper as db_helper
+from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.filters import StudentFilters
+from helper.db.sqlalchemy.queries.students import list_students_for_owner
 import helper.func_helper as func_helper
 
 
@@ -439,44 +442,35 @@ def change_student(conn, cursor, request_data, user_info):
 # this function use for get students of ins for list of students
 def get_students(conn, cursor, request_data, user_info):
     try:
-        query = '''
-            SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex, s.city,
-                   s.birth_date, s.access, s.consultant_user_id AS con_id
-            FROM stu s
-            INNER JOIN users u ON u.user_id = s.user_id
-            WHERE s.owner_user_id = ?
-        '''
-        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
+        filters = StudentFilters.from_request(request_data)
+        with session_scope() as session:
+            students = list_students_for_owner(
+                session=session,
+                owner_user_id=user_info["user_id"],
+                filters=filters,
+            )
+
         stu_info = []
-        if len(res) != 0:
-            for stu in res:
-                query = 'SELECT first_name, last_name FROM con WHERE user_id = ?'
-                res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=stu.con_id)
-                con_name = ""
-                if res_con and len(res_con) >= 2:
-                    con_name = f"{res_con.first_name} {res_con.last_name}"
-                # query_quiz = 'SELECT state, quiz_id FROM quiz_attempt WHERE user_id = ? ORDER BY quiz_id asc'
-                # res_quiz = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query_quiz, field=stu.user_id)
-                # status = ''
-                # if len(res_quiz) == 0:
-                #     status = "در انتظار شروع آزمون"
-                # else:
-                #     state_of_last_quiz = res_quiz[-1].state
-                #     quiz_answered = res_quiz[-1].quiz_id
-                #     if state_of_last_quiz == 1:
-                #         status = "آزمون " + AG_QUIZ_NAME_TITLE[quiz_answered - 1] + " در حال انجام است"
-                #     else:
-                #         if len(res_quiz) == 7 and state_of_last_quiz == 2:
-                #             status = "آزمون‌ها به پایان رسیده است."
-                #         else:
-                #             status = "آزمون " + AG_QUIZ_NAME_TITLE[quiz_answered - 1] + " به پایان رسیده است"
-                info_response = {"stu_id": stu.stu_id, "user_id": stu.user_id, "phone": stu.phone,
-                                 "first_name": stu.first_name,
-                                 "last_name": stu.last_name, "con_name": con_name,
-                                 "con_id": stu.con_id, "password": None, "sex": stu.sex,
-                                 "city": stu.city, "full_name": stu.first_name + " " + stu.last_name,
-                                 "birth_date": stu.birth_date, "access": json.loads(stu.access)}
-                stu_info.append(info_response)
+        for stu in students:
+            con_name = ""
+            if stu.get("consultant_first_name") or stu.get("consultant_last_name"):
+                con_name = f"{stu.get('consultant_first_name') or ''} {stu.get('consultant_last_name') or ''}".strip()
+
+            raw_access = stu.get("access") or "{}"
+            try:
+                access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
+            except (json.JSONDecodeError, TypeError):
+                access_data = {}
+
+            first_name = stu.get("first_name") or ""
+            last_name = stu.get("last_name") or ""
+            info_response = {"stu_id": stu.get("stu_id"), "user_id": stu.get("user_id"), "phone": stu.get("phone"),
+                             "first_name": stu.get("first_name"),
+                             "last_name": stu.get("last_name"), "con_name": con_name,
+                             "con_id": stu.get("con_id"), "password": None, "sex": stu.get("sex"),
+                             "city": stu.get("city"), "full_name": f"{first_name} {last_name}".strip(),
+                             "birth_date": stu.get("birth_date"), "access": access_data}
+            stu_info.append(info_response)
         token = func_helper.get_tracking_code()
         return token, stu_info, ""
     except Exception as e:
