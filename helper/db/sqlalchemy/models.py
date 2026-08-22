@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, Unicode, UnicodeText
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Unicode, UnicodeText
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from helper.db.sqlalchemy.base import Base, TimestampMixin
@@ -151,6 +151,40 @@ class Token(Base, TimestampMixin):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.user_id"), nullable=True)
 
 
+class Payment(Base, TimestampMixin):
+    __tablename__ = "payment"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    payment_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    phone: Mapped[str] = mapped_column(Unicode(12), nullable=False)
+    state: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    status: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    discount_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    track_id: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    discount_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    result: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    saleReferenceId: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    product_data: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+
+
+class Comment(Base, TimestampMixin):
+    __tablename__ = "comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str | None] = mapped_column(Unicode(400), nullable=True)
+    comment: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    rating: Mapped[float | None] = mapped_column(Float, nullable=True)
+    persian_date: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    phone: Mapped[str] = mapped_column(Unicode(12), nullable=False)
+    role: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    db_name: Mapped[str] = mapped_column(Unicode(400), nullable=False)
+
+
 class QuizAttempt(Base, TimestampMixin):
     __tablename__ = "quiz_attempt"
 
@@ -195,14 +229,31 @@ class SclScore(Base, TimestampMixin):
     scl_date: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
 
+class ResultState(Base, TimestampMixin):
+    __tablename__ = "result_state"
+
+    result_state_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
+    t_state: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    r_state: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    e_state: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    a_state: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    m_state: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    f_state: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    i_state: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+
+
 __all__ = [
     "Capacity",
     "CapacityPackage",
     "Consultant",
     "Institute",
     "OwnerConsultant",
+    "Comment",
+    "Payment",
     "QuizAttempt",
     "QuizQuestionAnswer",
+    "ResultState",
     "School",
     "SclScore",
     "Score",

@@ -2,7 +2,16 @@ import json, httpx
 from datetime import datetime
 
 import helper.db.db_helper as db_helper
+from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.other import (
+    get_result_state_for_user,
+    get_scl_score_date,
+    get_score_brain_categories,
+    list_latest_comments,
+    list_user_transactions,
+)
 import helper.func_helper as func_helper
+from helper.response import build_comment_list_response, build_transaction_list_response
 
 
 # AG_REPORT_INFO structure mapping result_state fields to their display names
@@ -75,57 +84,9 @@ def get_all_products(conn, cursor):
 
 def get_transactions(conn, cursor, request_data, user_info):
     try:
-        query = """
-                SELECT 
-                    payment_id AS id, 
-                    state, 
-                    status, 
-                    product_data, 
-                    result, 
-                    edited_time AS date 
-                FROM payment 
-                WHERE user_id = ? 
-                ORDER BY created_time DESC
-            """
-        res = db_helper.search_allin_table(conn, cursor, query, str(user_info["user_id"]))
-        transactions_info = []
-        for p in res:
-            try:
-                # Parse the full product_data JSON
-                full_product_data = json.loads(p[3]) if p[3] else {}
-                
-                # Extract only the required fields: packages, product_name, discount_price, price
-                filtered_product_data = {
-                    "packages": full_product_data.get("packages", {}),
-                    "product_name": full_product_data.get("product_name", ""),
-                    "discount_price": full_product_data.get("discount_price", 0),
-                    "price": full_product_data.get("price", 0)
-                }
-                
-                transactions_info.append({
-                    "id": p[0],
-                    "state": p[1],
-                    "status": p[2],
-                    "product_data": filtered_product_data,
-                    "result": p[4],
-                    "date": p[5]
-                })
-            except (json.JSONDecodeError, TypeError) as e:
-                # If product_data is invalid JSON, include empty product_data
-                print(f"Error parsing product_data for payment_id {p[0]}: {e}")
-                transactions_info.append({
-                    "id": p[0],
-                    "state": p[1],
-                    "status": p[2],
-                    "product_data": {
-                        "packages": {},
-                        "product_name": "",
-                        "discount_price": 0,
-                        "price": 0
-                    },
-                    "result": p[4],
-                    "date": p[5]
-                })
+        with session_scope() as session:
+            transactions = list_user_transactions(session=session, user_id=user_info["user_id"])
+        transactions_info = build_transaction_list_response(transactions)
         token = func_helper.get_tracking_code()
         return token, transactions_info, ""
     except Exception as e:
@@ -382,29 +343,15 @@ def get_report_data(conn, cursor, request_data, user_info):
             return None, None, "شناسه دانش‌آموز ارسال نشده است."
         
         if kind == "AG":
-            # Fetch result_state from result_state table
-            query_result_state = """
-                SELECT 
-                    t_state, r_state, e_state, a_state, 
-                    m_state, f_state, i_state
-                FROM result_state 
-                WHERE user_id = ?
-            """
-            res_result_state = db_helper.search_table(conn=conn, cursor=cursor, query=query_result_state, field=student_id)
-            
-            # Fetch brain_categories from scores table
-            query_scores = """
-                SELECT brain_categories
-                FROM scores
-                WHERE user_id = ?
-            """
-            res_scores = db_helper.search_table(conn=conn, cursor=cursor, query=query_scores, field=student_id)
+            with session_scope() as session:
+                result_state = get_result_state_for_user(session=session, user_id=student_id)
+                raw_brain_categories = get_score_brain_categories(session=session, user_id=student_id)
             
             # Build result_state data
             result_state_data = {}
-            if res_result_state:
+            if result_state:
                 for field_key, field_info in AG_REPORT_INFO.items():
-                    field_value = getattr(res_result_state, field_key, None)
+                    field_value = result_state.get(field_key)
                     result_state_data[field_key] = {
                         "name": field_info["name"],
                         "title": field_info["title"],
@@ -420,50 +367,48 @@ def get_report_data(conn, cursor, request_data, user_info):
             
             # Parse brain_categories from JSON
             brain_categories_data = []
-            if res_scores:
-                raw_brain_categories = getattr(res_scores, "brain_categories", None)
-                if raw_brain_categories:
-                    try:
-                        raw_data = json.loads(raw_brain_categories) if isinstance(raw_brain_categories, str) else (raw_brain_categories or [])
-                        # Ensure it's a list
-                        if not isinstance(raw_data, list):
-                            raw_data = []
+            if raw_brain_categories:
+                try:
+                    raw_data = json.loads(raw_brain_categories) if isinstance(raw_brain_categories, str) else (raw_brain_categories or [])
+                    # Ensure it's a list
+                    if not isinstance(raw_data, list):
+                        raw_data = []
+                    
+                    # Transform each item: add color, convert value to int, rename keys
+                    brain_categories_data = []
+                    for item in raw_data:
+                        category_name = item.get("Category") or item.get("category")
+                        value = item.get("Value") or item.get("value", 0)
                         
-                        # Transform each item: add color, convert value to int, rename keys
-                        brain_categories_data = []
-                        for item in raw_data:
-                            category_name = item.get("Category") or item.get("category")
-                            value = item.get("Value") or item.get("value", 0)
-                            
-                            # Normalize Persian characters for matching
-                            normalized_category = normalize_persian_text(category_name)
-                            
-                            # Get color from CATEGORY_DEF_COLOR with normalized matching
-                            color = "#cccccc"  # default fallback
-                            if normalized_category:
-                                # Try direct match first
-                                if normalized_category in CATEGORY_DEF_COLOR:
-                                    color = CATEGORY_DEF_COLOR[normalized_category]
-                                else:
-                                    # Try normalized matching with all keys
-                                    for key, value_color in CATEGORY_DEF_COLOR.items():
-                                        if normalize_persian_text(key) == normalized_category:
-                                            color = value_color
-                                            break
-                            
-                            # Convert value to int
-                            try:
-                                value_int = int(float(value))
-                            except (ValueError, TypeError):
-                                value_int = 0
-                            
-                            brain_categories_data.append({
-                                "name": category_name,
-                                "color": color,
-                                "value": value_int
-                            })
-                    except (json.JSONDecodeError, TypeError):
-                        brain_categories_data = []
+                        # Normalize Persian characters for matching
+                        normalized_category = normalize_persian_text(category_name)
+                        
+                        # Get color from CATEGORY_DEF_COLOR with normalized matching
+                        color = "#cccccc"  # default fallback
+                        if normalized_category:
+                            # Try direct match first
+                            if normalized_category in CATEGORY_DEF_COLOR:
+                                color = CATEGORY_DEF_COLOR[normalized_category]
+                            else:
+                                # Try normalized matching with all keys
+                                for key, value_color in CATEGORY_DEF_COLOR.items():
+                                    if normalize_persian_text(key) == normalized_category:
+                                        color = value_color
+                                        break
+                        
+                        # Convert value to int
+                        try:
+                            value_int = int(float(value))
+                        except (ValueError, TypeError):
+                            value_int = 0
+                        
+                        brain_categories_data.append({
+                            "name": category_name,
+                            "color": color,
+                            "value": value_int
+                        })
+                except (json.JSONDecodeError, TypeError):
+                    brain_categories_data = []
             
             # Build report_data with both keys
             report_data = {
@@ -474,32 +419,25 @@ def get_report_data(conn, cursor, request_data, user_info):
             token = func_helper.get_tracking_code()
             return token, report_data, ""
         elif kind == "SCL":
-            # Fetch scl_date from scl_scores table
-            query_scl_scores = """
-                SELECT scl_date
-                FROM scl_scores
-                WHERE user_id = ?
-            """
-            res_scl_scores = db_helper.search_table(conn=conn, cursor=cursor, query=query_scl_scores, field=student_id)
-            
+            with session_scope() as session:
+                raw_scl_date = get_scl_score_date(session=session, user_id=student_id)
+
             # Extract scl_date
             scl_date_data = None
-            if res_scl_scores:
-                raw_scl_date = getattr(res_scl_scores, "scl_date", None)
-                if raw_scl_date:
-                    # Try to parse as JSON if it's a JSON string, otherwise return as string
-                    try:
-                        if isinstance(raw_scl_date, str):
-                            # Try parsing as JSON
-                            try:
-                                scl_date_data = json.loads(raw_scl_date)
-                            except (json.JSONDecodeError, TypeError):
-                                # If not JSON, return as string
-                                scl_date_data = raw_scl_date
-                        else:
+            if raw_scl_date:
+                # Try to parse as JSON if it's a JSON string, otherwise return as string
+                try:
+                    if isinstance(raw_scl_date, str):
+                        # Try parsing as JSON
+                        try:
+                            scl_date_data = json.loads(raw_scl_date)
+                        except (json.JSONDecodeError, TypeError):
+                            # If not JSON, return as string
                             scl_date_data = raw_scl_date
-                    except Exception:
+                    else:
                         scl_date_data = raw_scl_date
+                except Exception:
+                    scl_date_data = raw_scl_date
             
             # Build report_data with scl_date
             report_data = {
@@ -518,27 +456,9 @@ def get_report_data(conn, cursor, request_data, user_info):
 
 def get_comments(conn, cursor):
     try:
-        query = """
-            SELECT TOP 100
-                id,
-                name,
-                comment,
-                rating,
-                persian_date
-            FROM comments
-            ORDER BY created_time DESC
-        """
-        res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query)
-        comments = [
-            {
-                "id": p["id"],
-                "name": p["name"],
-                "comment": p["comment"],
-                "rating": p["rating"],
-                "persian_date": p["persian_date"],
-            }
-            for p in res
-        ]
+        with session_scope() as session:
+            comment_rows = list_latest_comments(session=session, limit=100)
+        comments = build_comment_list_response(comment_rows)
         return func_helper.get_tracking_code(), comments, ""
     except Exception as e:
         print("error occurred in get comments", e)
