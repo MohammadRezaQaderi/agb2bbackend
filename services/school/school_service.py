@@ -4,10 +4,11 @@ from datetime import datetime
 import config
 import helper.db.db_helper as db_helper
 from helper.db.sqlalchemy import session_scope
-from helper.db.sqlalchemy.filters import StudentFilters
+from helper.db.sqlalchemy.filters import ConsultantFilters, StudentFilters
+from helper.db.sqlalchemy.queries.consultants import list_consultants_for_owner
 from helper.db.sqlalchemy.queries.students import list_students_for_owner
 import helper.func_helper as func_helper
-from helper.response import build_student_list_response
+from helper.response import build_consultant_list_response, build_student_list_response
 
 
 def get_info(conn, cursor, user_id):
@@ -381,21 +382,14 @@ def change_consultant(conn, cursor, request_data, user_info):
 # this function use for get consultant of sch for list of consultants and add students cons pick filed
 def get_consultants(conn, cursor, request_data, user_info):
     try:
-        query = '''
-            SELECT c.con_id, c.user_id, u.phone, c.first_name, c.last_name, c.sex
-            FROM con c
-            INNER JOIN users u ON u.user_id = c.user_id
-            WHERE c.owner_user_id = ?
-        '''
-        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
-        cons_info = []
-        if res is not None:
-            for con in res:
-                info_response = {"con_id": con.con_id, "user_id": con.user_id, "phone": con.phone,
-                                 "first_name": con.first_name, "sex": con.sex,
-                                 "full_name": con.first_name + " " + con.last_name,
-                                 "last_name": con.last_name, "password": None}
-                cons_info.append(info_response)
+        filters = ConsultantFilters.from_request(request_data)
+        with session_scope() as session:
+            consultants = list_consultants_for_owner(
+                session=session,
+                owner_user_id=user_info["user_id"],
+                filters=filters,
+            )
+        cons_info = build_consultant_list_response(consultants)
         token = func_helper.get_tracking_code()
         return token, cons_info, ""
     except Exception as e:

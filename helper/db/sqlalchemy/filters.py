@@ -23,6 +23,20 @@ class StudentFilters:
         )
 
 
+@dataclass(frozen=True)
+class ConsultantFilters:
+    search: str | None = None
+    sex: int | None = None
+
+    @classmethod
+    def from_request(cls, request_data: dict | None) -> "ConsultantFilters":
+        request_data = request_data or {}
+        return cls(
+            search=_clean_string(request_data.get("search")),
+            sex=_clean_int(request_data.get("sex")),
+        )
+
+
 def _clean_string(value: object) -> str | None:
     if value is None:
         return None
