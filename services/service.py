@@ -741,6 +741,22 @@ def add_comment(conn, cursor, request_data):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
+def mark_notification_read(conn, cursor, request_data, user_info):
+    method_type = "INSERT"
+    is_valid, error_response = func_helper.validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["notification_id"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return error_response
+
+    tracking_token, response_data, response_message = other_service.mark_notification_read(
+        conn=conn, cursor=cursor, request_data=request_data, user_info=user_info
+    )
+    return _service_response(method_type, tracking_token, response_data, response_message)
+
+
 # Admin functions
 def admin_change_capacity(conn, cursor, request_data):
     method_type = "UPDATE"

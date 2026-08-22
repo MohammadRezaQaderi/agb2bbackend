@@ -597,3 +597,66 @@ def add_comment(conn, cursor, request_data):
             conn, cursor, "ag_api/other", "add_comment", str(e), request_data, {}
         )
         return None, None, "خطا در ثبت نظر."
+
+
+def _notification_role_aliases(role):
+    if not role:
+        return []
+
+    return {
+        "ins": ["ins", "institute"],
+        "sch": ["sch", "school"],
+        "ocon": ["ocon", "ownerConsultant"],
+        "con": ["con"],
+        "stu": ["stu", "student"],
+    }.get(role, [role])
+
+
+def mark_notification_read(conn, cursor, request_data, user_info):
+    try:
+        notification_id = int(request_data["notification_id"])
+        user_id = int(user_info["user_id"])
+        role_patterns = [f"%{role}%" for role in _notification_role_aliases(user_info.get("role"))]
+        role_conditions = " OR ".join(["roles LIKE ?"] * len(role_patterns)) or "1 = 0"
+
+        access_query = f"""
+            SELECT TOP 1 id
+            FROM notifications
+            WHERE id = ?
+              AND (
+                  user_id = ?
+                  OR roles LIKE '%all%'
+                  OR {role_conditions}
+              )
+        """
+        cursor.execute(access_query, (notification_id, user_id, *role_patterns))
+        if cursor.fetchone() is None:
+            return None, None, "اعلان مورد نظر یافت نشد."
+
+        cursor.execute(
+            """
+            IF NOT EXISTS (
+                SELECT 1
+                FROM notification_reads
+                WHERE notification_id = ? AND user_id = ?
+            )
+            INSERT INTO notification_reads (notification_id, user_id)
+            VALUES (?, ?)
+            """,
+            notification_id,
+            user_id,
+            notification_id,
+            user_id,
+        )
+        conn.commit()
+
+        return func_helper.get_tracking_code(), {"notification_id": notification_id, "is_read": 1}, ""
+    except (TypeError, ValueError):
+        return None, None, "شناسه اعلان معتبر نیست."
+    except Exception as e:
+        conn.rollback()
+        print("error occurred in mark notification read", e)
+        func_helper.service_exception_error_logging(
+            conn, cursor, "ag_api/other", "mark_notification_read", str(e), request_data, user_info
+        )
+        return None, None, "خطا در ثبت وضعیت اعلان."

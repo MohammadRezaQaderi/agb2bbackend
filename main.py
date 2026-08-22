@@ -276,6 +276,7 @@ async def insert_api(request: Request):
             "ag_add_payment_order": service.add_payment_order,
             "ag_add_consultant": service.add_consultant,
             "ag_add_student": service.add_student,
+            "ag_mark_notification_read": service.mark_notification_read,
         }
 
         handler = action_map.get(action)

@@ -443,6 +443,32 @@ def ensure_student_package_access(conn: Any, cursor: Any, dry_run: bool) -> None
     run_sql(conn, cursor, sql, dry_run, "create student_package_access")
 
 
+def ensure_notification_reads(conn: Any, cursor: Any, dry_run: bool) -> None:
+    if not table_exists(cursor, "notifications") or not table_exists(cursor, "users"):
+        print("SKIP: notification_reads requires notifications and users tables")
+        return
+
+    if table_exists(cursor, "notification_reads"):
+        print("SKIP: notification_reads already exists")
+        return
+
+    sql = """
+    CREATE TABLE [notification_reads] (
+        [id] INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+        [notification_id] INT NOT NULL,
+        [user_id] INT NOT NULL,
+        [created_time] DATETIME DEFAULT GETDATE(),
+        CONSTRAINT [fk_notification_reads_notification]
+            FOREIGN KEY ([notification_id]) REFERENCES [notifications]([id]),
+        CONSTRAINT [fk_notification_reads_user]
+            FOREIGN KEY ([user_id]) REFERENCES [users]([user_id]),
+        CONSTRAINT [ux_notification_reads_notification_user]
+            UNIQUE ([notification_id], [user_id])
+    )
+    """
+    run_sql(conn, cursor, sql, dry_run, "create notification_reads")
+
+
 def ensure_quiz_attempt_tables(conn: Any, cursor: Any, dry_run: bool) -> None:
     if not table_exists(cursor, "quiz_attempt"):
         run_sql(
@@ -708,6 +734,7 @@ def run_migration(
             )
 
         ensure_student_package_access(conn, cursor, dry_run)
+        ensure_notification_reads(conn, cursor, dry_run)
         ensure_quiz_attempt_tables(conn, cursor, dry_run)
         backfill_student_package_access(conn, cursor, dry_run)
         alter_text_columns(conn, cursor, dry_run)
