@@ -7,6 +7,7 @@ from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.filters import StudentFilters
 from helper.db.sqlalchemy.queries.students import list_students_for_owner
 import helper.func_helper as func_helper
+from helper.response import build_student_list_response
 
 
 def get_info(conn, cursor, user_id):
@@ -150,12 +151,16 @@ def get_dashboard(conn, cursor, request_data, user_info):
             }
 
         notifications_query = """
-            SELECT id, title, description, added_by, priority, fullText, persian_date
-            FROM notifications
-            WHERE (roles LIKE '%institute%' OR roles LIKE '%all%' OR user_id = ?)
-            ORDER BY created_time DESC
+            SELECT n.id, n.title, n.description, n.added_by, n.priority, n.fullText, n.persian_date,
+                   CASE WHEN EXISTS (
+                       SELECT 1 FROM notification_reads nr
+                       WHERE nr.notification_id = n.id AND nr.user_id = ?
+                   ) THEN 1 ELSE 0 END AS is_read
+            FROM notifications n
+            WHERE (n.roles LIKE '%institute%' OR n.roles LIKE '%all%' OR n.user_id = ?)
+            ORDER BY n.created_time DESC
         """
-        cursor.execute(notifications_query, (user_id,))
+        cursor.execute(notifications_query, (user_id, user_id))
         columns = [col[0] for col in cursor.description]
         notifications = [dict(zip(columns, row)) for row in cursor.fetchall()]
 
@@ -450,27 +455,7 @@ def get_students(conn, cursor, request_data, user_info):
                 filters=filters,
             )
 
-        stu_info = []
-        for stu in students:
-            con_name = ""
-            if stu.get("consultant_first_name") or stu.get("consultant_last_name"):
-                con_name = f"{stu.get('consultant_first_name') or ''} {stu.get('consultant_last_name') or ''}".strip()
-
-            raw_access = stu.get("access") or "{}"
-            try:
-                access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-            except (json.JSONDecodeError, TypeError):
-                access_data = {}
-
-            first_name = stu.get("first_name") or ""
-            last_name = stu.get("last_name") or ""
-            info_response = {"stu_id": stu.get("stu_id"), "user_id": stu.get("user_id"), "phone": stu.get("phone"),
-                             "first_name": stu.get("first_name"),
-                             "last_name": stu.get("last_name"), "con_name": con_name,
-                             "con_id": stu.get("con_id"), "password": None, "sex": stu.get("sex"),
-                             "city": stu.get("city"), "full_name": f"{first_name} {last_name}".strip(),
-                             "birth_date": stu.get("birth_date"), "access": access_data}
-            stu_info.append(info_response)
+        stu_info = build_student_list_response(students)
         token = func_helper.get_tracking_code()
         return token, stu_info, ""
     except Exception as e:

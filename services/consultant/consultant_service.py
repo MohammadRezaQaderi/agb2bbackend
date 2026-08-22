@@ -2,7 +2,11 @@ import json
 from datetime import datetime
 
 import helper.db.db_helper as db_helper
+from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.filters import StudentFilters
+from helper.db.sqlalchemy.queries.students import list_students_for_consultant
 import helper.func_helper as func_helper
+from helper.response import build_student_list_response
 
 
 def get_info(conn, cursor, user_id):
@@ -160,12 +164,16 @@ def get_dashboard(conn, cursor, request_data, user_info):
             }
 
         notifications_query = """
-            SELECT id, title, description, added_by, priority, fullText, persian_date
-            FROM notifications
-            WHERE (roles LIKE '%con%' OR roles LIKE '%all%' OR user_id = ?)
-            ORDER BY created_time DESC
+            SELECT n.id, n.title, n.description, n.added_by, n.priority, n.fullText, n.persian_date,
+                   CASE WHEN EXISTS (
+                       SELECT 1 FROM notification_reads nr
+                       WHERE nr.notification_id = n.id AND nr.user_id = ?
+                   ) THEN 1 ELSE 0 END AS is_read
+            FROM notifications n
+            WHERE (n.roles LIKE '%con%' OR n.roles LIKE '%all%' OR n.user_id = ?)
+            ORDER BY n.created_time DESC
         """
-        cursor.execute(notifications_query, (user_id,))
+        cursor.execute(notifications_query, (user_id, user_id))
         columns = [col[0] for col in cursor.description]
         notifications = [dict(zip(columns, row)) for row in cursor.fetchall()]
 
@@ -318,43 +326,14 @@ def get_management_report(conn, cursor, request_data, user_info):
 # this function use for get students of con for list of students
 def get_students(conn, cursor, request_data, user_info):
     try:
-        query = 'SELECT first_name, last_name FROM con WHERE user_id = ?'
-        res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
-        con_name = ""
-        if res_con and len(res_con) >= 2:
-            con_name = f"{res_con.first_name} {res_con.last_name}"
-        query = '''
-            SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex,
-                   s.city, s.birth_date, s.access
-            FROM stu s
-            INNER JOIN users u ON u.user_id = s.user_id
-            WHERE s.consultant_user_id = ?
-        '''
-        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
-        stu_info = []
-        if len(res) != 0:
-            for stu in res:
-                # query_quiz = 'SELECT state, quiz_id FROM quiz_attempt WHERE user_id = ? ORDER BY quiz_id asc'
-                # res_quiz = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query_quiz, field=stu.user_id)
-                # status = ''
-                # if len(res_quiz) == 0:
-                #     status = "در انتظار شروع آزمون"
-                # else:
-                #     state_of_last_quiz = res_quiz[-1].state
-                #     quiz_answered = res_quiz[-1].quiz_id
-                #     if state_of_last_quiz == 1:
-                #         status = "آزمون " + func_helper.AG_QUIZ_NAME_TITLE[quiz_answered - 1] + " در حال انجام است"
-                #     else:
-                #         if len(res_quiz) == 7 and state_of_last_quiz == 2:
-                #             status = "آزمون‌ها به پایان رسیده است."
-                #         else:
-                #             status = "آزمون " + func_helper.AG_QUIZ_NAME_TITLE[quiz_answered - 1] + " به پایان رسیده است"
-                user_info = {"stu_id": stu.stu_id, "user_id": stu.user_id, "phone": stu.phone, "first_name": stu.first_name,
-                        "last_name": stu.last_name, "con_name": con_name,
-                        "full_name": stu.first_name + " " + stu.last_name,
-                        "con_id": user_info["user_id"], "password": None, "sex": stu.sex,
-                        "city": stu.city, "birth_date": stu.birth_date, "access": json.loads(stu.access)}
-                stu_info.append(user_info)
+        filters = StudentFilters.from_request(request_data)
+        with session_scope() as session:
+            students = list_students_for_consultant(
+                session=session,
+                consultant_user_id=user_info["user_id"],
+                filters=filters,
+            )
+        stu_info = build_student_list_response(students, default_con_id=user_info["user_id"])
         token = func_helper.get_tracking_code()
         return token, stu_info, ""
     except Exception as e:
