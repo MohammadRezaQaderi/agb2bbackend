@@ -1,14 +1,21 @@
-import json
 from datetime import datetime
 
 import config
 import helper.db.db_helper as db_helper
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.filters import StudentFilters
+from helper.db.sqlalchemy.queries.dashboard import (
+    count_student_packages_for_scope,
+    count_students_for_scope,
+    list_capacity_packages_for_user,
+    list_notifications_for_user,
+    list_quiz_attempts_for_scope,
+)
 from helper.db.sqlalchemy.queries.reports import list_quiz_attempts_for_users
 from helper.db.sqlalchemy.queries.students import list_students_for_consultant
 import helper.func_helper as func_helper
 from helper.response import (
+    build_dashboard_info_response,
     build_student_list_response,
     build_student_management_report_response,
     build_student_report_response,
@@ -45,132 +52,25 @@ def get_dashboard(conn, cursor, request_data, user_info):
     """
     try:
         user_id = user_info["user_id"]
-
-        package_quiz_count = {
-            "AG": 7,
-            "SCL": 4
-        }
-
-        query_capacity = """
-            SELECT package_name, allowed, used
-            FROM capacity_package
-            WHERE user_id = ?
-        """
-        res_capacity = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query_capacity, field=user_id)
-
-        capacity_info = {
-            row["package_name"]: {"allowed": row["allowed"], "used": row["used"]}
-            for row in res_capacity
-        }
-
-        queries = {
-            "stu_count": "SELECT COUNT(*) AS total FROM stu WHERE consultant_user_id = ?"
-        }
-
-        results = {key: db_helper.search_fetchall(conn, cursor, query, field=user_id) for key, query in queries.items()}
-
-        stu_count = results["stu_count"][0]["total"] if results["stu_count"] else 0
-
-        stu_package_count = func_helper.get_student_package_access_counts(
-            conn, cursor, user_id, "consultant_user_id"
-        )
-        if stu_package_count is None:
-            query_stu_access = "SELECT access FROM stu WHERE consultant_user_id = ?"
-            res_stu_access = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query_stu_access, field=user_id)
-
-            stu_package_count = {"AG": 0, "SCL": 0}
-            if res_stu_access:
-                for stu in res_stu_access:
-                    raw_access = getattr(stu, "access", None) or "{}"
-                    try:
-                        access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-                    except (json.JSONDecodeError, TypeError):
-                        access_data = {}
-
-                    for package_name in ["AG", "SCL"]:
-                        package_info = access_data.get(package_name, {})
-                        permission = 0
-                        if isinstance(package_info, dict):
-                            permission = int(package_info.get("permission") or 0)
-                        elif isinstance(package_info, bool):
-                            permission = 1 if package_info else 0
-                        elif isinstance(package_info, (int, float, str)):
-                            try:
-                                permission = int(package_info) if str(package_info).strip() != "" else 0
-                            except ValueError:
-                                permission = 0
-
-                        if permission == 1:
-                            stu_package_count[package_name] += 1
-
-        quiz_report = {}
-        for package_name in ["AG", "SCL"]:
-            total_quizzes = package_quiz_count.get(package_name, 0)
-
-            query_finish_quiz = """
-                SELECT COUNT(DISTINCT user_id) AS total 
-                FROM quiz_attempt 
-                WHERE consultant_user_id = ? AND quiz_kind = ? AND state = 2 AND quiz_id = ?
-            """
-            res_finish_quiz = db_helper.search_fetchall(conn, cursor, query_finish_quiz,
-                                                        field=(user_id, package_name, total_quizzes))
-            finish_quiz = res_finish_quiz[0]["total"] if res_finish_quiz and res_finish_quiz[0]["total"] else 0
-
-            query_started_quiz = """
-                SELECT COUNT(DISTINCT user_id) AS total 
-                FROM quiz_attempt 
-                WHERE consultant_user_id = ? AND quiz_kind = ?
-            """
-            res_started_quiz = db_helper.search_fetchall(conn, cursor, query_started_quiz,
-                                                         field=(user_id, package_name))
-            started_quiz = res_started_quiz[0]["total"] if res_started_quiz and res_started_quiz[0]["total"] else 0
-
-            query_c_quiz = """
-                SELECT COUNT(*) AS total 
-                FROM quiz_attempt 
-                WHERE consultant_user_id = ? AND quiz_kind = ? AND state = 2
-            """
-            res_c_quiz = db_helper.search_fetchall(conn, cursor, query_c_quiz, field=(user_id, package_name))
-            c_quiz = res_c_quiz[0]["total"] if res_c_quiz and res_c_quiz[0]["total"] else 0
-
-            query_total_first = """
-                SELECT COUNT(*) AS total 
-                FROM quiz_attempt 
-                WHERE consultant_user_id = ? AND quiz_kind = ?
-            """
-            res_total_first = db_helper.search_fetchall(conn, cursor, query_total_first, field=(user_id, package_name))
-            total_first = res_total_first[0]["total"] if res_total_first and res_total_first[0]["total"] else 0
-
-            nc_quiz = total_first - c_quiz
-
-            quiz_report[package_name] = {
-                "finish_quiz": finish_quiz,
-                "started_quiz": started_quiz,
-                "c_quiz": c_quiz,
-                "nc_quiz": nc_quiz
-            }
-
-        notifications_query = """
-            SELECT n.id, n.title, n.description, n.added_by, n.priority, n.fullText, n.persian_date,
-                   CASE WHEN EXISTS (
-                       SELECT 1 FROM notification_reads nr
-                       WHERE nr.notification_id = n.id AND nr.user_id = ?
-                   ) THEN 1 ELSE 0 END AS is_read
-            FROM notifications n
-            WHERE (n.roles LIKE '%ownerConsultant%' OR n.roles LIKE '%all%' OR n.user_id = ?)
-            ORDER BY n.created_time DESC
-        """
-        cursor.execute(notifications_query, (user_id, user_id))
-        columns = [col[0] for col in cursor.description]
-        notifications = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        with session_scope() as session:
+            capacity_packages = list_capacity_packages_for_user(session=session, user_id=user_id)
+            student_count = count_students_for_scope(session=session, scope="consultant", user_id=user_id)
+            package_counts = count_student_packages_for_scope(session=session, scope="consultant", user_id=user_id)
+            quiz_attempts = list_quiz_attempts_for_scope(session=session, scope="consultant", user_id=user_id)
+            notifications = list_notifications_for_user(
+                session=session,
+                user_id=user_id,
+                role_terms=["ownerConsultant"],
+            )
 
         token = func_helper.get_tracking_code()
-        cons_info = {
-            "capacity": capacity_info,
-            "stu_count": stu_count,
-            "stu": stu_package_count,
-            "quiz_report": quiz_report
-        }
+        cons_info = build_dashboard_info_response(
+            capacity_packages=capacity_packages,
+            student_count=student_count,
+            package_counts=package_counts,
+            quiz_attempts=quiz_attempts,
+            packages_data=func_helper.PACKAGES_DATA,
+        )
 
         return token, {"dashboard_info": cons_info, "notifications": notifications}, ""
 

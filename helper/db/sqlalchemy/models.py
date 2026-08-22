@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Unicode, UnicodeText
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -185,6 +187,29 @@ class Comment(Base, TimestampMixin):
     db_name: Mapped[str] = mapped_column(Unicode(400), nullable=False)
 
 
+class Notification(Base, TimestampMixin):
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    roles: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    title: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    description: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    added_by: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    priority: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    persian_date: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+    full_text: Mapped[str | None] = mapped_column("fullText", UnicodeText, nullable=True)
+
+
+class NotificationRead(Base):
+    __tablename__ = "notification_reads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    notification_id: Mapped[int] = mapped_column(ForeignKey("notifications.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), nullable=False)
+    created_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class QuizAttempt(Base, TimestampMixin):
     __tablename__ = "quiz_attempt"
 
@@ -250,6 +275,8 @@ __all__ = [
     "Institute",
     "OwnerConsultant",
     "Comment",
+    "Notification",
+    "NotificationRead",
     "Payment",
     "QuizAttempt",
     "QuizQuestionAnswer",
