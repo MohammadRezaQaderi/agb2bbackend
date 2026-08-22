@@ -6,9 +6,15 @@ import helper.db.db_helper as db_helper
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.filters import ConsultantFilters, StudentFilters
 from helper.db.sqlalchemy.queries.consultants import list_consultants_for_owner
+from helper.db.sqlalchemy.queries.reports import list_quiz_attempts_for_users
 from helper.db.sqlalchemy.queries.students import list_students_for_owner
 import helper.func_helper as func_helper
-from helper.response import build_consultant_list_response, build_student_list_response
+from helper.response import (
+    build_consultant_list_response,
+    build_student_list_response,
+    build_student_management_report_response,
+    build_student_report_response,
+)
 
 
 def get_info(conn, cursor, user_id):
@@ -203,34 +209,9 @@ def add_institute(conn, cursor, request_data, user_id):
 
 def get_report(conn, cursor, request_data, user_info):
     try:
-        query = '''
-            SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex, s.city,
-                   s.access, s.comment, s.consultant_user_id AS con_id
-            FROM stu s
-            INNER JOIN users u ON u.user_id = s.user_id
-            WHERE s.owner_user_id = ?
-        '''
-        res_stu = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
-        report_info = []
-        if res_stu is not None:
-            for stu in res_stu:
-                query = 'SELECT first_name, last_name FROM con WHERE user_id = ?'
-                res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=stu.con_id)
-                con_name = ""
-                raw_access = getattr(stu, "access", None) or "{}"
-                try:
-                    access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-                except (json.JSONDecodeError, TypeError):
-                    access_data = {}
-                if res_con and len(res_con) >= 2:
-                    con_name = f"{res_con.first_name} {res_con.last_name}"
-                info_response = {"id": stu.stu_id, "student_id": stu.user_id, "phone": stu.phone,
-                                 "first_name": stu.first_name,
-                                 "last_name": stu.last_name, "con_name": con_name,
-                                 "password": None, "sex": stu.sex, "city": stu.city,
-                                 "access": access_data, "full_name": stu.first_name + " " + stu.last_name,
-                                 "consultant_comment": stu.comment, "report_id": stu.user_id}
-                report_info.append(info_response)
+        with session_scope() as session:
+            students = list_students_for_owner(session=session, owner_user_id=user_info["user_id"])
+        report_info = build_student_report_response(students, include_consultant_name=True)
         token = func_helper.get_tracking_code()
         return token, report_info, ""
     except Exception as e:
@@ -241,103 +222,19 @@ def get_report(conn, cursor, request_data, user_info):
 
 def get_management_report(conn, cursor, request_data, user_info):
     try:
-        # Fetch basic student user_info for this institute
-        query = '''
-            SELECT user_id, first_name, last_name, access, consultant_user_id AS con_id
-            FROM stu
-            WHERE owner_user_id = ?
-        '''
-        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
-
-        report_info = []
-
-        # Number of quizzes per package for state calculation
-        package_quiz_count = {
-            "AG": 7,
-            "SCL": 4
-        }
-
-        if res is not None:
-            for stu in res:
-                # Resolve consultant name (if any)
-                query_con = 'SELECT first_name, last_name FROM con WHERE user_id = ?'
-                res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query_con, field=stu.con_id)
-                con_name = ""
-                if res_con and len(res_con) >= 2:
-                    con_name = f"{res_con.first_name} {res_con.last_name}"
-
-                # Parse student's access JSON safely
-                raw_access = getattr(stu, "access", None) or "{}"
-                try:
-                    access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-                except (json.JSONDecodeError, TypeError):
-                    access_data = {}
-
-                # Build per-package permission and quiz state
-                access_state = {}
-                for package_name in func_helper.PACKAGES_DATA.keys():
-                    package_info = access_data.get(package_name, {})
-
-                    # Default permission is 0 (no access)
-                    permission = 0
-                    if isinstance(package_info, dict):
-                        permission = int(package_info.get("permission") or 0)
-                    elif isinstance(package_info, bool):
-                        permission = 1 if package_info else 0
-                    elif isinstance(package_info, (int, float, str)):
-                        try:
-                            permission = int(package_info) if str(package_info).strip() != "" else 0
-                        except ValueError:
-                            permission = 0
-
-                    state = "-"
-                    last_quiz_id = 0
-                    if permission == 1:
-                        # Determine how many quizzes exist for this package
-                        total_quizzes = package_quiz_count.get(package_name)
-
-                        # If we know quiz count, compute state from quiz_attempt table
-                        if total_quizzes:
-                            query_quiz = (
-                                'SELECT state, quiz_id FROM quiz_attempt '
-                                'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
-                            )
-                            res_quiz = db_helper.search_allin_table(
-                                conn=conn,
-                                cursor=cursor,
-                                query=query_quiz,
-                                field=(stu.user_id, package_name)
-                            )
-                            last_quiz_id = 1
-                            if not res_quiz or len(res_quiz) == 0:
-                                # No quiz answers yet
-                                state = "not-started"
-                            else:
-                                last_quiz = res_quiz[-1]
-                                last_state = getattr(last_quiz, "state", None)
-                                last_quiz_id = getattr(last_quiz, "quiz_id", None)
-
-                                if last_state == 2 and last_quiz_id == total_quizzes:
-                                    state = "completed"
-                                else:
-                                    state = "in-progress"
-
-                    access_state[package_name] = {
-                        "permission": permission,
-                        "state": state,
-                        "current_quiz_name": func_helper.get_quiz_name(package_name, last_quiz_id)
-                    }
-
-                info_response = {
-                    "student_id": stu.user_id,
-                    "first_name": stu.first_name,
-                    "full_name": stu.first_name + " " + stu.last_name,
-                    "last_name": stu.last_name,
-                    "access": access_data,
-                    "access_state": access_state,
-                    "con_name": con_name,
-                }
-                report_info.append(info_response)
+        with session_scope() as session:
+            students = list_students_for_owner(session=session, owner_user_id=user_info["user_id"])
+            quiz_attempts = list_quiz_attempts_for_users(
+                session=session,
+                user_ids=[student["user_id"] for student in students],
+            )
+        report_info = build_student_management_report_response(
+            students,
+            quiz_attempts,
+            packages_data=func_helper.PACKAGES_DATA,
+            get_quiz_name=func_helper.get_quiz_name,
+            include_consultant_name=True,
+        )
         token = func_helper.get_tracking_code()
         return token, report_info, ""
     except Exception as e:
