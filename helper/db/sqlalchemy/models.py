@@ -235,6 +235,14 @@ class QuizQuestionAnswer(Base, TimestampMixin):
     answer_value: Mapped[str] = mapped_column(UnicodeText, nullable=False)
 
 
+class QuizMissingAnswer(Base, TimestampMixin):
+    __tablename__ = "quiz_missing_answers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.user_id"), nullable=True)
+    question_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
 class Score(Base, TimestampMixin):
     __tablename__ = "scores"
 

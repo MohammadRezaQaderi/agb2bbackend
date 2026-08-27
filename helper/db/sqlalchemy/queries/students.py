@@ -119,3 +119,8 @@ def list_students_for_consultant(
     filters: StudentFilters | None = None,
 ) -> list[dict]:
     return list_students(session, scope="consultant", user_id=consultant_user_id, filters=filters)
+
+
+def get_student_birth_date(session: Session, user_id: int) -> str | None:
+    statement = select(Student.birth_date).where(Student.user_id == user_id)
+    return session.execute(statement).scalar_one_or_none()
