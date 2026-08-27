@@ -145,6 +145,17 @@ class StudentPackageAccess(Base, TimestampMixin):
     limit: Mapped[int] = mapped_column("limit", Integer, nullable=False)
 
 
+class Setting(Base, TimestampMixin):
+    __tablename__ = "setting"
+
+    setting_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    description: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    voice: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    quiz_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    editor_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
 class Token(Base, TimestampMixin):
     __tablename__ = "tokens"
 
@@ -243,6 +254,17 @@ class QuizMissingAnswer(Base, TimestampMixin):
     question_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
+class RedisLog(Base, TimestampMixin):
+    __tablename__ = "redis_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    kind: Mapped[str | None] = mapped_column(Unicode(20), nullable=True)
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    phone: Mapped[str | None] = mapped_column(Unicode(12), nullable=True)
+
+
 class Score(Base, TimestampMixin):
     __tablename__ = "scores"
 
@@ -288,10 +310,13 @@ __all__ = [
     "Payment",
     "QuizAttempt",
     "QuizQuestionAnswer",
+    "QuizMissingAnswer",
+    "RedisLog",
     "ResultState",
     "School",
     "SclScore",
     "Score",
+    "Setting",
     "Student",
     "StudentPackageAccess",
     "Token",

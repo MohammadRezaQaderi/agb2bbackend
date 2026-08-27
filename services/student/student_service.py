@@ -1,11 +1,25 @@
 import json
 import uuid
-from datetime import datetime
 
 import redis
 
-import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
+from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.students import (
+    create_redis_log,
+    get_latest_ag_score_summary,
+    get_quiz_setting,
+    get_result_state,
+    get_student_access_comment,
+    get_student_legacy_access,
+    get_student_owner_consultant_ids,
+    get_student_owner_user_id,
+    get_student_profile,
+    list_student_notifications,
+    list_student_package_access,
+    update_student_name,
+    update_user_password,
+)
 from helper.func_helper import service_exception_error_logging
 from helper.quiz import answer_store
 from helper.quiz.ag_quiz_data_info import ag_quiz_info
@@ -40,12 +54,8 @@ def _load_access_from_json(raw_access):
 
 def _load_student_access(conn, cursor, user_id):
     try:
-        query = """
-            SELECT package_name, permission, [limit]
-            FROM student_package_access
-            WHERE stu_user_id = ?
-        """
-        rows = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query, field=user_id)
+        with session_scope() as session:
+            rows = list_student_package_access(session=session, user_id=user_id)
         if rows:
             access = {}
             for row in rows:
@@ -57,9 +67,9 @@ def _load_student_access(conn, cursor, user_id):
     except Exception as e:
         print(f"[student_package_access] student fallback: {e}")
 
-    query_stu = 'SELECT access FROM stu WHERE user_id = ?'
-    res_stu = db_helper.search_table(conn=conn, cursor=cursor, query=query_stu, field=user_id)
-    return _load_access_from_json(getattr(res_stu, "access", None))
+    with session_scope() as session:
+        access = get_student_legacy_access(session=session, user_id=user_id)
+    return _load_access_from_json(access)
 
 
 def _package_permission(access, kind):
@@ -77,43 +87,39 @@ def _package_permission(access, kind):
 
 def select_student_info(conn, cursor, user_id):
     try:
-        query = '''
-            SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex, s.city,
-                   s.access, s.owner_user_id, s.consultant_user_id, s.birth_date,
-                   owner.role AS owner_role
-            FROM stu s
-            INNER JOIN users u ON u.user_id = s.user_id
-            LEFT JOIN users owner ON owner.user_id = s.owner_user_id
-            WHERE s.user_id = ?
-        '''
-        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
+        with session_scope() as session:
+            res = get_student_profile(session=session, user_id=user_id)
+        if not res:
+            raise ValueError("student not found")
         token = str(uuid.uuid4())
-        if res.owner_role in ["ins", "sch"]:
-            if res.owner_role == "ins":
-                query_ins = 'SELECT name, logo, user_id FROM ins WHERE user_id = ?'
-                res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.owner_user_id)
+        if res.get("owner_role") in ["ins", "sch"]:
+            if res.get("owner_role") == "ins":
+                owner_name = res.get("institute_name")
+                owner_logo = res.get("institute_logo")
+                owner_user_id = res.get("institute_user_id")
             else:
-                query_ins = 'SELECT name, logo, user_id FROM sch WHERE user_id = ?'
-                res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.owner_user_id)
-            query_con = 'SELECT first_name, last_name FROM con WHERE user_id = ?'
-            res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query_con, field=res.consultant_user_id)
+                owner_name = res.get("school_name")
+                owner_logo = res.get("school_logo")
+                owner_user_id = res.get("school_user_id")
+
             con_name = ""
-            if res_con and len(res_con) >= 2:
-                con_name = f"{res_con.first_name} {res_con.last_name}"
-            return token, {"phone": res.phone, "user_id": user_id, "id": res.stu_id, "first_name": res.first_name,
-                           "last_name": res.last_name, "sex": res.sex, "city": res.city,
-                           "access": res.access, "role": "stu", "name": res_ins.name, "con_name": con_name,
-                           "pic": res_ins.logo, "owner_user_id": res_ins.user_id, "ins_id": res_ins.user_id}, ""
+            if res.get("consultant_first_name") or res.get("consultant_last_name"):
+                con_name = f"{res.get('consultant_first_name') or ''} {res.get('consultant_last_name') or ''}".strip()
+            return token, {"phone": res.get("phone"), "user_id": user_id, "id": res.get("stu_id"),
+                           "first_name": res.get("first_name"), "last_name": res.get("last_name"),
+                           "sex": res.get("sex"), "city": res.get("city"), "access": res.get("access"),
+                           "role": "stu", "name": owner_name, "con_name": con_name, "pic": owner_logo,
+                           "owner_user_id": owner_user_id, "ins_id": owner_user_id}, ""
         else:
-            query_con = 'SELECT first_name, last_name FROM ocon WHERE user_id = ?'
-            res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query_con, field=res.consultant_user_id)
             con_name = ""
-            if res_con and len(res_con) >= 2:
-                con_name = f"{res_con.first_name} {res_con.last_name}"
-            return token, {"phone": res.phone, "user_id": user_id, "id": res.stu_id, "first_name": res.first_name,
-                           "last_name": res.last_name, "sex": res.sex, "city": res.city,
-                           "access": res.access, "role": "stu", "name": "هدایت تحصیلی", "con_name": con_name,
-                           "pic": None, "owner_user_id": res.owner_user_id, "ins_id": res.owner_user_id}, ""
+            if res.get("ocon_first_name") or res.get("ocon_last_name"):
+                con_name = f"{res.get('ocon_first_name') or ''} {res.get('ocon_last_name') or ''}".strip()
+            return token, {"phone": res.get("phone"), "user_id": user_id, "id": res.get("stu_id"),
+                           "first_name": res.get("first_name"), "last_name": res.get("last_name"),
+                           "sex": res.get("sex"), "city": res.get("city"), "access": res.get("access"),
+                           "role": "stu", "name": "هدایت تحصیلی", "con_name": con_name,
+                           "pic": None, "owner_user_id": res.get("owner_user_id"),
+                           "ins_id": res.get("owner_user_id")}, ""
     except Exception as e:
         conn.rollback()
         service_exception_error_logging(conn, cursor, "ags_api/stu", "select_student_info", str(e), {},
@@ -167,15 +173,9 @@ def select_stu_dashboard(conn, cursor, request_data, info):
         # Latest computed scores (if any) - only if AG permission and limit is 1
         scores_info = None
         if ag_has_permission and ag_has_limit:
-            scores_query = """
-                SELECT TOP 1 brain_categories, brain_branches
-                FROM scores
-                WHERE user_id = ?
-                ORDER BY edited_time DESC
-            """
-            scores_res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=scores_query, field=user_id)
-            if scores_res:
-                score_row = scores_res[0]
+            with session_scope() as session:
+                score_row = get_latest_ag_score_summary(session=session, user_id=user_id)
+            if score_row:
                 scores_info = {
                     "brain_categories": _safe_json_load(score_row.get("brain_categories")),
                     "brain_branches": _safe_json_load(score_row.get("brain_branches")),
@@ -184,15 +184,9 @@ def select_stu_dashboard(conn, cursor, request_data, info):
         # Result state (single row per user) - only if AG permission and limit is 1
         result_state_info = None
         if ag_has_permission and ag_has_limit:
-            result_state_query = """
-                SELECT t_state, r_state, e_state, a_state, m_state, f_state, i_state, edited_time
-                FROM result_state
-                WHERE user_id = ?
-            """
-            result_state_res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=result_state_query,
-                                                         field=user_id)
-            if result_state_res:
-                db_row = result_state_res[0]
+            with session_scope() as session:
+                db_row = get_result_state(session=session, user_id=user_id)
+            if db_row:
                 result_state_info = {}
                 # Transform using AG_REPORT_INFO and add values from database
                 for state_key in AG_REPORT_INFO.keys():
@@ -203,41 +197,18 @@ def select_stu_dashboard(conn, cursor, request_data, info):
                 # Add edited_time separately
                 result_state_info["edited_time"] = db_row.get("edited_time")
 
-        # Guidance fields (hedayat_fields)
-        # hedayat_fields_query = """
-        #     SELECT TOP 1 suggested, other, created_time, edited_time
-        #     FROM hedayat_fields
-        #     WHERE user_id = ?
-        #     ORDER BY edited_time DESC
-        # """
-        # hedayat_fields_res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=hedayat_fields_query,
-        #                                                field=user_id)
-        # hedayat_fields_info = None
-        # if hedayat_fields_res:
-        #     hedayat_row = hedayat_fields_res[0]
-        #     hedayat_fields_info = {
-        #         "suggested": _safe_json_load(hedayat_row.get("suggested")),
-        #         "other": _safe_json_load(hedayat_row.get("other")),
-        #         "created_time": hedayat_row.get("created_time"),
-        #         "edited_time": hedayat_row.get("edited_time"),
-        #     }
-
         # Notifications for the user or for the student role
-        notifications_query = """
-            SELECT TOP 10 title, description, added_by, priority, persian_date, fullText, created_time
-            FROM notifications
-            WHERE (user_id = ? OR roles LIKE ?)
-            ORDER BY created_time DESC
-        """
-        notif_params = (user_id, f"%{info.get('role', 'stu')}%")
-        notifications_res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=notifications_query,
-                                                      field=notif_params)
+        with session_scope() as session:
+            notifications_res = list_student_notifications(
+                session=session,
+                user_id=user_id,
+                role=info.get("role", "stu"),
+            )
 
         dashboard_info = {
             "quiz": quiz_progress,
             "scores": scores_info,
             "result_state": result_state_info,
-            # "hedayat_fields": hedayat_fields_info,
             "notifications": notifications_res,
         }
         token = str(uuid.uuid4())
@@ -251,10 +222,13 @@ def select_stu_dashboard(conn, cursor, request_data, info):
 def update_stu_user_profile(conn, cursor, request_data, info):
     # TODO log for update the profile with the some attribute
     try:
-        db_helper.update_record(conn, cursor, 'stu', ['first_name', 'last_name', 'edited_time'],
-                                [request_data["first_name"], request_data["last_name"],
-                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                'user_id = ?', [str(info["user_id"])])
+        with session_scope() as session:
+            update_student_name(
+                session=session,
+                user_id=info["user_id"],
+                first_name=request_data["first_name"],
+                last_name=request_data["last_name"],
+            )
         token = str(uuid.uuid4())
         return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
@@ -267,17 +241,8 @@ def update_stu_user_profile(conn, cursor, request_data, info):
 def update_stu_password(conn, cursor, request_data, info):
     try:
         encrypted_password = func_helper.encrypt_password(request_data["password"])
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        db_helper.update_record(
-            conn,
-            cursor,
-            "users",
-            ["password", "edited_time"],
-            [encrypted_password, now_str],
-            "user_id = ?",
-            [str(info["user_id"])],
-        )
+        with session_scope() as session:
+            update_user_password(session=session, user_id=info["user_id"], encrypted_password=encrypted_password)
         token = str(uuid.uuid4())
         return token, None, "رمز عبور شما با موفقیت تغییر کرد."
     except Exception as e:
@@ -361,8 +326,8 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
         if not quiz_kind:
             return None, None, "quiz_kind is required"
 
-        query_stu = 'SELECT owner_user_id FROM stu WHERE user_id = ?'
-        res_stu = db_helper.search_table(conn=conn, cursor=cursor, query=query_stu, field=info["user_id"])
+        with session_scope() as session:
+            owner_user_id = get_student_owner_user_id(session=session, user_id=info["user_id"])
         stu_access = _load_student_access(conn, cursor, info["user_id"])
         permission, _ = _package_permission(stu_access, quiz_kind)
         has_access = permission == 1
@@ -372,10 +337,8 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
         # Limit answers to this user and this quiz kind (support legacy NULL quiz_kind)
         all_attempts = answer_store.get_attempts(conn, cursor, info["user_id"], quiz_kind)
 
-        query_quiz = 'SELECT * FROM setting WHERE user_id = ' + str(res_stu.owner_user_id) + ' and quiz_id = ' + str(
-            quiz_id) + ''
-        response_quiz_setting = cursor.execute(query_quiz)
-        res_quiz_setting = response_quiz_setting.fetchone()
+        with session_scope() as session:
+            res_quiz_setting = get_quiz_setting(session=session, owner_user_id=owner_user_id, quiz_id=quiz_id)
         # All attempts already limited to this product kind (AG, SCL, ...)
         quiz_ids_for_kind = {q["id"] for q in get_quiz_table_info(kind=quiz_kind)}
 
@@ -386,11 +349,10 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
         # Helper to apply optional custom description/voice from setting table
         def _apply_setting_overrides(quiz_info_obj, res_quiz_setting):
             if res_quiz_setting is not None:
-                # NOTE: column indexes 2 and 3 are used here based on existing implementation
-                if len(res_quiz_setting) > 2 and res_quiz_setting[2] is not None:
-                    quiz_info_obj["description"] = res_quiz_setting[2]
-                if len(res_quiz_setting) > 3 and res_quiz_setting[3] is not None:
-                    quiz_info_obj["voice"] = res_quiz_setting[3]
+                if res_quiz_setting.get("description") is not None:
+                    quiz_info_obj["description"] = res_quiz_setting["description"]
+                if res_quiz_setting.get("voice") is not None:
+                    quiz_info_obj["voice"] = res_quiz_setting["voice"]
             return quiz_info_obj
 
         # If no answer for this product yet, only the first quiz of this product is allowed
@@ -477,9 +439,14 @@ def _enqueue_result_generation(conn, cursor, user_id, phone, kind: str):
     r.rpush(REDIS_QUEUE_NAME, payload)
 
     # Log enqueue operation in redis_logs with kind
-    field = '([user_id], [kind], [result], [phone])'
-    values = (user_id, (kind or "").upper(), "user add to queue to create", phone)
-    db_helper.insert_value(conn=conn, cursor=cursor, table_name="redis_logs", fields=field, values=values)
+    with session_scope() as session:
+        create_redis_log(
+            session=session,
+            user_id=user_id,
+            kind=(kind or "").upper(),
+            result="user add to queue to create",
+            phone=phone,
+        )
 
 
 def submit_quiz_answer(conn, cursor, request_data, info):
@@ -585,20 +552,20 @@ def submit_quiz_answer(conn, cursor, request_data, info):
 
 
 def get_stu_other_info(conn, cursor, user_id):
-    query = 'SELECT consultant_user_id, owner_user_id FROM stu WHERE user_id = ?'
-    res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
-    if res.owner_user_id is None:
-        return res.consultant_user_id, res.consultant_user_id
-    return res.owner_user_id, res.consultant_user_id
+    with session_scope() as session:
+        result = get_student_owner_consultant_ids(session=session, user_id=user_id)
+    if not result:
+        return None, None
+    return result
 
 
 def select_student_access_info(conn, cursor, request_data, info):
     try:
-        query = 'SELECT access, comment FROM stu WHERE user_id = ?'
-        res_stu_access = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=info["user_id"])
+        with session_scope() as session:
+            res_stu_access = get_student_access_comment(session=session, user_id=info["user_id"])
         stu_access = _load_student_access(conn, cursor, info["user_id"])
         token = str(uuid.uuid4())
-        comment = getattr(res_stu_access, "comment", None) if res_stu_access else None
+        comment = res_stu_access.get("comment") if res_stu_access else None
         return token, {"access": stu_access or _empty_access(), "comment": comment}, ""
     except Exception as e:
         conn.rollback()
