@@ -7,8 +7,7 @@ from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.otp import create_otp_log
 
 
-def send_otp_message(conn: Any | None, cursor: Any | None, code: str | int, phone: str,
-                     type: str) -> Optional[dict[str, Any]]:
+def send_otp_message(code: str | int, phone: str, type: str) -> Optional[dict[str, Any]]:
     """
     Send an OTP code via Kavenegar SMS service.
 

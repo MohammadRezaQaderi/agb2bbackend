@@ -45,7 +45,7 @@ def _role_handler(user_info, handlers):
 def remove_token(request_data, user_info, conn=None, cursor=None):
     method_type = "DELETE"
     tracking_token, response_data, response_message = auth_service.remove_token(
-        conn=conn, cursor=cursor, request_data=request_data, user_info=user_info
+        request_data=request_data, user_info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -60,9 +60,7 @@ def sign_in(request_data, conn=None, cursor=None):
     if not is_valid:
         return error_response
 
-    tracking_token, response_data, response_message = auth_service.sign_in(
-        conn=conn, cursor=cursor, request_data=request_data
-    )
+    tracking_token, response_data, response_message = auth_service.sign_in(request_data=request_data)
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -76,9 +74,7 @@ def student_sign_in(request_data, conn=None, cursor=None):
     if not is_valid:
         return error_response
 
-    tracking_token, response_data, response_message = auth_service.sign_in_student(
-        conn=conn, cursor=cursor, request_data=request_data
-    )
+    tracking_token, response_data, response_message = auth_service.sign_in_student(request_data=request_data)
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -93,7 +89,7 @@ def sign_up(redis_db, request_data, conn=None, cursor=None):
         return error_response
 
     tracking_token, response_data, response_message = auth_service.sign_up(
-        conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data
+        redis_db=redis_db, request_data=request_data
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -109,7 +105,7 @@ def send_otp(redis_db, request_data, conn=None, cursor=None):
         return error_response
 
     tracking_token, response_data, response_message = auth_service.send_otp(
-        conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data
+        redis_db=redis_db, request_data=request_data
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -125,7 +121,7 @@ def check_otp(redis_db, request_data, conn=None, cursor=None):
         return error_response
 
     tracking_token, response_data, response_message = auth_service.check_otp(
-        conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data
+        redis_db=redis_db, request_data=request_data
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
