@@ -66,7 +66,7 @@ async def student_signin_api(request: Request):
         if action != "ags_sign_in":
             return func_helper.not_method_access_return()
 
-        return service.student_sign_in(conn=None, cursor=None, request_data=request_data)
+        return service.student_sign_in(request_data=request_data)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ags_api/signin", "student_signin_api", str(e), method_type)
@@ -102,7 +102,7 @@ async def student_select_api(request: Request):
         handler = action_map.get(action)
         if handler is None:
             return func_helper.not_method_access_return()
-        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
+        return handler(request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ags_api/select_request", "student_select_api", str(e), method_type)
@@ -136,7 +136,7 @@ async def student_update_api(request: Request):
         handler = action_map.get(action)
         if handler is None:
             return func_helper.not_method_access_return()
-        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
+        return handler(request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ags_api/update_request", "student_update_api", str(e), method_type)
@@ -168,7 +168,7 @@ async def student_delete_api(request: Request):
         handler = action_map.get(action)
         if handler is None:
             return func_helper.not_method_access_return()
-        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
+        return handler(request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ags_api/delete_request", "student_delete_api", str(e), method_type)
@@ -195,7 +195,7 @@ async def signin_api(request: Request):
         if action != "ag_sign_in":
             return func_helper.not_method_access_return()
 
-        return service.sign_in(conn=None, cursor=None, request_data=request_data)
+        return service.sign_in(request_data=request_data)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/signin", "signin_api", str(e), method_type)
@@ -222,17 +222,17 @@ async def insert_api(request: Request):
         if action == "ag_sign_up":
             redis_db = await redis_connection()
             try:
-                return service.sign_up(conn=None, cursor=None, redis_db=redis_db, request_data=request_data)
+                return service.sign_up(redis_db=redis_db, request_data=request_data)
             finally:
                 await close_redis_connection(redis_db=redis_db)
         elif action == "ag_send_otp":
             redis_db = await redis_connection()
             try:
-                return service.send_otp(conn=None, cursor=None, redis_db=redis_db, request_data=request_data)
+                return service.send_otp(redis_db=redis_db, request_data=request_data)
             finally:
                 await close_redis_connection(redis_db=redis_db)
         elif action == "ag_add_comment":
-            return service.add_comment(conn=None, cursor=None, request_data=request_data)
+            return service.add_comment(request_data=request_data)
 
         state, state_message, user_info = await func_helper.authorizer(request_data=request_data)
         if not state:
@@ -249,7 +249,7 @@ async def insert_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
+        return handler(request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/insert_request", "insert_api", str(e), method_type)
@@ -276,12 +276,12 @@ async def select_api(request: Request):
         if action == "ag_check_otp":
             redis_db = await redis_connection()
             try:
-                return service.check_otp(conn=None, cursor=None, redis_db=redis_db, request_data=request_data)
+                return service.check_otp(redis_db=redis_db, request_data=request_data)
             finally:
                 await close_redis_connection(redis_db=redis_db)
 
         if action == "ag_get_comments":
-            return service.get_comments(conn=None, cursor=None)
+            return service.get_comments()
 
         state, state_message, user_info = await func_helper.authorizer(request_data=request_data)
         if not state:
@@ -304,7 +304,7 @@ async def select_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
+        return handler(request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/select_request", "select_api", str(e), method_type)
@@ -347,7 +347,7 @@ async def update_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
+        return handler(request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/update_request", "update_api", str(e), method_type)
@@ -383,7 +383,7 @@ async def delete_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
+        return handler(request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/delete_request", "delete_api", str(e), method_type)
@@ -421,7 +421,7 @@ async def admin_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=None, cursor=None, request_data=request_data)
+        return handler(request_data=request_data)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/admin_request", "admin_api", str(e), method_type)
@@ -452,7 +452,7 @@ async def update_user_file_image(request: Request):
         )
         if not state:
             return func_helper.not_auth_return(message=state_message)
-        return service.change_user_info(conn=None, cursor=None, request_data=request_data, user_info=user_info)
+        return service.change_user_info(request_data=request_data, user_info=user_info)
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api", "update_user_file_image", str(e), method_type)
     except Exception as e:
