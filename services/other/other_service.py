@@ -1,14 +1,22 @@
 import json, httpx
 from datetime import datetime
 
-import helper.db.db_helper as db_helper
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.other import (
+    create_comment,
+    create_payment,
+    create_payment_log,
+    get_comment_user_info_by_phone,
+    get_discount_by_code,
+    get_payment_status,
     get_result_state_for_user,
     get_scl_score_date,
     get_score_brain_categories,
+    list_all_products,
     list_latest_comments,
     list_user_transactions,
+    mark_notification_read_if_allowed,
+    record_discount_usage,
 )
 import helper.func_helper as func_helper
 from helper.response import build_comment_list_response, build_transaction_list_response
@@ -57,27 +65,8 @@ def normalize_persian_text(text):
     return text
 
 def get_all_products(conn, cursor):
-    query = """
-        SELECT 
-            product_id AS id, 
-            name, 
-            price, 
-            status, 
-            image 
-        FROM product 
-        ORDER BY created_time DESC
-    """
-    res = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query)
-    products_info = [
-        {
-            "id": p[0],
-            "name": p[1],
-            "price": p[2],
-            "status": p[3],
-            "image": p[4]
-        }
-        for p in res
-    ]
+    with session_scope() as session:
+        products_info = list_all_products(session=session)
     token = func_helper.get_tracking_code()
     return token, products_info, ""
 
@@ -96,30 +85,31 @@ def get_transactions(conn, cursor, request_data, user_info):
 
 def apply_discount(conn, cursor, request_data, user_info):
     try:
-        query = 'SELECT id, discount_percentage, count, status, count_apply, expire_time FROM discounts WHERE code = ?'
-        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["discount_code"])
+        with session_scope() as session:
+            res = get_discount_by_code(session=session, code=request_data["discount_code"])
         if not res:
             return None, None, "کد تخفیف مد نظر شما موجود نیست."
 
-        if res.expire_time and datetime.now() > res.expire_time:
+        if res["expire_time"] and datetime.now() > res["expire_time"]:
             return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-        if res.status == 'expired':
+        if res["status"] == 'expired':
             return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-        if res.count == 0:
+        if res["count"] == 0:
             return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
 
-        field = '([code], [status], [phone], [user_id])'
-        values = (request_data["discount_code"], "APPLY CODE", user_info["phone"], user_info["user_id"])
-        db_helper.insert_value(conn=conn, cursor=cursor, table_name='using_discount', fields=field, values=values)
-        db_helper.update_record(
-            conn, cursor, "discounts", ["count_apply", "edited_time"], [
-                res.count_apply + 1,
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            ], "id = ?", [res.id]
-        )
+        with session_scope() as session:
+            record_discount_usage(
+                session=session,
+                discount_id=res["id"],
+                code=request_data["discount_code"],
+                status="APPLY CODE",
+                phone=user_info["phone"],
+                user_id=user_info["user_id"],
+                counter_field="count_apply",
+            )
 
         token = func_helper.get_tracking_code()
-        new_total = (round(int(request_data["total_value"]) * (1 - res.discount_percentage))) / 100
+        new_total = (round(int(request_data["total_value"]) * (1 - res["discount_percentage"]))) / 100
         return token, {"new_total": new_total}, ""
     except Exception as e:
         print("error occurred in apply discounts", e)
@@ -131,31 +121,22 @@ def apply_discount(conn, cursor, request_data, user_info):
 
 def get_order_status(conn, cursor, data, user_info):
     try:
-        query = """
-                    SELECT 
-                        payment_id AS id, 
-                        state, 
-                        status, 
-                        price, 
-                        product_data, 
-                        result, 
-                        edited_time AS date 
-                    FROM payment 
-                    WHERE user_id = ? and payment_id = ?
-                    ORDER BY created_time DESC
-                """
-
-        res = db_helper.search_allin_table(conn, cursor, query, [str(user_info["user_id"]), str(data["payment_id"])])
-        if len(res) != 0:
-            status = res[0][2]
+        with session_scope() as session:
+            res = get_payment_status(
+                session=session,
+                user_id=user_info["user_id"],
+                payment_id=int(data["payment_id"]),
+            )
+        if res:
+            status = res["status"]
             transactions_info = {
-                "id": res[0][0],
-                "state": res[0][1],
-                "status": res[0][2],
-                "price": res[0][3],
-                "product_data": json.loads(res[0][4]),
-                "result": res[0][5],
-                "date": res[0][6]
+                "id": res["id"],
+                "state": res["state"],
+                "status": res["status"],
+                "price": res["price"],
+                "product_data": json.loads(res["product_data"]),
+                "result": res["result"],
+                "date": res["date"]
             }
         else:
             status = "UNDIFINE"
@@ -171,6 +152,7 @@ def mellat_request_created(conn, cursor, data, user_info):
     try:
         token = 'eyJhbGciOiJIUzI1NiJ9.eyJSb2xlIjoiQWRtaW4iLCJJc3N1ZXIiOiIwMUZhcmRha2hlaWxpc2FieiIsIlVzZXJuYW1lIjoiTXJxMjciLCJleHAiOjE3NTMwODc5NzcsImlhdCI6MTc1MzA4Nzk3N30.mlcxgBMXIjmw04DPeMkSL5Ijqlg-ifZXQnw_d889qvM'
         endpoint = "b2b"
+        result = {}
         try:
             data["user_id"] = user_info.get("user_id")
             data["phone"] = user_info.get("phone")
@@ -199,46 +181,70 @@ def mellat_request_created(conn, cursor, data, user_info):
             url = result["data"]["url"]
             message = result["message"]
 
-            # We only store aggregated product information as JSON in product_data.
-            field = '([payment_id], [user_id], [phone], [state], [status], [price], [discount_price], [track_id], [result], [discount_id], [message], [product_data], [token])'
-            values = (
-                data["payment_id"],
-                user_info["user_id"],
-                user_info["phone"],
-                "SendPaymentGateway",
-                "PEND",
-                data["price"],
-                data["discount_price"],
-                ref_id,
-                "انتقال به درگاه پرداخت",
-                data["discount_id"],
-                message,
-                json.dumps(data, ensure_ascii=False),
-                ref_id,
-            )
-            db_helper.insert_value(conn=conn, cursor=cursor, table_name='payment', fields=field,
-                                   values=values)
+            with session_scope() as session:
+                create_payment(
+                    session=session,
+                    payment_data={
+                        "payment_id": data["payment_id"],
+                        "user_id": user_info["user_id"],
+                        "phone": user_info["phone"],
+                        "state": "SendPaymentGateway",
+                        "status": "PEND",
+                        "price": data["price"],
+                        "discount_price": data["discount_price"],
+                        "track_id": ref_id,
+                        "result": "انتقال به درگاه پرداخت",
+                        "discount_id": data["discount_id"],
+                        "message": message,
+                        "product_data": json.dumps(data, ensure_ascii=False),
+                        "token": ref_id,
+                    },
+                )
             return ref_id, message, url
 
         else:
             message = result.get("message", "Unknown error from payment gateway")
-            field = '([payment_id], [user_id], [phone], [state], [status], [price], [discount_price], [track_id], [result], [discount_id], [message], [product_data], [token])'
-            values = (
-                data["payment_id"], user_info["user_id"], user_info["phone"], "NOTREFID", "Error", data["price"],
-                data["discount_price"], None, "", data["discount_id"], message,
-                json.dumps(data, ensure_ascii=False), None)
-            db_helper.insert_value(conn=conn, cursor=cursor, table_name='payment_log', fields=field,
-                                   values=values)
+            with session_scope() as session:
+                create_payment_log(
+                    session=session,
+                    payment_data={
+                        "payment_id": data["payment_id"],
+                        "user_id": user_info["user_id"],
+                        "phone": user_info["phone"],
+                        "state": "NOTREFID",
+                        "status": "Error",
+                        "price": data["price"],
+                        "discount_price": data["discount_price"],
+                        "track_id": None,
+                        "result": "",
+                        "discount_id": data["discount_id"],
+                        "message": message,
+                        "product_data": json.dumps(data, ensure_ascii=False),
+                        "token": None,
+                    },
+                )
             return None, message, None
 
     except Exception as e:
-        field = '([payment_id], [user_id], [phone], [state], [status], [price], [discount_price], [track_id], [result], [discount_id], [message], [product_data], [token])'
-        values = (
-            data["payment_id"], user_info["user_id"], user_info["phone"], "MellatGatewayException", "Bug", data["price"],
-            data["discount_price"], None, "مشکل در درگاه بانک ملت", data["discount_id"], str(e),
-            json.dumps(data, ensure_ascii=False), None)
-        db_helper.insert_value(conn=conn, cursor=cursor, table_name='payment_log', fields=field,
-                               values=values)
+        with session_scope() as session:
+            create_payment_log(
+                session=session,
+                payment_data={
+                    "payment_id": data["payment_id"],
+                    "user_id": user_info["user_id"],
+                    "phone": user_info["phone"],
+                    "state": "MellatGatewayException",
+                    "status": "Bug",
+                    "price": data["price"],
+                    "discount_price": data["discount_price"],
+                    "track_id": None,
+                    "result": "مشکل در درگاه بانک ملت",
+                    "discount_id": data["discount_id"],
+                    "message": str(e),
+                    "product_data": json.dumps(data, ensure_ascii=False),
+                    "token": None,
+                },
+            )
         return None, str(e), None
 
 
@@ -270,37 +276,30 @@ def order_payment(conn, cursor, request_data, user_info):
         discount_id = None
         discount_percentage = None
         if request_data.get("discount_code"):
-            query = 'SELECT id, discount_percentage, count, status, used_apply, expire_time FROM discounts WHERE code = ?'
-            res_discount = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["discount_code"])
+            with session_scope() as session:
+                res_discount = get_discount_by_code(session=session, code=request_data["discount_code"])
             if not res_discount:
                 return None, None, "کد تخفیف شما موجود نیست."
             elif res_discount:
-                if datetime.now() > res_discount.expire_time:
+                if res_discount["expire_time"] and datetime.now() > res_discount["expire_time"]:
                     return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-                elif res_discount.status == 'EXPIRED':
+                elif res_discount["status"] == 'EXPIRED':
                     return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-                elif res_discount.count == 0:
+                elif res_discount["count"] == 0:
                     return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
                 else:
-                    discount_id = res_discount.id
-                    discount_percentage = res_discount.discount_percentage
-                    field = '([code], [status], [phone], [user_id])'
-                    values = (request_data["discount_code"], "GOPAYMENT", user_info["phone"], user_info["user_id"])
-                    res_cap = db_helper.insert_value(conn=conn, cursor=cursor, table_name='using_discount',
-                                                     fields=field,
-                                                     values=values)
-                    db_helper.update_record(
-                        conn,
-                        cursor,
-                        "discounts",
-                        ["used_apply", "edited_time"],
-                        [
-                            res_discount.used_apply + 1,
-                            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        ],
-                        "id = ?",
-                        [res_discount.id],
-                    )
+                    discount_id = res_discount["id"]
+                    discount_percentage = res_discount["discount_percentage"]
+                    with session_scope() as session:
+                        record_discount_usage(
+                            session=session,
+                            discount_id=discount_id,
+                            code=request_data["discount_code"],
+                            status="GOPAYMENT",
+                            phone=user_info["phone"],
+                            user_id=user_info["user_id"],
+                            counter_field="used_apply",
+                        )
 
         # Calculate price based on selected packages and discounts.
         price, discount_price, ag_count, scl_count = func_helper.get_price_payment(
@@ -470,45 +469,22 @@ def get_comments(conn, cursor):
 
 def add_comment(conn, cursor, request_data):
     try:
-        query = 'SELECT role, user_id FROM users WHERE phone = ?'
-        res_role = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["phone"])
-        if res_role is None:
-            return None, None, "کاربر یافت نشد."
+        with session_scope() as session:
+            user = get_comment_user_info_by_phone(session=session, phone=request_data["phone"])
+            if user is None:
+                return None, None, "کاربر یافت نشد."
 
-        user_role = res_role[0]
-        user_id = res_role[1]
-        db_name = ""
-        if user_role in ["ins", "sch"]:
-            if user_role == "ins":
-                query = 'SELECT user_id, name FROM ins WHERE user_id = ?'
-            else:
-                query = 'SELECT user_id, name FROM sch WHERE user_id = ?'
-            res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
-            if res_user is None:
-                return None, None, "اطلاعات کاربر یافت نشد."
-            db_name = res_user[1]
-        elif user_role in ["con", "ocon"]:
-            if user_role == "con":
-                query = 'SELECT user_id, first_name, last_name FROM con WHERE user_id = ?'
-            else:
-                query = 'SELECT user_id, first_name, last_name FROM ocon WHERE user_id = ?'
-            res_user = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
-            if res_user is None:
-                return None, None, "اطلاعات کاربر یافت نشد."
-            db_name = res_user[1] + " " + res_user[2]
-
-        field = '([name], [comment], [rating], [persian_date], [user_id], [phone], [db_name], [role])'
-        values = (
-            request_data["first_name"] + " " + request_data["last_name"],
-            request_data["comment"],
-            request_data["rating"],
-            request_data["date"],
-            res_role[1],
-            request_data["phone"],
-            db_name,
-            user_role,
-        )
-        db_helper.insert_value(conn=conn, cursor=cursor, table_name='comments', fields=field, values=values)
+            create_comment(
+                session=session,
+                name=request_data["first_name"] + " " + request_data["last_name"],
+                comment=request_data["comment"],
+                rating=request_data["rating"],
+                persian_date=request_data["date"],
+                user_id=user["user_id"],
+                phone=request_data["phone"],
+                db_name=user["db_name"],
+                role=user["role"],
+            )
         return func_helper.get_tracking_code(), None, "نظر شما با موفقیت ثبت شد."
     except Exception as e:
         conn.rollback()
@@ -536,39 +512,15 @@ def mark_notification_read(conn, cursor, request_data, user_info):
     try:
         notification_id = int(request_data["notification_id"])
         user_id = int(user_info["user_id"])
-        role_patterns = [f"%{role}%" for role in _notification_role_aliases(user_info.get("role"))]
-        role_conditions = " OR ".join(["roles LIKE ?"] * len(role_patterns)) or "1 = 0"
-
-        access_query = f"""
-            SELECT TOP 1 id
-            FROM notifications
-            WHERE id = ?
-              AND (
-                  user_id = ?
-                  OR roles LIKE '%all%'
-                  OR {role_conditions}
-              )
-        """
-        cursor.execute(access_query, (notification_id, user_id, *role_patterns))
-        if cursor.fetchone() is None:
-            return None, None, "اعلان مورد نظر یافت نشد."
-
-        cursor.execute(
-            """
-            IF NOT EXISTS (
-                SELECT 1
-                FROM notification_reads
-                WHERE notification_id = ? AND user_id = ?
+        with session_scope() as session:
+            was_marked = mark_notification_read_if_allowed(
+                session=session,
+                notification_id=notification_id,
+                user_id=user_id,
+                role_aliases=_notification_role_aliases(user_info.get("role")),
             )
-            INSERT INTO notification_reads (notification_id, user_id)
-            VALUES (?, ?)
-            """,
-            notification_id,
-            user_id,
-            notification_id,
-            user_id,
-        )
-        conn.commit()
+        if not was_marked:
+            return None, None, "اعلان مورد نظر یافت نشد."
 
         return func_helper.get_tracking_code(), {"notification_id": notification_id, "is_read": 1}, ""
     except (TypeError, ValueError):

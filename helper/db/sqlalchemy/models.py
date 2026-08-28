@@ -197,6 +197,60 @@ class Payment(Base, TimestampMixin):
     product_data: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
 
+class PaymentLog(Base, TimestampMixin):
+    __tablename__ = "payment_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    payment_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    phone: Mapped[str] = mapped_column(Unicode(12), nullable=False)
+    state: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    status: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    discount_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    track_id: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    discount_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    result: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    saleReferenceId: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    product_data: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+
+
+class Discount(Base, TimestampMixin):
+    __tablename__ = "discounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    status: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    discount_percentage: Mapped[float | None] = mapped_column(Float, nullable=True)
+    used: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    used_apply: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    count_apply: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    expire_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class UsingDiscount(Base, TimestampMixin):
+    __tablename__ = "using_discount"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    status: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    phone: Mapped[str] = mapped_column(Unicode(12), nullable=False)
+
+
+class Product(Base, TimestampMixin):
+    __tablename__ = "product"
+
+    product_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    image: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class Comment(Base, TimestampMixin):
     __tablename__ = "comments"
 
@@ -335,6 +389,10 @@ __all__ = [
     "Notification",
     "NotificationRead",
     "Payment",
+    "PaymentLog",
+    "Discount",
+    "UsingDiscount",
+    "Product",
     "QuizAttempt",
     "QuizQuestionAnswer",
     "QuizMissingAnswer",
