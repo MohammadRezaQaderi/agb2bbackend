@@ -133,6 +133,19 @@ class CapacityPackage(Base, TimestampMixin):
     capacity: Mapped[Capacity | None] = relationship(back_populates="packages")
 
 
+class CapacityLog(Base, TimestampMixin):
+    __tablename__ = "capacity_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    capacity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    capacity_package_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    package_name: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+    allowed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    used: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    change: Mapped[int | None] = mapped_column("change", Integer, nullable=True)
+
+
 class StudentPackageAccess(Base, TimestampMixin):
     __tablename__ = "student_package_access"
 
@@ -313,6 +326,7 @@ class ResultState(Base, TimestampMixin):
 __all__ = [
     "ApiLog",
     "Capacity",
+    "CapacityLog",
     "CapacityPackage",
     "Consultant",
     "Institute",
