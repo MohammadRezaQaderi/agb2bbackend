@@ -51,7 +51,7 @@ def get_info(conn, cursor, user_id):
         }
         return token, user_info, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_info", str(e), {},
                                         {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
@@ -90,7 +90,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
         return token, {"dashboard_info": cons_info, "notifications": notifications}, ""
 
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_dashboard", str(e), request_data,
                                         user_info)
         return None, None, "اطلاعات داشبورد دریافت نشد."
@@ -113,7 +113,7 @@ def add_owner_consultant(conn, cursor, request_data, user_id):
         token = func_helper.get_tracking_code()
         return token, None, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "add_owner_consultant", str(e), request_data,
                                         {"user_id": user_id, "phone": request_data["phone"]})
         return None, None, "مشکل در ثبت مشاور ارشد رخ داده است."
@@ -127,7 +127,7 @@ def get_report(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_report", str(e), request_data, user_info)
         return None, [], "مشکل در دریافت گزارش رخ داده است."
 
@@ -149,7 +149,7 @@ def get_management_report(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_management_report", str(e),
                                         request_data, user_info)
         return None, None, "مشکل در دریافت گزارش مدیریتی رخ داده است."
@@ -173,7 +173,7 @@ def add_student(conn, cursor, request_data, stu_user_id, user_info):
         token = func_helper.get_tracking_code()
         return token, None, "دانش‌آموز شما با موفقیت ثبت شد."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "add_student", str(e), request_data, user_info)
         return None, None, "مشکلی در افزودن دانش‌آموز رخ داده است."
 
@@ -194,7 +194,7 @@ def change_student(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_student", str(e), request_data, user_info)
         return None, None, "مشکلی در تغییر اطلاعات دانش‌آموز رخ داده است."
 
@@ -211,7 +211,7 @@ def change_comment(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_comment", str(e), request_data, user_info)
         return None, None, "مشکلی در تغییر توضیحات دانش‌آموز رخ داده است."
 
@@ -237,7 +237,7 @@ def change_user_info(conn, cursor, request_data, user_info):
             response["pic"] = pic
         return token, response, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_user_info", str(e), request_data,
                                         user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
@@ -264,7 +264,7 @@ def get_students(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, stu_info, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_students", str(e), request_data, user_info)
         return None, [], "اطلاعات دانش‌آموزان دریافت نشد."
 
@@ -283,7 +283,7 @@ def change_user_voice(conn, cursor, request_data, user_info):
             )
         return token, None, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_user_voice", str(e), request_data,
                                         user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
@@ -303,7 +303,7 @@ def change_setting(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, None, "پیش اطلاعات اولیه آزمون شما تغییر یافت."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_setting", str(e), request_data, user_info)
         return None, None, "پیش اطلاعات اولیه آزمون شما تغییر نیافت."
 
@@ -327,7 +327,7 @@ def verify_user(conn, cursor, user_id):
         }
         return token, user_info, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "verify_user", str(e), None,
                                         {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."

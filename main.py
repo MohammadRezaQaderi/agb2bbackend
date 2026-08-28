@@ -3,12 +3,12 @@ import os
 from fastapi import FastAPI, Request, Form, UploadFile, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
-import helper.db.db_helper as db_helper
 import helper.api_metrics as api_metrics
 import helper.func_helper as func_helper
 import helper.static_data.get_data as static_data
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.report_downloads import get_report_download_status
+from helper.redis_helper import close_redis_connection, redis_connection
 import services.institute.institute_service as institute_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
@@ -54,7 +54,6 @@ async def student_health_check():
 @api_metrics.monitor_endpoint("ags_api/signin")
 async def student_signin_api(request: Request):
     method_type = "SIGNIN"
-    conn, cursor = None, None
 
     try:
         data = await request.json()
@@ -67,23 +66,18 @@ async def student_signin_api(request: Request):
         if action != "ags_sign_in":
             return func_helper.not_method_access_return()
 
-        conn, cursor = await db_helper.db_connection()
-        return service.student_sign_in(conn=conn, cursor=cursor, request_data=request_data)
+        return service.student_sign_in(conn=None, cursor=None, request_data=request_data)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ags_api/signin", "student_signin_api", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ags_api/signin", "student_signin_api", str(e), method_type)
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ags_api/select_request")
 @api_metrics.monitor_endpoint("ags_api/select_request")
 async def student_select_api(request: Request):
     method_type = "SELECT"
-    conn, cursor = None, None
 
     try:
         data = await request.json()
@@ -94,9 +88,8 @@ async def student_select_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await db_helper.db_connection()
         state, state_message, user_info = await func_helper.authorizer(
-            conn=conn, cursor=cursor, request_data=request_data
+            conn=None, cursor=None, request_data=request_data
         )
         if not state:
             return func_helper.not_auth_return(message=state_message)
@@ -111,22 +104,18 @@ async def student_select_api(request: Request):
         handler = action_map.get(action)
         if handler is None:
             return func_helper.not_method_access_return()
-        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ags_api/select_request", "student_select_api", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ags_api/select_request", "student_select_api", str(e), method_type)
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ags_api/update_request")
 @api_metrics.monitor_endpoint("ags_api/update_request")
 async def student_update_api(request: Request):
     method_type = "UPDATE"
-    conn, cursor = None, None
 
     try:
         data = await request.json()
@@ -137,9 +126,8 @@ async def student_update_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await db_helper.db_connection()
         state, state_message, user_info = await func_helper.authorizer(
-            conn=conn, cursor=cursor, request_data=request_data
+            conn=None, cursor=None, request_data=request_data
         )
         if not state:
             return func_helper.not_auth_return(message=state_message)
@@ -152,22 +140,18 @@ async def student_update_api(request: Request):
         handler = action_map.get(action)
         if handler is None:
             return func_helper.not_method_access_return()
-        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ags_api/update_request", "student_update_api", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ags_api/update_request", "student_update_api", str(e), method_type)
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ags_api/delete_request")
 @api_metrics.monitor_endpoint("ags_api/delete_request")
 async def student_delete_api(request: Request):
     method_type = "DELETE"
-    conn, cursor = None, None
 
     try:
         data = await request.json()
@@ -178,9 +162,8 @@ async def student_delete_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await db_helper.db_connection()
         state, state_message, user_info = await func_helper.authorizer(
-            conn=conn, cursor=cursor, request_data=request_data
+            conn=None, cursor=None, request_data=request_data
         )
         if not state:
             return func_helper.not_auth_return(message=state_message)
@@ -191,22 +174,18 @@ async def student_delete_api(request: Request):
         handler = action_map.get(action)
         if handler is None:
             return func_helper.not_method_access_return()
-        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ags_api/delete_request", "student_delete_api", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ags_api/delete_request", "student_delete_api", str(e), method_type)
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/signin")
 @api_metrics.monitor_endpoint("ag_api/signin")
 async def signin_api(request: Request):
     method_type = "SIGNIN"
-    conn, cursor = None, None
 
     try:
         data = await request.json()
@@ -222,24 +201,18 @@ async def signin_api(request: Request):
         if action != "ag_sign_in":
             return func_helper.not_method_access_return()
 
-        conn, cursor = await db_helper.db_connection()
-
-        return service.sign_in(conn=conn, cursor=cursor, request_data=request_data)
+        return service.sign_in(conn=None, cursor=None, request_data=request_data)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/signin", "signin_api", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ag_api/signin", "signin_api", str(e), method_type)
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/insert_request")
 @api_metrics.monitor_endpoint("ag_api/insert_request")
 async def insert_api(request: Request):
     method_type = "INSERT"
-    conn, cursor = None, None
 
     try:
         data = await request.json()
@@ -252,24 +225,22 @@ async def insert_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await db_helper.db_connection()
-
         if action == "ag_sign_up":
-            redis_db = await db_helper.redis_connection()
+            redis_db = await redis_connection()
             try:
-                return service.sign_up(conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data)
+                return service.sign_up(conn=None, cursor=None, redis_db=redis_db, request_data=request_data)
             finally:
-                await db_helper.close_redis_connection(redis_db=redis_db)
+                await close_redis_connection(redis_db=redis_db)
         elif action == "ag_send_otp":
-            redis_db = await db_helper.redis_connection()
+            redis_db = await redis_connection()
             try:
-                return service.send_otp(conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data)
+                return service.send_otp(conn=None, cursor=None, redis_db=redis_db, request_data=request_data)
             finally:
-                await db_helper.close_redis_connection(redis_db=redis_db)
+                await close_redis_connection(redis_db=redis_db)
         elif action == "ag_add_comment":
-            return service.add_comment(conn=conn, cursor=cursor, request_data=request_data)
+            return service.add_comment(conn=None, cursor=None, request_data=request_data)
 
-        state, state_message, user_info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
+        state, state_message, user_info = await func_helper.authorizer(conn=None, cursor=None, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -284,22 +255,18 @@ async def insert_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/insert_request", "insert_api", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ag_api/insert_request", "insert_api", str(e), method_type)
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/select_request")
 @api_metrics.monitor_endpoint("ag_api/select_request")
 async def select_api(request: Request):
     method_type = "SELECT"
-    conn, cursor = None, None
 
     try:
         data = await request.json()
@@ -312,19 +279,17 @@ async def select_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await db_helper.db_connection()
-
         if action == "ag_check_otp":
-            redis_db = await db_helper.redis_connection()
+            redis_db = await redis_connection()
             try:
-                return service.check_otp(conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data)
+                return service.check_otp(conn=None, cursor=None, redis_db=redis_db, request_data=request_data)
             finally:
-                await db_helper.close_redis_connection(redis_db=redis_db)
+                await close_redis_connection(redis_db=redis_db)
 
         if action == "ag_get_comments":
-            return service.get_comments(conn=conn, cursor=cursor)
+            return service.get_comments(conn=None, cursor=None)
 
-        state, state_message, user_info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
+        state, state_message, user_info = await func_helper.authorizer(conn=None, cursor=None, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -345,22 +310,18 @@ async def select_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/select_request", "select_api", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ag_api/select_request", "select_api", str(e), method_type)
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/update_request")
 @api_metrics.monitor_endpoint("ag_api/update_request")
 async def update_api(request: Request):
     method_type = "UPDATE"
-    conn, cursor = None, None
 
     try:
         data = await request.json()
@@ -373,8 +334,7 @@ async def update_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await db_helper.db_connection()
-        state, state_message, user_info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
+        state, state_message, user_info = await func_helper.authorizer(conn=None, cursor=None, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -393,22 +353,18 @@ async def update_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/update_request", "update_api", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ag_api/update_request", "update_api", str(e), method_type)
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/delete_request")
 @api_metrics.monitor_endpoint("ag_api/delete_request")
 async def delete_api(request: Request):
     method_type = "DELETE"
-    conn, cursor = None, None
 
     try:
         data = await request.json()
@@ -421,8 +377,7 @@ async def delete_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await db_helper.db_connection()
-        state, state_message, user_info = await func_helper.authorizer(conn=conn, cursor=cursor, request_data=request_data)
+        state, state_message, user_info = await func_helper.authorizer(conn=None, cursor=None, request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -434,22 +389,18 @@ async def delete_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+        return handler(conn=None, cursor=None, request_data=request_data, user_info=user_info)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/delete_request", "delete_api", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ag_api/delete_request", "delete_api", str(e), method_type)
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/admin_request")
 @api_metrics.monitor_endpoint("ag_api/admin_request")
 async def admin_api(request: Request):
     method_type = "ADMIN"
-    conn, cursor = None, None
 
     try:
         data = await request.json()
@@ -466,8 +417,6 @@ async def admin_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        conn, cursor = await db_helper.db_connection()
-
         action_map = {
             "ag_change_capacity": service.admin_change_capacity,
             "ag_get_user_info": service.admin_get_user_info,
@@ -478,22 +427,18 @@ async def admin_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(conn=conn, cursor=cursor, request_data=request_data)
+        return handler(conn=None, cursor=None, request_data=request_data)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/admin_request", "admin_api", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ag_api/admin_request", "admin_api", str(e), method_type)
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/update_user_file_image")
 @api_metrics.monitor_endpoint("ag_api/update_user_file_image")
 async def update_user_file_image(request: Request):
     method_type = "UPDATE"
-    conn, cursor = None, None
     try:
         data = await request.json()
         action = data.get("action_type")
@@ -508,19 +453,15 @@ async def update_user_file_image(request: Request):
 
         user_id = request_data["user_id"]
         token = request_data["token"]
-        conn, cursor = await db_helper.db_connection()
-        state, state_message, user_info = await func_helper.authorizer(conn=conn, cursor=cursor,
+        state, state_message, user_info = await func_helper.authorizer(conn=None, cursor=None,
                                                       request_data={"user_id": int(user_id), "token": token})
         if not state:
             return func_helper.not_auth_return(message=state_message)
-        return service.change_user_info(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+        return service.change_user_info(conn=None, cursor=None, request_data=request_data, user_info=user_info)
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api", "update_user_file_image", str(e), method_type)
     except Exception as e:
         return await func_helper.exception_error_logging("ag_api", "update_user_file_image", str(e), method_type)
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.post("/ag_api/update_user_voice")
@@ -537,10 +478,8 @@ async def update_user_voice(
         token: str = Form(...),
 ):
     method_type = "UPDATE"
-    conn, cursor = None, None
     try:
-        conn, cursor = await db_helper.db_connection()
-        state, state_message, user_info = await func_helper.authorizer(conn=conn, cursor=cursor,
+        state, state_message, user_info = await func_helper.authorizer(conn=None, cursor=None,
                                                       request_data={"user_id": int(user_id), "token": token})
         if not state:
             return func_helper.not_auth_return(message=state_message)
@@ -559,17 +498,17 @@ async def update_user_voice(
             file_object.write(voice.file.read())
         if role == "ins":
             tracking_token, response_data, response_message = institute_service.change_user_voice(
-                conn=conn, cursor=cursor, request_data=data, user_info=user_info
+                conn=None, cursor=None, request_data=data, user_info=user_info
             )
             return service.service_response(method_type, tracking_token, response_data, response_message)
         elif role == "sch":
             tracking_token, response_data, response_message = school_service.change_user_voice(
-                conn=conn, cursor=cursor, request_data=data, user_info=user_info
+                conn=None, cursor=None, request_data=data, user_info=user_info
             )
             return service.service_response(method_type, tracking_token, response_data, response_message)
         elif role == "ocon":
             tracking_token, response_data, response_message = owner_consultant_service.change_user_voice(
-                conn=conn, cursor=cursor, request_data=data, user_info=user_info
+                conn=None, cursor=None, request_data=data, user_info=user_info
             )
             return service.service_response(method_type, tracking_token, response_data, response_message)
         else:
@@ -577,9 +516,6 @@ async def update_user_voice(
                     "error": "شما به این سرویس دسترسی ندارید."}
     except Exception as e:
         return await func_helper.exception_error_logging("ag_api", "update_user_voice", str(e), method_type)
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
 
 
 @app.get("/ags_api/get_ins_pic/{filename}")

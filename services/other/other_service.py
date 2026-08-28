@@ -487,7 +487,7 @@ def add_comment(conn, cursor, request_data):
             )
         return func_helper.get_tracking_code(), None, "نظر شما با موفقیت ثبت شد."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         print("error occurred in add comment", e)
         func_helper.service_exception_error_logging(
             conn, cursor, "ag_api/other", "add_comment", str(e), request_data, {}
@@ -526,7 +526,7 @@ def mark_notification_read(conn, cursor, request_data, user_info):
     except (TypeError, ValueError):
         return None, None, "شناسه اعلان معتبر نیست."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         print("error occurred in mark notification read", e)
         func_helper.service_exception_error_logging(
             conn, cursor, "ag_api/other", "mark_notification_read", str(e), request_data, user_info

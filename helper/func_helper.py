@@ -2,7 +2,6 @@ import base64
 import hashlib
 import hmac
 import os
-import pyodbc
 import secrets
 import string
 import random
@@ -13,8 +12,8 @@ from datetime import datetime
 from random import randint
 from typing import Any, Mapping, Tuple, Optional
 
-from walrus import Database
 from cryptography.fernet import Fernet, InvalidToken
+from sqlalchemy import text
 
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.auth import (
@@ -33,8 +32,7 @@ from helper.db.sqlalchemy.queries.students import (
     save_student_package_access,
     update_student_access,
 )
-from config import PASSWORD_SECRET_KEY, DB_DRIVER, DB_SERVER, DB_DATABASE, DB_UID, DB_PWD, DB_TRUST_CERT, REDIS_HOST, \
-    REDIS_PORT, REDIS_DB, REDIS_PASSWORD, DEVELOP_TOKEN
+from config import PASSWORD_SECRET_KEY, DEVELOP_TOKEN
 
 _PASSWORD_FERNET: Optional[Fernet] = None
 PASSWORD_HASH_PREFIX = "pbkdf2_sha256"
@@ -86,8 +84,8 @@ async def health_payload(service_name: str):
     port = os.getenv("PORT", "unknown")
 
     try:
-        conn, cursor = await db_connection()
-        await close_db_connection(conn=conn, cursor=cursor)
+        with session_scope() as session:
+            session.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as e:
         db_status = f"error: {str(e)}"
@@ -286,29 +284,6 @@ PROVINCES = [
     }
 ]
 
-
-def _db_config() -> dict:
-    """Return DB connection kwargs, sourcing overrides from environment variables."""
-    return {
-        "driver": DB_DRIVER,
-        "host": DB_SERVER,
-        "database": DB_DATABASE,
-        "UID": DB_UID,
-        "PWD": DB_PWD,
-        "TrustServerCertificate": DB_TRUST_CERT,
-    }
-
-
-def _redis_config() -> dict:
-    """Return Redis connection kwargs, sourcing overrides from environment variables."""
-    return {
-        "host": REDIS_HOST,
-        "port": REDIS_PORT,
-        "db": REDIS_DB,
-        "password": REDIS_PASSWORD if REDIS_PASSWORD else None,
-    }
-
-
 def _get_password_fernet() -> Fernet:
     """Return a singleton Fernet instance configured with PASSWORD_SECRET_KEY."""
     global _PASSWORD_FERNET
@@ -400,8 +375,8 @@ def verify_password(plain_password: str, stored_password: str) -> bool:
 
 
 def upsert_student_package_access(
-        conn: pyodbc.Connection,
-        cursor: pyodbc.Cursor,
+        conn: Any,
+        cursor: Any,
         stu_user_id: int,
         owner_user_id: int | None,
         consultant_user_id: int | None,
@@ -427,8 +402,8 @@ def upsert_student_package_access(
 
 
 def get_student_package_access_counts(
-        conn: pyodbc.Connection,
-        cursor: pyodbc.Cursor,
+        conn: Any,
+        cursor: Any,
         user_id: int,
         relation_column: str,
 ) -> dict[str, int] | None:
@@ -447,50 +422,18 @@ def get_student_package_access_counts(
         return None
 
 
-async def db_connection() -> tuple[pyodbc.Connection, pyodbc.Cursor]:
-    """Establish and return a SQL Server connection and cursor."""
-    conn = pyodbc.connect(**_db_config())
-    return conn, conn.cursor()
+def safe_rollback(conn: Any | None) -> None:
+    """Rollback a legacy DB connection when one is available."""
+    if conn is None:
+        return
 
-
-async def close_db_connection(conn: pyodbc.Connection | None, cursor: pyodbc.Cursor | None) -> None:
-    """Safely close the SQL Server connection and cursor."""
     try:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-    except pyodbc.Error as e:
-        print(f"[DB] Error closing connection: {e}")
-
-
-async def redis_connection() -> Database:
-    """Establish and return a Redis connection."""
-    cfg = _redis_config()
-    try:
-        redis_db: Database = Database(
-            host=cfg["host"],
-            port=cfg["port"],
-            db=cfg["db"],
-            password=cfg["password"],
-        )
-        redis_db.ping()
-        return redis_db
+        conn.rollback()
     except Exception as e:
-        print(f"[Redis] Connection failed: {e}")
-        raise
+        print(f"[DB] Rollback skipped: {e}")
 
 
-async def close_redis_connection(redis_db: Database | None) -> None:
-    """Safely close the Redis connection."""
-    try:
-        if redis_db is not None:
-            redis_db.close()
-    except Exception as e:
-        print(f"[Redis] Error closing connection: {e}")
-
-
-async def authorizer(conn: pyodbc.Connection | None, cursor: pyodbc.Cursor | None, request_data: Mapping[str, Any]):
+async def authorizer(conn: Any | None, cursor: Any | None, request_data: Mapping[str, Any]):
     try:
         token = request_data.get("token")
         if not token:
@@ -586,8 +529,8 @@ async def exception_error_logging(
 
 
 def service_exception_error_logging(
-        conn: pyodbc.Connection,
-        cursor: pyodbc.Cursor,
+        conn: Any,
+        cursor: Any,
         end_point: str,
         func_name: str,
         error_message: str,
@@ -637,7 +580,7 @@ def check_security_code(code: str | int, check: str | int) -> bool:
         return False
 
 
-def random_generate_phone(conn: pyodbc.Connection, cursor: pyodbc.Cursor, n: int) -> str:
+def random_generate_phone(conn: Any, cursor: Any, n: int) -> str:
     """Generate a unique random phone number with prefix '009' and n-digit suffix."""
     range_start = 10 ** (n - 1)
     range_end = (10 ** n) - 1
@@ -679,8 +622,8 @@ def password_format_check(password: str) -> Tuple[bool, str]:
 
 
 def insert_user(
-        conn: pyodbc.Connection,
-        cursor: pyodbc.Cursor,
+        conn: Any,
+        cursor: Any,
         request_data: Mapping[str, Any],
         user_info: Mapping[str, Any],
 ) -> Tuple[Optional[int], Optional[str], str]:
@@ -701,14 +644,14 @@ def insert_user(
             )
         return user_id, password, ""
     except Exception as e:
-        conn.rollback()
+        safe_rollback(conn)
         service_exception_error_logging(conn, cursor, "ag_api/func_helper", "insert_user", str(e), request_data, user_info)
         return None, None, "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
 
 
 def insert_user_student(
-        conn: pyodbc.Connection,
-        cursor: pyodbc.Cursor,
+        conn: Any,
+        cursor: Any,
         user_info: Mapping[str, Any],
 ) -> Tuple[Optional[int], Optional[str], Optional[str], str]:
     """Insert a new student user with a randomly generated phone number and password."""
@@ -724,12 +667,12 @@ def insert_user_student(
             )
         return user_id, password, phone, ""
     except Exception as e:
-        conn.rollback()
+        safe_rollback(conn)
         service_exception_error_logging(conn, cursor, "ag_api/func_helper", "insert_user", str(e), {}, user_info)
         return None, None, None, "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
 
 
-def get_payment_id(conn: pyodbc.Connection, cursor: pyodbc.Cursor) -> int:
+def get_payment_id(conn: Any, cursor: Any) -> int:
     """Generate a unique payment ID that doesn't exist in the database."""
     while True:
         payment_id = randint(1, 999999)
@@ -773,8 +716,8 @@ def get_price_payment(request_data: Mapping[str, int], discount_percentage: floa
 
 
 def add_capacity_signup(
-        conn: pyodbc.Connection,
-        cursor: pyodbc.Cursor,
+        conn: Any,
+        cursor: Any,
         user_id: int,
         phone: str,
 ) -> Optional[int]:
@@ -792,8 +735,8 @@ def add_capacity_signup(
 
 
 def update_user_and_role_password(
-        conn: pyodbc.Connection,
-        cursor: pyodbc.Cursor,
+        conn: Any,
+        cursor: Any,
         request_data: Mapping[str, Any],
         user_info: Mapping[str, Any],
         role_table: str,
@@ -829,7 +772,7 @@ def update_user_and_role_password(
         token = get_tracking_code()
         return token
     except Exception as e:
-        conn.rollback()
+        safe_rollback(conn)
         service_exception_error_logging(
             conn, cursor, "ag_api/password", f"update_{role_table}_password",
             str(e), request_data, user_info
@@ -856,8 +799,8 @@ def validate_request_data_fields(
 
 
 def update_student_access_and_capacity(
-        conn: pyodbc.Connection,
-        cursor: pyodbc.Cursor,
+        conn: Any,
+        cursor: Any,
         request_data: Mapping[str, Any],
         user_info: Mapping[str, Any],
         role_type: str,
@@ -994,7 +937,7 @@ def update_student_access_and_capacity(
         return token, None, "دسترسی دانش‌آموز با موفقیت به‌روزرسانی شد."
 
     except Exception as e:
-        conn.rollback()
+        safe_rollback(conn)
         service_exception_error_logging(
             conn, cursor, end_point,
             f"update_student_access_and_capacity_{role_type}",

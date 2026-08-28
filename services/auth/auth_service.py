@@ -35,7 +35,7 @@ def _create_token(conn, cursor, user_info):
                 if not token_exists(session=session, token=token):
                     return create_token(session=session, user_id=user_id, token=token)
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/auth", "_create_token", str(e), user_info, {})
         return None
 
@@ -48,7 +48,7 @@ def remove_token(conn, cursor, request_data, user_info):
             return None, None, "توکن حذف نشد یا موجود نیست."
         return func_helper.get_tracking_code(), {}, "توکن حذف شد."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/auth", "remove_token", str(e), request_data, user_info)
         return None, None, "مشکل در اتمام نشست"
 
@@ -98,7 +98,7 @@ def sign_in(conn, cursor, request_data):
             return None, None, "متاسفانه شما از این سامانه اجازه ورود ندارید."
         return token_user, user_info, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/auth", "sign_in", str(e), request_data, {})
         return None, None, "مشکلی در ورود شما رخ داده با پشتیبانی ارتباط بگیرید."
 
@@ -122,7 +122,7 @@ def sign_in_student(conn, cursor, request_data):
         _, user_info, _ = student_service.select_student_info(conn=conn, cursor=cursor, user_id=res["user_id"])
         return token_user, user_info, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ags_api/auth", "sign_in_student", str(e), request_data, {})
         return None, None, "مشکلی در ورود شما رخ داده با پشتیبانی ارتباط بگیرید."
 
@@ -173,7 +173,7 @@ def sign_up(conn, cursor, redis_db, request_data):
             token = None
 
         if token is None:
-            conn.rollback()
+            func_helper.safe_rollback(conn)
             return None, None, "مشکل در ثبت نام رخ داده با پشتیبانی در ارتباط باشید."
 
         cache = redis_db.cache(REDIS_CACHE_OTP)
@@ -188,7 +188,7 @@ def sign_up(conn, cursor, redis_db, request_data):
         return token, None, "ثبت نام شما با موفقیت انجام شد."
 
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/auth", "sign_up", str(e), request_data, {})
         return None, None, "مشکلی در ثبت نام شما رخ داده با پشتیبانی ارتباط بگیرید."
 
@@ -237,7 +237,7 @@ def send_otp(conn, cursor, redis_db, request_data):
         token = func_helper.get_tracking_code()
         return token, {"phone": phone}, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/auth", "send_otp", str(e), request_data, {})
         return None, None, "مشکلی در احراز هویت شما رخ داده با پشتیبانی ارتباط بگیرید."
 
@@ -294,6 +294,6 @@ def check_otp(conn, cursor, redis_db, request_data):
             return token_user, user_info, ""
 
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/auth", "check_otp", str(e), request_data, {})
         return None, None, "مشکلی در احراز هویت شما رخ داده با پشتیبانی ارتباط بگیرید."
