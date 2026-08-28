@@ -13,7 +13,6 @@ from helper.db.sqlalchemy.queries.dashboard import (
     list_quiz_attempts_for_scope,
 )
 from helper.db.sqlalchemy.queries.owner_consultants import (
-    create_owner_consultant_profile,
     get_owner_consultant_profile,
     update_owner_consultant_profile,
     verify_owner_consultant,
@@ -21,7 +20,6 @@ from helper.db.sqlalchemy.queries.owner_consultants import (
 from helper.db.sqlalchemy.queries.reports import list_quiz_attempts_for_users
 from helper.db.sqlalchemy.queries.settings import upsert_setting
 from helper.db.sqlalchemy.queries.students import (
-    create_student_profile,
     list_students_for_consultant,
 )
 import helper.func_helper as func_helper
@@ -96,29 +94,6 @@ def get_dashboard(conn, cursor, request_data, user_info):
         return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
-def add_owner_consultant(conn, cursor, request_data, user_id):
-    try:
-        sex = request_data.get("sex")
-        if not sex:
-            sex = 1
-        with session_scope() as session:
-            create_owner_consultant_profile(
-                session=session,
-                user_id=user_id,
-                first_name=request_data["first_name"],
-                last_name=request_data["last_name"],
-                sex=sex,
-            )
-        func_helper.add_capacity_signup(user_id=user_id)
-        token = func_helper.get_tracking_code()
-        return token, None, ""
-    except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "add_owner_consultant", str(e), request_data,
-                                        {"user_id": user_id, "phone": request_data["phone"]})
-        return None, None, "مشکل در ثبت مشاور ارشد رخ داده است."
-
-
 def get_report(conn, cursor, request_data, user_info):
     try:
         with session_scope() as session:
@@ -153,29 +128,6 @@ def get_management_report(conn, cursor, request_data, user_info):
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_management_report", str(e),
                                         request_data, user_info)
         return None, None, "مشکل در دریافت گزارش مدیریتی رخ داده است."
-
-
-def add_student(conn, cursor, request_data, stu_user_id, user_info):
-    try:
-        with session_scope() as session:
-            create_student_profile(
-                session=session,
-                user_id=stu_user_id,
-                owner_user_id=request_data["user_id"],
-                consultant_user_id=user_info["user_id"],
-                adder_id=user_info["user_id"],
-                first_name=request_data["first_name"],
-                last_name=request_data["last_name"],
-                sex=request_data["sex"],
-                city=request_data["city"],
-                birth_date=request_data["birth_date"],
-            )
-        token = func_helper.get_tracking_code()
-        return token, None, "دانش‌آموز شما با موفقیت ثبت شد."
-    except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "add_student", str(e), request_data, user_info)
-        return None, None, "مشکلی در افزودن دانش‌آموز رخ داده است."
 
 
 def change_student(conn, cursor, request_data, user_info):

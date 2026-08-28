@@ -25,7 +25,6 @@ from helper.db.sqlalchemy.queries.other import create_api_log, payment_id_exists
 from helper.db.sqlalchemy.queries.students import (
     consume_capacity_package,
     count_student_packages_for_relation,
-    create_capacity_with_packages,
     get_capacity_package,
     get_student_access_for_relation,
     save_student_package_access,
@@ -657,22 +656,6 @@ def get_price_payment(request_data: Mapping[str, int], discount_percentage: floa
         new_value = total
 
     return total, new_value, ag_count, scl_count
-
-
-def add_capacity_signup(
-        user_id: int,
-) -> Optional[int]:
-    """Create a capacity record and associated package entries for a new user signup."""
-    try:
-        with session_scope() as session:
-            return create_capacity_with_packages(
-                session=session,
-                user_id=user_id,
-                package_names=list(PACKAGES_DATA.keys()),
-            )
-    except Exception as e:
-        print(f"Error: capacity insert failed: {e}")
-        return None
 
 
 def update_user_and_role_password(

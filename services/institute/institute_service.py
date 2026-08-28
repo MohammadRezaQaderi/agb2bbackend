@@ -2,7 +2,6 @@ import config
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.filters import ConsultantFilters, StudentFilters
 from helper.db.sqlalchemy.queries.consultants import (
-    create_consultant_profile,
     list_consultants_for_owner,
     update_consultant_profile_for_owner,
 )
@@ -16,13 +15,11 @@ from helper.db.sqlalchemy.queries.dashboard import (
 )
 from helper.db.sqlalchemy.queries.reports import list_quiz_attempts_for_users
 from helper.db.sqlalchemy.queries.institutes import (
-    create_institute_profile,
     get_institute_profile,
     update_institute_profile,
     verify_institute,
 )
 from helper.db.sqlalchemy.queries.students import (
-    create_student_profile,
     list_students_for_owner,
     update_student_profile_for_owner,
 )
@@ -91,23 +88,6 @@ def get_dashboard(conn, cursor, request_data, user_info):
         return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
-def add_institute(conn, cursor, request_data, user_id):
-    try:
-        with session_scope() as session:
-            create_institute_profile(session=session, user_id=user_id, name=request_data["name"])
-
-        func_helper.add_capacity_signup(user_id=user_id)
-        token = func_helper.get_tracking_code()
-
-        return token, None, ""
-
-    except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ins", "add_institute", str(e), request_data,
-                                        {"user_id": user_id, "phone": request_data["phone"]})
-        return None, None, "مشکل در ثبت موسسه رخ داده است."
-
-
 def get_report(conn, cursor, request_data, user_info):
     try:
         with session_scope() as session:
@@ -144,27 +124,6 @@ def get_management_report(conn, cursor, request_data, user_info):
                                         request_data,
                                         user_info)
         return None, None, "مشکل در دریافت گزارش مدیریتی رخ داده است."
-
-
-# this function is for add consultant in ins
-def add_consultant(conn, cursor, request_data, con_user_id, user_info):
-    try:
-        with session_scope() as session:
-            create_consultant_profile(
-                session=session,
-                user_id=con_user_id,
-                owner_user_id=user_info["user_id"],
-                editor_id=user_info["user_id"],
-                first_name=request_data["first_name"],
-                last_name=request_data["last_name"],
-                sex=request_data["sex"],
-            )
-        token = func_helper.get_tracking_code()
-        return token, None, "مشاور شما با موفقیت ثبت شد."
-    except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ins", "add_consultant", str(e), request_data, user_info)
-        return None, None, "مشکلی در ثبت نهایی اطلاعات مشاور رخ داده است لطفا با پیشیبانی در ارتباط باشید."
 
 
 # this function is for update the information of consultant
@@ -204,30 +163,6 @@ def get_consultants(conn, cursor, request_data, user_info):
         func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ins", "get_consultants", str(e), request_data, user_info)
         return None, [], "اطلاعات مشاورین دریافت نشد."
-
-
-# this function for insert student to ins
-def add_student(conn, cursor, request_data, stu_user_id, user_info):
-    try:
-        with session_scope() as session:
-            create_student_profile(
-                session=session,
-                user_id=stu_user_id,
-                owner_user_id=user_info["user_id"],
-                consultant_user_id=request_data["con_id"],
-                adder_id=user_info["user_id"],
-                first_name=request_data["first_name"],
-                last_name=request_data["last_name"],
-                sex=request_data["sex"],
-                city=request_data["city"],
-                birth_date=request_data["birth_date"],
-            )
-        token = func_helper.get_tracking_code()
-        return token, None, "دانش‌آموز شما با موفقیت ثبت شد."
-    except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/ins", "add_student", str(e), request_data, user_info)
-        return None, None, "مشکلی در افزودن دانش‌آموز رخ داده است."
 
 
 # this function is for update the information of consultant
