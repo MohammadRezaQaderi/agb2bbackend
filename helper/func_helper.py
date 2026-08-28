@@ -433,7 +433,7 @@ def safe_rollback(conn: Any | None) -> None:
         print(f"[DB] Rollback skipped: {e}")
 
 
-async def authorizer(conn: Any | None, cursor: Any | None, request_data: Mapping[str, Any]):
+async def authorizer(request_data: Mapping[str, Any]):
     try:
         token = request_data.get("token")
         if not token:
@@ -451,7 +451,7 @@ async def authorizer(conn: Any | None, cursor: Any | None, request_data: Mapping
 
         return True, "", {"user_id": res["user_id"], "phone": res["phone"], "role": res["role"]}
     except Exception as e:
-        service_exception_error_logging(conn, cursor, "ag_api/check", "check", str(e), request_data, {})
+        service_exception_error_logging(None, None, "ag_api/check", "check", str(e), request_data, {})
         return False, "اطلاعات دریافتی شما دچار مشکل شده لطفا یکبار خروج کرده و سپس ورود شوید.", None
 
 

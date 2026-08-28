@@ -88,9 +88,7 @@ async def student_select_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        state, state_message, user_info = await func_helper.authorizer(
-            conn=None, cursor=None, request_data=request_data
-        )
+        state, state_message, user_info = await func_helper.authorizer(request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -126,9 +124,7 @@ async def student_update_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        state, state_message, user_info = await func_helper.authorizer(
-            conn=None, cursor=None, request_data=request_data
-        )
+        state, state_message, user_info = await func_helper.authorizer(request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -162,9 +158,7 @@ async def student_delete_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        state, state_message, user_info = await func_helper.authorizer(
-            conn=None, cursor=None, request_data=request_data
-        )
+        state, state_message, user_info = await func_helper.authorizer(request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -240,7 +234,7 @@ async def insert_api(request: Request):
         elif action == "ag_add_comment":
             return service.add_comment(conn=None, cursor=None, request_data=request_data)
 
-        state, state_message, user_info = await func_helper.authorizer(conn=None, cursor=None, request_data=request_data)
+        state, state_message, user_info = await func_helper.authorizer(request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -289,7 +283,7 @@ async def select_api(request: Request):
         if action == "ag_get_comments":
             return service.get_comments(conn=None, cursor=None)
 
-        state, state_message, user_info = await func_helper.authorizer(conn=None, cursor=None, request_data=request_data)
+        state, state_message, user_info = await func_helper.authorizer(request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -334,7 +328,7 @@ async def update_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        state, state_message, user_info = await func_helper.authorizer(conn=None, cursor=None, request_data=request_data)
+        state, state_message, user_info = await func_helper.authorizer(request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -377,7 +371,7 @@ async def delete_api(request: Request):
         if request_data is None:
             return func_helper.not_data_return(method_type=method_type)
 
-        state, state_message, user_info = await func_helper.authorizer(conn=None, cursor=None, request_data=request_data)
+        state, state_message, user_info = await func_helper.authorizer(request_data=request_data)
         if not state:
             return func_helper.not_auth_return(message=state_message)
 
@@ -453,8 +447,9 @@ async def update_user_file_image(request: Request):
 
         user_id = request_data["user_id"]
         token = request_data["token"]
-        state, state_message, user_info = await func_helper.authorizer(conn=None, cursor=None,
-                                                      request_data={"user_id": int(user_id), "token": token})
+        state, state_message, user_info = await func_helper.authorizer(
+            request_data={"user_id": int(user_id), "token": token}
+        )
         if not state:
             return func_helper.not_auth_return(message=state_message)
         return service.change_user_info(conn=None, cursor=None, request_data=request_data, user_info=user_info)
@@ -479,8 +474,9 @@ async def update_user_voice(
 ):
     method_type = "UPDATE"
     try:
-        state, state_message, user_info = await func_helper.authorizer(conn=None, cursor=None,
-                                                      request_data={"user_id": int(user_id), "token": token})
+        state, state_message, user_info = await func_helper.authorizer(
+            request_data={"user_id": int(user_id), "token": token}
+        )
         if not state:
             return func_helper.not_auth_return(message=state_message)
         generate_random_name = func_helper.get_tracking_code()
