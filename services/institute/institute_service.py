@@ -96,7 +96,7 @@ def add_institute(conn, cursor, request_data, user_id):
         with session_scope() as session:
             create_institute_profile(session=session, user_id=user_id, name=request_data["name"])
 
-        func_helper.add_capacity_signup(conn, cursor, user_id, request_data["phone"])
+        func_helper.add_capacity_signup(user_id=user_id)
         token = func_helper.get_tracking_code()
 
         return token, None, ""
@@ -381,8 +381,6 @@ def change_student_access(conn, cursor, request_data, user_info):
     Uses the reusable helper function func_helper.update_student_access_and_capacity.
     """
     return func_helper.update_student_access_and_capacity(
-        conn=conn,
-        cursor=cursor,
         request_data=request_data,
         user_info=user_info,
         role_type="ins",

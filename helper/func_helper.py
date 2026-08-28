@@ -375,8 +375,6 @@ def verify_password(plain_password: str, stored_password: str) -> bool:
 
 
 def upsert_student_package_access(
-        conn: Any,
-        cursor: Any,
         stu_user_id: int,
         owner_user_id: int | None,
         consultant_user_id: int | None,
@@ -402,8 +400,6 @@ def upsert_student_package_access(
 
 
 def get_student_package_access_counts(
-        conn: Any,
-        cursor: Any,
         user_id: int,
         relation_column: str,
 ) -> dict[str, int] | None:
@@ -580,7 +576,7 @@ def check_security_code(code: str | int, check: str | int) -> bool:
         return False
 
 
-def random_generate_phone(conn: Any, cursor: Any, n: int) -> str:
+def random_generate_phone(n: int) -> str:
     """Generate a unique random phone number with prefix '009' and n-digit suffix."""
     range_start = 10 ** (n - 1)
     range_end = (10 ** n) - 1
@@ -622,8 +618,6 @@ def password_format_check(password: str) -> Tuple[bool, str]:
 
 
 def insert_user(
-        conn: Any,
-        cursor: Any,
         request_data: Mapping[str, Any],
         user_info: Mapping[str, Any],
 ) -> Tuple[Optional[int], Optional[str], str]:
@@ -641,22 +635,19 @@ def insert_user(
                 phone=request_data["phone"],
                 password=encrypt_password(password),
                 role='con',
-            )
+        )
         return user_id, password, ""
     except Exception as e:
-        safe_rollback(conn)
-        service_exception_error_logging(conn, cursor, "ag_api/func_helper", "insert_user", str(e), request_data, user_info)
+        service_exception_error_logging(None, None, "ag_api/func_helper", "insert_user", str(e), request_data, user_info)
         return None, None, "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
 
 
 def insert_user_student(
-        conn: Any,
-        cursor: Any,
         user_info: Mapping[str, Any],
 ) -> Tuple[Optional[int], Optional[str], Optional[str], str]:
     """Insert a new student user with a randomly generated phone number and password."""
     try:
-        phone = random_generate_phone(conn, cursor, 8)
+        phone = random_generate_phone(8)
         password = random_generate_password()
         with session_scope() as session:
             user_id = create_user(
@@ -664,15 +655,14 @@ def insert_user_student(
                 phone=phone,
                 password=encrypt_password(password),
                 role='stu',
-            )
+        )
         return user_id, password, phone, ""
     except Exception as e:
-        safe_rollback(conn)
-        service_exception_error_logging(conn, cursor, "ag_api/func_helper", "insert_user", str(e), {}, user_info)
+        service_exception_error_logging(None, None, "ag_api/func_helper", "insert_user", str(e), {}, user_info)
         return None, None, None, "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
 
 
-def get_payment_id(conn: Any, cursor: Any) -> int:
+def get_payment_id() -> int:
     """Generate a unique payment ID that doesn't exist in the database."""
     while True:
         payment_id = randint(1, 999999)
@@ -716,10 +706,7 @@ def get_price_payment(request_data: Mapping[str, int], discount_percentage: floa
 
 
 def add_capacity_signup(
-        conn: Any,
-        cursor: Any,
         user_id: int,
-        phone: str,
 ) -> Optional[int]:
     """Create a capacity record and associated package entries for a new user signup."""
     try:
@@ -735,8 +722,6 @@ def add_capacity_signup(
 
 
 def update_user_and_role_password(
-        conn: Any,
-        cursor: Any,
         request_data: Mapping[str, Any],
         user_info: Mapping[str, Any],
         role_table: str,
@@ -751,8 +736,6 @@ def update_user_and_role_password(
     - update_con_password
 
     Args:
-        conn: Active database connection.
-        cursor: Active database cursor.
         request_data: Request payload containing at least the new 'password'.
         user_info: Context information containing 'user_id'.
         role_table: Kept for backward-compatible caller signatures.
@@ -772,9 +755,8 @@ def update_user_and_role_password(
         token = get_tracking_code()
         return token
     except Exception as e:
-        safe_rollback(conn)
         service_exception_error_logging(
-            conn, cursor, "ag_api/password", f"update_{role_table}_password",
+            None, None, "ag_api/password", f"update_{role_table}_password",
             str(e), request_data, user_info
         )
         return None
@@ -799,8 +781,6 @@ def validate_request_data_fields(
 
 
 def update_student_access_and_capacity(
-        conn: Any,
-        cursor: Any,
         request_data: Mapping[str, Any],
         user_info: Mapping[str, Any],
         role_type: str,
@@ -813,8 +793,6 @@ def update_student_access_and_capacity(
     This is a reusable function for institute, school, and owner_consultant roles.
 
     Args:
-        conn: Active database connection
-        cursor: Active database cursor
         request_data: Request data containing:
             - stu_id: Student ID (user_id from stu table)
             - kind: Package name (key from PACKAGES_DATA, e.g., "AG", "SCL")
@@ -937,9 +915,8 @@ def update_student_access_and_capacity(
         return token, None, "دسترسی دانش‌آموز با موفقیت به‌روزرسانی شد."
 
     except Exception as e:
-        safe_rollback(conn)
         service_exception_error_logging(
-            conn, cursor, end_point,
+            None, None, end_point,
             f"update_student_access_and_capacity_{role_type}",
             str(e), request_data, user_info
         )

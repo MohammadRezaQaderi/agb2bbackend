@@ -306,7 +306,7 @@ def order_payment(conn, cursor, request_data, user_info):
             request_data, discount_percentage=discount_percentage
         )
 
-        payment_id = func_helper.get_payment_id(conn, cursor)
+        payment_id = func_helper.get_payment_id()
 
         # Store product details in a generic structure so future products can be added easily.
         product_data = {

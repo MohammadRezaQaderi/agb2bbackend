@@ -109,7 +109,7 @@ def add_owner_consultant(conn, cursor, request_data, user_id):
                 last_name=request_data["last_name"],
                 sex=sex,
             )
-        func_helper.add_capacity_signup(conn, cursor, user_id, request_data["phone"])
+        func_helper.add_capacity_signup(user_id=user_id)
         token = func_helper.get_tracking_code()
         return token, None, ""
     except Exception as e:
@@ -340,8 +340,6 @@ def change_student_access(conn, cursor, request_data, user_info):
     Uses the reusable helper function func_helper.update_student_access_and_capacity.
     """
     return func_helper.update_student_access_and_capacity(
-        conn=conn,
-        cursor=cursor,
         request_data=request_data,
         user_info=user_info,
         role_type="ocon",

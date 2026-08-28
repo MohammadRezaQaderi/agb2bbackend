@@ -175,8 +175,6 @@ def change_password(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token = func_helper.update_user_and_role_password(
-        conn=conn,
-        cursor=cursor,
         request_data=request_data,
         user_info=user_info,
         role_table=role_table,
@@ -425,7 +423,7 @@ def add_consultant(request_data, user_info, conn=None, cursor=None):
     if not is_valid:
         return error_response
 
-    con_user_id, password, error_message = func_helper.insert_user(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+    con_user_id, password, error_message = func_helper.insert_user(request_data=request_data, user_info=user_info)
     if not con_user_id:
         return _error_response(method_type, error_message)
     request_data["password"] = password
@@ -536,7 +534,7 @@ def add_student(request_data, user_info, conn=None, cursor=None):
     method_type = "INSERT"
     # No strict required fields here because phone/password are generated,
     # but you can add validation for optional metadata if needed.
-    stu_user_id, password, phone, error_message = func_helper.insert_user_student(conn=conn, cursor=cursor, user_info=user_info)
+    stu_user_id, password, phone, error_message = func_helper.insert_user_student(user_info=user_info)
     if not stu_user_id:
         return _error_response(method_type, error_message)
     request_data["phone"] = phone
