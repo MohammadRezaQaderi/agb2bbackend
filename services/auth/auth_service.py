@@ -97,7 +97,7 @@ def sign_in(request_data):
             _, user_info, _ = owner_consultant_service.get_info(conn=None, cursor=None, user_id=res["user_id"])
 
         elif res["role"] == "con":
-            _, user_info, _ = consultant_service.get_info(conn=None, cursor=None, user_id=res["user_id"])
+            _, user_info, _ = consultant_service.get_info(user_id=res["user_id"])
         elif res["role"] == "stu":
             return None, None, "متاسفانه شما از این سامانه اجازه ورود ندارید."
         return token_user, user_info, ""
@@ -276,7 +276,7 @@ def check_otp(redis_db, request_data):
             elif res["role"] == "ocon":
                 _, user_info, _ = owner_consultant_service.get_info(conn=None, cursor=None, user_id=res["user_id"])
             elif res["role"] == "con":
-                _, user_info, _ = consultant_service.get_info(conn=None, cursor=None, user_id=res["user_id"])
+                _, user_info, _ = consultant_service.get_info(user_id=res["user_id"])
             else:
                 return None, None, "شما به این سرویس دسترسی ندارید."
             return token_user, user_info, ""

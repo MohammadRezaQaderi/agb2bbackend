@@ -133,8 +133,7 @@ def change_user_info(request_data, user_info, conn=None, cursor=None):
                                                           user_info=user_info),
         "sch": lambda: school_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data,
                                                        user_info=user_info),
-        "con": lambda: consultant_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data,
-                                                           user_info=user_info),
+        "con": lambda: consultant_service.change_user_info(request_data=request_data, user_info=user_info),
         "ocon": lambda: owner_consultant_service.change_user_info(conn=conn, cursor=cursor,
                                                                   request_data=request_data, user_info=user_info),
     })
@@ -380,8 +379,7 @@ def get_dashboard(request_data, user_info, conn=None, cursor=None):
                                                     user_info=user_info),
         "ocon": lambda: owner_consultant_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
                                                                user_info=user_info),
-        "con": lambda: consultant_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
-                                                        user_info=user_info),
+        "con": lambda: consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
     })
     if result is None:
         return func_helper.not_method_access_return()
@@ -467,8 +465,7 @@ def get_students(request_data, user_info, conn=None, cursor=None):
                                                       user_info=user_info),
         "sch": lambda: school_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
                                                    user_info=user_info),
-        "con": lambda: consultant_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
-                                                       user_info=user_info),
+        "con": lambda: consultant_service.get_students(request_data=request_data, user_info=user_info),
         "ocon": lambda: owner_consultant_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
                                                               user_info=user_info),
     })
@@ -574,8 +571,7 @@ def change_student(request_data, user_info, conn=None, cursor=None):
                                                      user_info=user_info),
         "ocon": lambda: owner_consultant_service.change_student(conn=conn, cursor=cursor, request_data=request_data,
                                                                 user_info=user_info),
-        "con": lambda: consultant_service.change_student(conn=conn, cursor=cursor, request_data=request_data,
-                                                         user_info=user_info),
+        "con": lambda: consultant_service.change_student(request_data=request_data, user_info=user_info),
     })
     if result is None:
         return func_helper.not_method_access_return()
@@ -588,8 +584,7 @@ def change_student(request_data, user_info, conn=None, cursor=None):
 def change_comment(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     result = _role_handler(user_info, {
-        "con": lambda: consultant_service.change_comment(conn=conn, cursor=cursor, request_data=request_data,
-                                                         user_info=user_info),
+        "con": lambda: consultant_service.change_comment(request_data=request_data, user_info=user_info),
         "ocon": lambda: owner_consultant_service.change_comment(conn=conn, cursor=cursor, request_data=request_data,
                                                                 user_info=user_info),
     })
@@ -636,8 +631,7 @@ def get_report(request_data, user_info, conn=None, cursor=None):
                                                  user_info=user_info),
         "ocon": lambda: owner_consultant_service.get_report(conn=conn, cursor=cursor, request_data=request_data,
                                                             user_info=user_info),
-        "con": lambda: consultant_service.get_report(conn=conn, cursor=cursor, request_data=request_data,
-                                                     user_info=user_info),
+        "con": lambda: consultant_service.get_report(request_data=request_data, user_info=user_info),
     })
     if result is None:
         return func_helper.not_method_access_return()
@@ -659,8 +653,7 @@ def get_management_report(request_data, user_info, conn=None, cursor=None):
         "ocon": lambda: owner_consultant_service.get_management_report(conn=conn, cursor=cursor,
                                                                        request_data=request_data,
                                                                        user_info=user_info),
-        "con": lambda: consultant_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data,
-                                                                user_info=user_info),
+        "con": lambda: consultant_service.get_management_report(request_data=request_data, user_info=user_info),
     })
     if result is None:
         return func_helper.not_method_access_return()

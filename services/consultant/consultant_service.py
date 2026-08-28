@@ -25,7 +25,7 @@ from helper.response import (
 )
 
 
-def get_info(conn, cursor, user_id):
+def get_info(user_id):
     try:
         with session_scope() as session:
             res = get_consultant_profile(session=session, user_id=user_id)
@@ -45,13 +45,12 @@ def get_info(conn, cursor, user_id):
                          "owner_user_id": res.get("owner_user_id"), "ins_id": res.get("owner_user_id")}
         return token, response_info, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_info", str(e), {},
+        func_helper.service_exception_error_logging(None, None, "ag_api/con", "get_info", str(e), {},
                                         {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 
 
-def get_dashboard(conn, cursor, request_data, user_info):
+def get_dashboard(request_data, user_info):
     """
     Fetches dashboard data for consultant users, including:
     - Student counts
@@ -85,12 +84,11 @@ def get_dashboard(conn, cursor, request_data, user_info):
         return token, {"dashboard_info": cons_info, "notifications": notifications}, ""
 
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_dashboard", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/con", "get_dashboard", str(e), request_data, user_info)
         return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
-def get_report(conn, cursor, request_data, user_info):
+def get_report(request_data, user_info):
     try:
         with session_scope() as session:
             students = list_students_for_consultant(session=session, consultant_user_id=user_info["user_id"])
@@ -98,12 +96,11 @@ def get_report(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_report", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/con", "get_report", str(e), request_data, user_info)
         return None, [], "مشکل در دریافت گزارش رخ داده است."
 
 
-def get_management_report(conn, cursor, request_data, user_info):
+def get_management_report(request_data, user_info):
     try:
         with session_scope() as session:
             students = list_students_for_consultant(session=session, consultant_user_id=user_info["user_id"])
@@ -120,14 +117,13 @@ def get_management_report(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_management_report", str(e),
+        func_helper.service_exception_error_logging(None, None, "ag_api/con", "get_management_report", str(e),
                                         request_data, user_info)
         return None, None, "مشکل در دریافت گزارش مدیریتی رخ داده است."
 
 
 # this function use for get students of con for list of students
-def get_students(conn, cursor, request_data, user_info):
+def get_students(request_data, user_info):
     try:
         filters = StudentFilters.from_request(request_data)
         with session_scope() as session:
@@ -140,13 +136,12 @@ def get_students(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, stu_info, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "get_students", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/con", "get_students", str(e), request_data, user_info)
         return None, [], "اطلاعات دانش‌آموزان دریافت نشد."
 
 
 # this function is for update the information of consultant
-def change_student(conn, cursor, request_data, user_info):
+def change_student(request_data, user_info):
     try:
         with session_scope() as session:
             update_student_profile_by_consultant(
@@ -162,12 +157,11 @@ def change_student(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_student", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/con", "change_student", str(e), request_data, user_info)
         return None, None, "مشکلی در تغییر اطلاعات دانش‌آموز رخ داده است."
 
 
-def change_comment(conn, cursor, request_data, user_info):
+def change_comment(request_data, user_info):
     try:
         with session_scope() as session:
             update_student_comment_by_consultant(
@@ -179,12 +173,11 @@ def change_comment(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_comment", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/con", "change_comment", str(e), request_data, user_info)
         return None, None, "مشکلی در تغییر توضیحات دانش‌آموز رخ داده است."
 
 
-def change_user_info(conn, cursor, request_data, user_info):
+def change_user_info(request_data, user_info):
     try:
         with session_scope() as session:
             update_consultant_name(
@@ -196,7 +189,6 @@ def change_user_info(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/con", "change_user_info", str(e), request_data,
+        func_helper.service_exception_error_logging(None, None, "ag_api/con", "change_user_info", str(e), request_data,
                                         user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
