@@ -17,7 +17,6 @@ from sqlalchemy import text
 
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.auth import (
-    create_user,
     get_user_identity_by_token,
     update_user_password,
     user_phone_exists,
@@ -615,51 +614,6 @@ def password_format_check(password: str) -> Tuple[bool, str]:
         return val, ''
     else:
         return val, message
-
-
-def insert_user(
-        request_data: Mapping[str, Any],
-        user_info: Mapping[str, Any],
-) -> Tuple[Optional[int], Optional[str], str]:
-    """Insert a new consultant user into the database with a randomly generated password."""
-    try:
-        with session_scope() as session:
-            exists = user_phone_exists(session=session, phone=request_data["phone"])
-        if exists:
-            return None, None, "شماره تلفن وارد شده در سامانه موجود می‌باشد لطفا شماره تلفن دیگری وارد نمایید."
-
-        password = random_generate_password()
-        with session_scope() as session:
-            user_id = create_user(
-                session=session,
-                phone=request_data["phone"],
-                password=encrypt_password(password),
-                role='con',
-        )
-        return user_id, password, ""
-    except Exception as e:
-        service_exception_error_logging(None, None, "ag_api/func_helper", "insert_user", str(e), request_data, user_info)
-        return None, None, "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
-
-
-def insert_user_student(
-        user_info: Mapping[str, Any],
-) -> Tuple[Optional[int], Optional[str], Optional[str], str]:
-    """Insert a new student user with a randomly generated phone number and password."""
-    try:
-        phone = random_generate_phone(8)
-        password = random_generate_password()
-        with session_scope() as session:
-            user_id = create_user(
-                session=session,
-                phone=phone,
-                password=encrypt_password(password),
-                role='stu',
-        )
-        return user_id, password, phone, ""
-    except Exception as e:
-        service_exception_error_logging(None, None, "ag_api/func_helper", "insert_user", str(e), {}, user_info)
-        return None, None, None, "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
 
 
 def get_payment_id() -> int:

@@ -4,9 +4,9 @@ from config import REDIS_CACHE_OTP
 import helper.func_helper as func_helper
 import helper.otp.otp_helper as otp_helper
 from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.accounts import create_signup_account
 from helper.db.sqlalchemy.queries.auth import (
     create_token,
-    create_user,
     delete_token_for_user,
     get_role_verify_status,
     get_token_for_user,
@@ -151,31 +151,18 @@ def sign_up(redis_db, request_data):
         if exists:
             return None, None, "این شماره تلفن موجود می‌باشد."
 
+        if role not in {"ins", "sch", "ocon"}:
+            return None, None, "نقش کاربری معتبر نیست."
+
         with session_scope() as session:
-            user_id = create_user(
+            create_signup_account(
                 session=session,
                 phone=phone,
-                password=func_helper.encrypt_password(password),
+                encrypted_password=func_helper.encrypt_password(password),
                 role=role,
+                request_data=request_data,
+                package_names=list(func_helper.PACKAGES_DATA.keys()),
             )
-        if role == "ins":
-            token, _, _ = institute_service.add_institute(conn=None, cursor=None, request_data=request_data,
-                                                          user_id=user_id)
-
-        elif role == "sch":
-            token, _, _ = school_service.add_school(conn=None, cursor=None, request_data=request_data,
-                                                    user_id=user_id)
-
-        elif role == "ocon":
-            token, _, _ = owner_consultant_service.add_owner_consultant(
-                conn=None, cursor=None, request_data=request_data, user_id=user_id
-            )
-
-        else:
-            token = None
-
-        if token is None:
-            return None, None, "مشکل در ثبت نام رخ داده با پشتیبانی در ارتباط باشید."
 
         cache = redis_db.cache(REDIS_CACHE_OTP)
         cache_record = cache.get(phone)
@@ -186,7 +173,7 @@ def sign_up(redis_db, request_data):
         res_otp = otp_helper.send_otp_message(code=code, phone=phone, type="VERIFY")
         cache.set(phone, json.dumps({"code": code}), 60 * 60 * 24 * 100)
 
-        return token, None, "ثبت نام شما با موفقیت انجام شد."
+        return func_helper.get_tracking_code(), None, "ثبت نام شما با موفقیت انجام شد."
 
     except Exception as e:
         func_helper.service_exception_error_logging(None, None, "ag_api/auth", "sign_up", str(e), request_data, {})
