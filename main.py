@@ -1,5 +1,4 @@
 import os
-import json
 
 from fastapi import FastAPI, Request, Form, UploadFile, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
@@ -8,6 +7,8 @@ import helper.db.db_helper as db_helper
 import helper.api_metrics as api_metrics
 import helper.func_helper as func_helper
 import helper.static_data.get_data as static_data
+from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.report_downloads import get_report_download_status
 import services.institute.institute_service as institute_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
@@ -591,659 +592,87 @@ async def get_ins_pic(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
 
 
+def _report_error(status_code: int, message: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={"status": status_code, "tracking_code": None, "method_type": "GET", "error": message},
+    )
+
+
+async def _get_report_pdf(
+    phone: str,
+    kind: str,
+    expected_kind: str,
+    expected_quiz_count: int,
+    report_filename: str,
+    log_endpoint: str,
+    log_func_name: str,
+):
+    try:
+        kind = kind.upper()
+        if kind != expected_kind:
+            return _report_error(321, "درخواست برای دریافت کارنامه نامعتبر است.")
+
+        with session_scope() as session:
+            report_status = get_report_download_status(
+                session=session,
+                phone=phone,
+                kind=kind,
+                expected_quiz_count=expected_quiz_count,
+            )
+
+        status = report_status["status"]
+        if status == "student_not_found":
+            return _report_error(404, "دانش‌آموزی با این شماره تلفن یافت نشد.")
+        if status == "access_denied":
+            return _report_error(403, "دانش‌آموز دسترسی لازم برای دریافت این کارنامه را ندارد.")
+        if status == "quiz_incomplete":
+            return _report_error(321, "در حال حاضر آزمون‌های دانش‌آموز به پایان نرسیده است.")
+        if status == "generating":
+            return _report_error(323, "کارنامه در حال تولید است.")
+        if status == "queued":
+            return _report_error(324, "کارنامه در صف تولید است.")
+
+        folder_check = os.path.join(REPORTS_DIR, phone)
+        file_path = os.path.join(folder_check, report_filename)
+        if os.path.exists(file_path):
+            return FileResponse(file_path, filename=report_filename)
+        if os.path.exists(folder_check):
+            return _report_error(322, "کارنامه‌ها درحال آماده سازی می‌باشد.")
+        return _report_error(404, "File not found")
+    except Exception as e:
+        await func_helper.exception_error_logging(log_endpoint, log_func_name, str(e), "GET")
+        return _report_error(404, "File not found")
+
+
 @app.get("/ags_api/get_ag_first_pdf/{phone}/{kind}")
 @app.get("/ag_api/get_ag_first_pdf/{phone}/{kind}")
 async def get_ag_first_pdf(phone: str, kind: str):
-    conn, cursor = None, None
-
-    try:
-        if kind.upper() != "AG":
-            return JSONResponse(
-                status_code=321,
-                content={"status": 321, "tracking_code": None, "method_type": "GET",
-                         "error": "درخواست برای دریافت کارنامه نامعتبر است."}
-            )
-        conn, cursor = await db_helper.db_connection()
-        # Check the access of the student for this kind - should have permission = 1
-        query = 'SELECT s.user_id, s.access FROM stu s INNER JOIN users u ON u.user_id = s.user_id WHERE u.phone = ?'
-        stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
-
-        if not stu:
-            return JSONResponse(
-                status_code=404,
-                content={"status": 404, "tracking_code": None, "method_type": "GET",
-                         "error": "دانش‌آموزی با این شماره تلفن یافت نشد."}
-            )
-
-        # Parse access field to check permission
-        raw_access = getattr(stu, "access", None) or "{}"
-        try:
-            access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-        except (json.JSONDecodeError, TypeError):
-            access_data = {}
-
-        # Check permission for the given kind
-        package_info = access_data.get(kind.upper(), {})
-        permission = 0
-        if isinstance(package_info, dict):
-            permission = int(package_info.get("permission") or 0)
-        elif isinstance(package_info, bool):
-            permission = 1 if package_info else 0
-        elif isinstance(package_info, (int, float, str)):
-            try:
-                permission = int(package_info) if str(package_info).strip() != "" else 0
-            except ValueError:
-                permission = 0
-
-        if permission != 1:
-            return JSONResponse(
-                status_code=403,
-                content={"status": 403, "tracking_code": None, "method_type": "GET",
-                         "error": "دانش‌آموز دسترسی لازم برای دریافت این کارنامه را ندارد."}
-            )
-
-        # After the count of the quiz answered, check that all answers should be completed (state = 2)
-        query_quiz = (
-            'SELECT state, quiz_id FROM quiz_attempt '
-            'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
-        )
-        res_quiz = db_helper.search_allin_table(
-            conn=conn,
-            cursor=cursor,
-            query=query_quiz,
-            field=(stu.user_id, kind.upper())
-        )
-        if len(res_quiz) < 7:
-            return JSONResponse(
-                status_code=321,
-                content={"status": 321, "tracking_code": None, "method_type": "GET",
-                         "error": "در حال حاضر آزمون‌های دانش‌آموز به پایان نرسیده است."}
-            )
-
-        # Check that all quiz answers are completed (state = 2)
-        for quiz in res_quiz:
-            quiz_state = getattr(quiz, "state", None)
-            if quiz_state != 2:
-                return JSONResponse(
-                    status_code=321,
-                    content={"status": 321, "tracking_code": None, "method_type": "GET",
-                             "error": "در حال حاضر آزمون‌های دانش‌آموز به پایان نرسیده است."}
-                )
-
-        # Proceed with checking report status
-        query = 'SELECT status FROM redis_logs WHERE user_id = ? and kind = ?'
-        res_queue = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu.user_id, kind.upper()))
-        # if not res_queue:
-        #     return JSONResponse(
-        #         status_code=404,
-        #         content={"status": 404, "tracking_code": None, "method_type": "GET",
-        #                  "error": "مشکلی در سامانه پیش آماده با پشتیبانی ارتباط بگیرید."}
-        #     )
-        if not res_queue:
-            pass
-        elif res_queue.status == 1:
-            return JSONResponse(
-                status_code=323,
-                content={"status": 323, "tracking_code": None, "method_type": "GET",
-                         "error": "کارنامه در حال تولید است."}
-            )
-        elif res_queue.status == 0:
-            return JSONResponse(
-                status_code=324,
-                content={"status": 324, "tracking_code": None, "method_type": "GET",
-                         "error": "کارنامه در صف تولید است."}
-            )
-        folder_check = os.path.join(REPORTS_DIR, phone)
-        file_path = os.path.join(REPORTS_DIR, phone, 'Report1.pdf')
-        if os.path.exists(file_path):
-            return FileResponse(file_path, filename="Report1.pdf")
-        else:
-            if os.path.exists(folder_check):
-                return JSONResponse(
-                    status_code=322,
-                    content={"status": 322, "tracking_code": None, "method_type": "GET",
-                             "error": "کارنامه‌ها درحال آماده سازی می‌باشد."}
-                )
-            else:
-                return JSONResponse(
-                    status_code=404,
-                    content={"status": 404, "tracking_code": None, "method_type": "GET", "error": "File not found"}
-                )
-
-    except Exception as e:
-        await func_helper.exception_error_logging("ag_api/get_report1", "get_report1", str(e), "GET")
-        return JSONResponse(
-            status_code=404,
-            content={"status": 404, "tracking_code": None, "method_type": "GET", "error": "File not found"}
-        )
-
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
+    return await _get_report_pdf(phone, kind, "AG", 7, "Report1.pdf", "ag_api/get_report1", "get_report1")
 
 
 @app.get("/ags_api/get_ag_second_pdf/{phone}/{kind}")
 @app.get("/ag_api/get_ag_second_pdf/{phone}/{kind}")
 async def get_ag_second_pdf(phone: str, kind: str):
-    conn, cursor = None, None
-
-    try:
-        if kind.upper() != "AG":
-            return JSONResponse(
-                status_code=321,
-                content={"status": 321, "tracking_code": None, "method_type": "GET",
-                         "error": "درخواست برای دریافت کارنامه نامعتبر است."}
-            )
-        conn, cursor = await db_helper.db_connection()
-        # Check the access of the student for this kind - should have permission = 1
-        query = 'SELECT s.user_id, s.access FROM stu s INNER JOIN users u ON u.user_id = s.user_id WHERE u.phone = ?'
-        stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
-
-        if not stu:
-            return JSONResponse(
-                status_code=404,
-                content={"status": 404, "tracking_code": None, "method_type": "GET",
-                         "error": "دانش‌آموزی با این شماره تلفن یافت نشد."}
-            )
-
-        # Parse access field to check permission
-        raw_access = getattr(stu, "access", None) or "{}"
-        try:
-            access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-        except (json.JSONDecodeError, TypeError):
-            access_data = {}
-
-        # Check permission for the given kind
-        package_info = access_data.get(kind.upper(), {})
-        permission = 0
-        if isinstance(package_info, dict):
-            permission = int(package_info.get("permission") or 0)
-        elif isinstance(package_info, bool):
-            permission = 1 if package_info else 0
-        elif isinstance(package_info, (int, float, str)):
-            try:
-                permission = int(package_info) if str(package_info).strip() != "" else 0
-            except ValueError:
-                permission = 0
-
-        if permission != 1:
-            return JSONResponse(
-                status_code=403,
-                content={"status": 403, "tracking_code": None, "method_type": "GET",
-                         "error": "دانش‌آموز دسترسی لازم برای دریافت این کارنامه را ندارد."}
-            )
-
-        # After the count of the quiz answered, check that all answers should be completed (state = 2)
-        query_quiz = (
-            'SELECT state, quiz_id FROM quiz_attempt '
-            'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
-        )
-        res_quiz = db_helper.search_allin_table(
-            conn=conn,
-            cursor=cursor,
-            query=query_quiz,
-            field=(stu.user_id, kind.upper())
-        )
-        if len(res_quiz) < 7:
-            return JSONResponse(
-                status_code=321,
-                content={"status": 321, "tracking_code": None, "method_type": "GET",
-                         "error": "در حال حاضر آزمون‌های دانش‌آموز به پایان نرسیده است."}
-            )
-
-        # Check that all quiz answers are completed (state = 2)
-        for quiz in res_quiz:
-            quiz_state = getattr(quiz, "state", None)
-            if quiz_state != 2:
-                return JSONResponse(
-                    status_code=321,
-                    content={"status": 321, "tracking_code": None, "method_type": "GET",
-                             "error": "در حال حاضر آزمون‌های دانش‌آموز به پایان نرسیده است."}
-                )
-
-        # Proceed with checking report status
-        query = 'SELECT status FROM redis_logs WHERE user_id = ? and kind = ?'
-        res_queue = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu.user_id, kind.upper()))
-        # if not res_queue:
-        #     return JSONResponse(
-        #         status_code=404,
-        #         content={"status": 404, "tracking_code": None, "method_type": "GET",
-        #                  "error": "مشکلی در سامانه پیش آماده با پشتیبانی ارتباط بگیرید."}
-        #     )
-        if not res_queue:
-            pass
-        elif res_queue.status == 1:
-            return JSONResponse(
-                status_code=323,
-                content={"status": 323, "tracking_code": None, "method_type": "GET",
-                         "error": "کارنامه در حال تولید است."}
-            )
-        elif res_queue.status == 0:
-            return JSONResponse(
-                status_code=324,
-                content={"status": 324, "tracking_code": None, "method_type": "GET",
-                         "error": "کارنامه در صف تولید است."}
-            )
-        folder_check = os.path.join(REPORTS_DIR, phone)
-        file_path = os.path.join(REPORTS_DIR, phone, 'Report2.pdf')
-        if os.path.exists(file_path):
-            return FileResponse(file_path, filename="Report2.pdf")
-        else:
-            if os.path.exists(folder_check):
-                return JSONResponse(
-                    status_code=322,
-                    content={"status": 322, "tracking_code": None, "method_type": "GET",
-                             "error": "کارنامه‌ها درحال آماده سازی می‌باشد."}
-                )
-            else:
-                return JSONResponse(
-                    status_code=404,
-                    content={"status": 404, "tracking_code": None, "method_type": "GET", "error": "File not found"}
-                )
-
-    except Exception as e:
-        await func_helper.exception_error_logging("ag_api/get_report2", "get_report2", str(e), "GET")
-        return JSONResponse(
-            status_code=404,
-            content={"status": 404, "tracking_code": None, "method_type": "GET", "error": "File not found"}
-        )
-
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
+    return await _get_report_pdf(phone, kind, "AG", 7, "Report2.pdf", "ag_api/get_report2", "get_report2")
 
 
 @app.get("/ags_api/get_scl_first_pdf/{phone}/{kind}")
 @app.get("/ag_api/get_scl_first_pdf/{phone}/{kind}")
 async def get_scl_first_pdf(phone: str, kind: str):
-    conn, cursor = None, None
-
-    try:
-        if kind.upper() != "SCL":
-            return JSONResponse(
-                status_code=321,
-                content={"status": 321, "tracking_code": None, "method_type": "GET",
-                         "error": "درخواست برای دریافت کارنامه نامعتبر است."}
-            )
-        conn, cursor = await db_helper.db_connection()
-        # Check the access of the student for this kind - should have permission = 1
-        query = 'SELECT s.user_id, s.access FROM stu s INNER JOIN users u ON u.user_id = s.user_id WHERE u.phone = ?'
-        stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
-
-        if not stu:
-            return JSONResponse(
-                status_code=404,
-                content={"status": 404, "tracking_code": None, "method_type": "GET",
-                         "error": "دانش‌آموزی با این شماره تلفن یافت نشد."}
-            )
-
-        # Parse access field to check permission
-        raw_access = getattr(stu, "access", None) or "{}"
-        try:
-            access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-        except (json.JSONDecodeError, TypeError):
-            access_data = {}
-
-        # Check permission for the given kind
-        package_info = access_data.get(kind.upper(), {})
-        permission = 0
-        if isinstance(package_info, dict):
-            permission = int(package_info.get("permission") or 0)
-        elif isinstance(package_info, bool):
-            permission = 1 if package_info else 0
-        elif isinstance(package_info, (int, float, str)):
-            try:
-                permission = int(package_info) if str(package_info).strip() != "" else 0
-            except ValueError:
-                permission = 0
-
-        if permission != 1:
-            return JSONResponse(
-                status_code=403,
-                content={"status": 403, "tracking_code": None, "method_type": "GET",
-                         "error": "دانش‌آموز دسترسی لازم برای دریافت این کارنامه را ندارد."}
-            )
-
-        # After the count of the quiz answered, check that all answers should be completed (state = 2)
-        query_quiz = (
-            'SELECT state, quiz_id FROM quiz_attempt '
-            'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
-        )
-        res_quiz = db_helper.search_allin_table(
-            conn=conn,
-            cursor=cursor,
-            query=query_quiz,
-            field=(stu.user_id, kind.upper())
-        )
-        if len(res_quiz) < 4:
-            return JSONResponse(
-                status_code=321,
-                content={"status": 321, "tracking_code": None, "method_type": "GET",
-                         "error": "در حال حاضر آزمون‌های دانش‌آموز به پایان نرسیده است."}
-            )
-
-        # Check that all quiz answers are completed (state = 2)
-        for quiz in res_quiz:
-            quiz_state = getattr(quiz, "state", None)
-            if quiz_state != 2:
-                return JSONResponse(
-                    status_code=321,
-                    content={"status": 321, "tracking_code": None, "method_type": "GET",
-                             "error": "در حال حاضر آزمون‌های دانش‌آموز به پایان نرسیده است."}
-                )
-
-        # Proceed with checking report status
-        query = 'SELECT status FROM redis_logs WHERE user_id = ? and kind = ?'
-        res_queue = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu.user_id, kind.upper()))
-        # if not res_queue:
-        #     return JSONResponse(
-        #         status_code=404,
-        #         content={"status": 404, "tracking_code": None, "method_type": "GET",
-        #                  "error": "مشکلی در سامانه پیش آماده با پشتیبانی ارتباط بگیرید."}
-        #     )
-        if not res_queue:
-            pass
-        elif res_queue.status == 1:
-            return JSONResponse(
-                status_code=323,
-                content={"status": 323, "tracking_code": None, "method_type": "GET",
-                         "error": "کارنامه در حال تولید است."}
-            )
-        elif res_queue.status == 0:
-            return JSONResponse(
-                status_code=324,
-                content={"status": 324, "tracking_code": None, "method_type": "GET",
-                         "error": "کارنامه در صف تولید است."}
-            )
-        folder_check = os.path.join(REPORTS_DIR, phone)
-        file_path = os.path.join(REPORTS_DIR, phone, 'Report3.pdf')
-        if os.path.exists(file_path):
-            return FileResponse(file_path, filename="Report3.pdf")
-        else:
-            if os.path.exists(folder_check):
-                return JSONResponse(
-                    status_code=322,
-                    content={"status": 322, "tracking_code": None, "method_type": "GET",
-                             "error": "کارنامه‌ها درحال آماده سازی می‌باشد."}
-                )
-            else:
-                return JSONResponse(
-                    status_code=404,
-                    content={"status": 404, "tracking_code": None, "method_type": "GET", "error": "File not found"}
-                )
-
-    except Exception as e:
-        await func_helper.exception_error_logging("ag_api/get_report3", "get_report3", str(e), "GET")
-        return JSONResponse(
-            status_code=404,
-            content={"status": 404, "tracking_code": None, "method_type": "GET", "error": "File not found"}
-        )
-
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
+    return await _get_report_pdf(phone, kind, "SCL", 4, "Report3.pdf", "ag_api/get_report3", "get_report3")
 
 
 @app.get("/ags_api/get_scl_second_pdf/{phone}/{kind}")
 @app.get("/ag_api/get_scl_second_pdf/{phone}/{kind}")
 async def get_scl_second_pdf(phone: str, kind: str):
-    conn, cursor = None, None
-
-    try:
-        if kind.upper() != "SCL":
-            return JSONResponse(
-                status_code=321,
-                content={"status": 321, "tracking_code": None, "method_type": "GET",
-                         "error": "درخواست برای دریافت کارنامه نامعتبر است."}
-            )
-        conn, cursor = await db_helper.db_connection()
-        # Check the access of the student for this kind - should have permission = 1
-        query = 'SELECT s.user_id, s.access FROM stu s INNER JOIN users u ON u.user_id = s.user_id WHERE u.phone = ?'
-        stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
-
-        if not stu:
-            return JSONResponse(
-                status_code=404,
-                content={"status": 404, "tracking_code": None, "method_type": "GET",
-                         "error": "دانش‌آموزی با این شماره تلفن یافت نشد."}
-            )
-
-        # Parse access field to check permission
-        raw_access = getattr(stu, "access", None) or "{}"
-        try:
-            access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-        except (json.JSONDecodeError, TypeError):
-            access_data = {}
-
-        # Check permission for the given kind
-        package_info = access_data.get(kind.upper(), {})
-        permission = 0
-        if isinstance(package_info, dict):
-            permission = int(package_info.get("permission") or 0)
-        elif isinstance(package_info, bool):
-            permission = 1 if package_info else 0
-        elif isinstance(package_info, (int, float, str)):
-            try:
-                permission = int(package_info) if str(package_info).strip() != "" else 0
-            except ValueError:
-                permission = 0
-
-        if permission != 1:
-            return JSONResponse(
-                status_code=403,
-                content={"status": 403, "tracking_code": None, "method_type": "GET",
-                         "error": "دانش‌آموز دسترسی لازم برای دریافت این کارنامه را ندارد."}
-            )
-
-        # After the count of the quiz answered, check that all answers should be completed (state = 2)
-        query_quiz = (
-            'SELECT state, quiz_id FROM quiz_attempt '
-            'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
-        )
-        res_quiz = db_helper.search_allin_table(
-            conn=conn,
-            cursor=cursor,
-            query=query_quiz,
-            field=(stu.user_id, kind.upper())
-        )
-        if len(res_quiz) < 4:
-            return JSONResponse(
-                status_code=321,
-                content={"status": 321, "tracking_code": None, "method_type": "GET",
-                         "error": "در حال حاضر آزمون‌های دانش‌آموز به پایان نرسیده است."}
-            )
-
-        # Check that all quiz answers are completed (state = 2)
-        for quiz in res_quiz:
-            quiz_state = getattr(quiz, "state", None)
-            if quiz_state != 2:
-                return JSONResponse(
-                    status_code=321,
-                    content={"status": 321, "tracking_code": None, "method_type": "GET",
-                             "error": "در حال حاضر آزمون‌های دانش‌آموز به پایان نرسیده است."}
-                )
-
-        # Proceed with checking report status
-        query = 'SELECT status FROM redis_logs WHERE user_id = ? and kind = ?'
-        res_queue = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu.user_id, kind.upper()))
-        # if not res_queue:
-        #     return JSONResponse(
-        #         status_code=404,
-        #         content={"status": 404, "tracking_code": None, "method_type": "GET",
-        #                  "error": "مشکلی در سامانه پیش آماده با پشتیبانی ارتباط بگیرید."}
-        #     )
-        if not res_queue:
-            pass
-        elif res_queue.status == 1:
-            return JSONResponse(
-                status_code=323,
-                content={"status": 323, "tracking_code": None, "method_type": "GET",
-                         "error": "کارنامه در حال تولید است."}
-            )
-        elif res_queue.status == 0:
-            return JSONResponse(
-                status_code=324,
-                content={"status": 324, "tracking_code": None, "method_type": "GET",
-                         "error": "کارنامه در صف تولید است."}
-            )
-        folder_check = os.path.join(REPORTS_DIR, phone)
-        file_path = os.path.join(REPORTS_DIR, phone, 'Report4.pdf')
-        if os.path.exists(file_path):
-            return FileResponse(file_path, filename="Report4.pdf")
-        else:
-            if os.path.exists(folder_check):
-                return JSONResponse(
-                    status_code=322,
-                    content={"status": 322, "tracking_code": None, "method_type": "GET",
-                             "error": "کارنامه‌ها درحال آماده سازی می‌باشد."}
-                )
-            else:
-                return JSONResponse(
-                    status_code=404,
-                    content={"status": 404, "tracking_code": None, "method_type": "GET", "error": "File not found"}
-                )
-
-    except Exception as e:
-        await func_helper.exception_error_logging("ag_api/get_report4", "get_report4", str(e), "GET")
-        return JSONResponse(
-            status_code=404,
-            content={"status": 404, "tracking_code": None, "method_type": "GET", "error": "File not found"}
-        )
-
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
+    return await _get_report_pdf(phone, kind, "SCL", 4, "Report4.pdf", "ag_api/get_report4", "get_report4")
 
 
 @app.get("/ags_api/get_scl_third_pdf/{phone}/{kind}")
 @app.get("/ag_api/get_scl_third_pdf/{phone}/{kind}")
 async def get_scl_third_pdf(phone: str, kind: str):
-    conn, cursor = None, None
-
-    try:
-        if kind.upper() != "SCL":
-            return JSONResponse(
-                status_code=321,
-                content={"status": 321, "tracking_code": None, "method_type": "GET",
-                         "error": "درخواست برای دریافت کارنامه نامعتبر است."}
-            )
-        conn, cursor = await db_helper.db_connection()
-        # Check the access of the student for this kind - should have permission = 1
-        query = 'SELECT s.user_id, s.access FROM stu s INNER JOIN users u ON u.user_id = s.user_id WHERE u.phone = ?'
-        stu = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
-
-        if not stu:
-            return JSONResponse(
-                status_code=404,
-                content={"status": 404, "tracking_code": None, "method_type": "GET",
-                         "error": "دانش‌آموزی با این شماره تلفن یافت نشد."}
-            )
-
-        # Parse access field to check permission
-        raw_access = getattr(stu, "access", None) or "{}"
-        try:
-            access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-        except (json.JSONDecodeError, TypeError):
-            access_data = {}
-
-        # Check permission for the given kind
-        package_info = access_data.get(kind.upper(), {})
-        permission = 0
-        if isinstance(package_info, dict):
-            permission = int(package_info.get("permission") or 0)
-        elif isinstance(package_info, bool):
-            permission = 1 if package_info else 0
-        elif isinstance(package_info, (int, float, str)):
-            try:
-                permission = int(package_info) if str(package_info).strip() != "" else 0
-            except ValueError:
-                permission = 0
-
-        if permission != 1:
-            return JSONResponse(
-                status_code=403,
-                content={"status": 403, "tracking_code": None, "method_type": "GET",
-                         "error": "دانش‌آموز دسترسی لازم برای دریافت این کارنامه را ندارد."}
-            )
-
-        # After the count of the quiz answered, check that all answers should be completed (state = 2)
-        query_quiz = (
-            'SELECT state, quiz_id FROM quiz_attempt '
-            'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
-        )
-        res_quiz = db_helper.search_allin_table(
-            conn=conn,
-            cursor=cursor,
-            query=query_quiz,
-            field=(stu.user_id, kind.upper())
-        )
-        if len(res_quiz) < 4:
-            return JSONResponse(
-                status_code=321,
-                content={"status": 321, "tracking_code": None, "method_type": "GET",
-                         "error": "در حال حاضر آزمون‌های دانش‌آموز به پایان نرسیده است."}
-            )
-
-        # Check that all quiz answers are completed (state = 2)
-        for quiz in res_quiz:
-            quiz_state = getattr(quiz, "state", None)
-            if quiz_state != 2:
-                return JSONResponse(
-                    status_code=321,
-                    content={"status": 321, "tracking_code": None, "method_type": "GET",
-                             "error": "در حال حاضر آزمون‌های دانش‌آموز به پایان نرسیده است."}
-                )
-
-        # Proceed with checking report status
-        query = 'SELECT status FROM redis_logs WHERE user_id = ? and kind = ?'
-        res_queue = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu.user_id, kind.upper()))
-        # if not res_queue:
-        #     return JSONResponse(
-        #         status_code=404,
-        #         content={"status": 404, "tracking_code": None, "method_type": "GET",
-        #                  "error": "مشکلی در سامانه پیش آماده با پشتیبانی ارتباط بگیرید."}
-        #     )
-        if not res_queue:
-            pass
-        elif res_queue.status == 1:
-            return JSONResponse(
-                status_code=323,
-                content={"status": 323, "tracking_code": None, "method_type": "GET",
-                         "error": "کارنامه در حال تولید است."}
-            )
-        elif res_queue.status == 0:
-            return JSONResponse(
-                status_code=324,
-                content={"status": 324, "tracking_code": None, "method_type": "GET",
-                         "error": "کارنامه در صف تولید است."}
-            )
-        folder_check = os.path.join(REPORTS_DIR, phone)
-        file_path = os.path.join(REPORTS_DIR, phone, 'Report5.pdf')
-        if os.path.exists(file_path):
-            return FileResponse(file_path, filename="Report5.pdf")
-        else:
-            if os.path.exists(folder_check):
-                return JSONResponse(
-                    status_code=322,
-                    content={"status": 322, "tracking_code": None, "method_type": "GET",
-                             "error": "کارنامه‌ها درحال آماده سازی می‌باشد."}
-                )
-            else:
-                return JSONResponse(
-                    status_code=404,
-                    content={"status": 404, "tracking_code": None, "method_type": "GET", "error": "File not found"}
-                )
-
-    except Exception as e:
-        await func_helper.exception_error_logging("ag_api/get_report4", "get_report4", str(e), "GET")
-        return JSONResponse(
-            status_code=404,
-            content={"status": 404, "tracking_code": None, "method_type": "GET", "error": "File not found"}
-        )
-
-    finally:
-        if conn and cursor:
-            await db_helper.close_db_connection(conn=conn, cursor=cursor)
+    return await _get_report_pdf(phone, kind, "SCL", 4, "Report5.pdf", "ag_api/get_report4", "get_report4")
 
 
 @app.get("/ags_api/get_default/{reportname}")
