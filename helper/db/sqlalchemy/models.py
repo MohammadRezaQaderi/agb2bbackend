@@ -198,6 +198,18 @@ class Comment(Base, TimestampMixin):
     db_name: Mapped[str] = mapped_column(Unicode(400), nullable=False)
 
 
+class ApiLog(Base, TimestampMixin):
+    __tablename__ = "api_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    phone: Mapped[str | None] = mapped_column(Unicode(12), nullable=True)
+    end_point: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    func_name: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    data: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    error_p: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+
+
 class Notification(Base, TimestampMixin):
     __tablename__ = "notifications"
 
@@ -299,6 +311,7 @@ class ResultState(Base, TimestampMixin):
 
 
 __all__ = [
+    "ApiLog",
     "Capacity",
     "CapacityPackage",
     "Consultant",

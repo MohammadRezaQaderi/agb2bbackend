@@ -16,7 +16,23 @@ from typing import Any, Mapping, Tuple, Optional
 from walrus import Database
 from cryptography.fernet import Fernet, InvalidToken
 
-import helper.db.db_helper as db_helper
+from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.auth import (
+    create_user,
+    get_user_identity_by_token,
+    update_user_password,
+    user_phone_exists,
+)
+from helper.db.sqlalchemy.queries.other import create_api_log, payment_id_exists
+from helper.db.sqlalchemy.queries.students import (
+    consume_capacity_package,
+    count_student_packages_for_relation,
+    create_capacity_with_packages,
+    get_capacity_package,
+    get_student_access_for_relation,
+    save_student_package_access,
+    update_student_access,
+)
 from config import PASSWORD_SECRET_KEY, DB_DRIVER, DB_SERVER, DB_DATABASE, DB_UID, DB_PWD, DB_TRUST_CERT, REDIS_HOST, \
     REDIS_PORT, REDIS_DB, REDIS_PASSWORD, DEVELOP_TOKEN
 
@@ -70,8 +86,8 @@ async def health_payload(service_name: str):
     port = os.getenv("PORT", "unknown")
 
     try:
-        conn, cursor = await db_helper.db_connection()
-        await db_helper.close_db_connection(conn=conn, cursor=cursor)
+        conn, cursor = await db_connection()
+        await close_db_connection(conn=conn, cursor=cursor)
         db_status = "connected"
     except Exception as e:
         db_status = f"error: {str(e)}"
@@ -394,32 +410,16 @@ def upsert_student_package_access(
         limit: int,
 ) -> None:
     try:
-        query = """
-            SELECT id
-            FROM student_package_access
-            WHERE stu_user_id = ? AND package_name = ?
-        """
-        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=(stu_user_id, package_name))
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        if res:
-            db_helper.update_record(
-                conn,
-                cursor,
-                "student_package_access",
-                ["owner_user_id", "consultant_user_id", "permission", "[limit]", "edited_time"],
-                [owner_user_id, consultant_user_id, permission, limit, now_str],
-                "id = ?",
-                [res.id],
+        with session_scope() as session:
+            save_student_package_access(
+                session=session,
+                stu_user_id=stu_user_id,
+                owner_user_id=owner_user_id,
+                consultant_user_id=consultant_user_id,
+                package_name=package_name,
+                permission=permission,
+                limit=limit,
             )
-            return
-
-        db_helper.insert_value(
-            conn=conn,
-            cursor=cursor,
-            table_name="student_package_access",
-            fields="([stu_user_id], [owner_user_id], [consultant_user_id], [package_name], [permission], [limit])",
-            values=(stu_user_id, owner_user_id, consultant_user_id, package_name, permission, limit),
-        )
     except Exception as e:
         # The new table is additive. Keep the old JSON path working if a deployment
         # temporarily runs before the schema migration.
@@ -436,19 +436,12 @@ def get_student_package_access_counts(
         return None
 
     try:
-        query = f"""
-            SELECT package_name, COUNT(*) AS total
-            FROM student_package_access
-            WHERE {relation_column} = ? AND permission = 1
-            GROUP BY package_name
-        """
-        rows = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query, field=user_id)
-        counts = {"AG": 0, "SCL": 0}
-        for row in rows:
-            package_name = str(row.get("package_name", "")).upper()
-            if package_name in counts:
-                counts[package_name] = row.get("total", 0)
-        return counts
+        with session_scope() as session:
+            return count_student_packages_for_relation(
+                session=session,
+                relation_column=relation_column,
+                user_id=user_id,
+            )
     except Exception as e:
         print(f"[student_package_access] count fallback: {e}")
         return None
@@ -499,28 +492,21 @@ async def close_redis_connection(redis_db: Database | None) -> None:
 
 async def authorizer(conn: pyodbc.Connection | None, cursor: pyodbc.Cursor | None, request_data: Mapping[str, Any]):
     try:
-        if request_data.get("token"):
-            if request_data["token"] is not None:
-                query = """
-                    SELECT t.user_id, u.phone, u.role
-                    FROM tokens t
-                    INNER JOIN users u ON u.user_id = t.user_id
-                    WHERE t.token = ?
-                """
-                res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=request_data["token"])
-                if res is None:
-                    return False, "نشست شما به پایان رسیده  لطفا یکبار خروج کرده و سپس ورود شوید.", None
-                elif request_data.get("user_id"):
-                    if not request_data["user_id"] == res.user_id:
-                        return False, "اطلاعات دریافتی شما دچار مشکل شده لطفا یکبار خروج کرده و سپس ورود شوید.", None
-                    else:
-                        return True, "", {"user_id": res.user_id, "phone": res.phone, "role": res.role}
-                else:
-                    return False, "اطلاعات دریافتی شما دچار مشکل شده لطفا یکبار خروج کرده و سپس ورود شوید.", None
-            else:
-                return False, "اطلاعات دریافتی شما دچار مشکل شده لطفا یکبار خروج کرده و سپس ورود شوید.", None
-        else:
+        token = request_data.get("token")
+        if not token:
             return False, "اطلاعات دریافتی شما دچار مشکل شده لطفا یکبار خروج کرده و سپس ورود شوید.", None
+
+        with session_scope() as session:
+            res = get_user_identity_by_token(session=session, token=token)
+
+        if res is None:
+            return False, "نشست شما به پایان رسیده  لطفا یکبار خروج کرده و سپس ورود شوید.", None
+
+        request_user_id = request_data.get("user_id")
+        if request_user_id is None or str(request_user_id) != str(res["user_id"]):
+            return False, "اطلاعات دریافتی شما دچار مشکل شده لطفا یکبار خروج کرده و سپس ورود شوید.", None
+
+        return True, "", {"user_id": res["user_id"], "phone": res["phone"], "role": res["role"]}
     except Exception as e:
         service_exception_error_logging(conn, cursor, "ag_api/check", "check", str(e), request_data, {})
         return False, "اطلاعات دریافتی شما دچار مشکل شده لطفا یکبار خروج کرده و سپس ورود شوید.", None
@@ -558,26 +544,19 @@ async def key_error_logging(
         method_type: str,
 ) -> dict:
     """Log missing-key errors to the database and return a standard response."""
-    conn, cursor = None, None
     try:
-        conn, cursor = await db_connection()
-        field_log = '([user_id], [phone], [end_point], [func_name], [data], [error_p])'
-        values_log = (
-            None, None, end_point, func_name,
-            None, f"{error_message} با اطلاعات شما ارسال نشده است."
-        )
-        db_helper.insert_value(
-            conn=conn,
-            cursor=cursor,
-            table_name='api_logs',
-            fields=field_log,
-            values=values_log
-        )
+        with session_scope() as session:
+            create_api_log(
+                session=session,
+                user_id=None,
+                phone=None,
+                end_point=end_point,
+                func_name=func_name,
+                data=None,
+                error_p=f"{error_message} با اطلاعات شما ارسال نشده است.",
+            )
     except Exception as e:
         print(f"[Logging Error] key_error_logging failed: {e}")
-    finally:
-        if conn or cursor:
-            await close_db_connection(conn, cursor)
 
     return key_error_message_return(error_message, method_type)
 
@@ -589,26 +568,19 @@ async def exception_error_logging(
         method_type: str,
 ) -> dict:
     """Log unexpected errors to the database and return a generic error response."""
-    conn, cursor = None, None
     try:
-        conn, cursor = await db_connection()
-        field_log = '([user_id], [phone], [end_point], [func_name], [data], [error_p])'
-        values_log = (
-            None, None, end_point, func_name,
-            None, str(error_message)
-        )
-        db_helper.insert_value(
-            conn=conn,
-            cursor=cursor,
-            table_name='api_logs',
-            fields=field_log,
-            values=values_log
-        )
+        with session_scope() as session:
+            create_api_log(
+                session=session,
+                user_id=None,
+                phone=None,
+                end_point=end_point,
+                func_name=func_name,
+                data=None,
+                error_p=str(error_message),
+            )
     except Exception as e:
         print(f"[Logging Error] exception_error_logging failed: {e}")
-    finally:
-        if conn or cursor:
-            await close_db_connection(conn, cursor)
 
     return exception_error_message_return(error_message, method_type)
 
@@ -624,12 +596,16 @@ def service_exception_error_logging(
 ) -> None:
     """Log service-level exceptions using an existing connection."""
     try:
-        field_log = '([user_id], [phone], [end_point], [func_name], [data], [error_p])'
-        values_log = (
-            user_info.get("user_id"), user_info.get("phone"), end_point, func_name,
-            json.dumps(data, ensure_ascii=False), str(error_message))
-        db_helper.insert_value(conn=conn, cursor=cursor, table_name='api_logs', fields=field_log,
-                               values=values_log)
+        with session_scope() as session:
+            create_api_log(
+                session=session,
+                user_id=user_info.get("user_id"),
+                phone=user_info.get("phone"),
+                end_point=end_point,
+                func_name=func_name,
+                data=json.dumps(data, ensure_ascii=False),
+                error_p=str(error_message),
+            )
     except Exception as e:
         print(f"[Logging Error] service_exception_error_logging failed: {e}")
 
@@ -665,13 +641,12 @@ def random_generate_phone(conn: pyodbc.Connection, cursor: pyodbc.Cursor, n: int
     """Generate a unique random phone number with prefix '009' and n-digit suffix."""
     range_start = 10 ** (n - 1)
     range_end = (10 ** n) - 1
-    phone = '009' + str(randint(range_start, range_end))
-    query = 'SELECT * FROM users WHERE phone = ?'
-    res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=phone)
-    if res is None:
-        return phone
-    else:
-        return random_generate_phone(conn=conn, cursor=cursor, n=n)
+    while True:
+        phone = '009' + str(randint(range_start, range_end))
+        with session_scope() as session:
+            exists = user_phone_exists(session=session, phone=phone)
+        if not exists:
+            return phone
 
 
 def random_generate_password(size: int = 6, chars: str = string.digits) -> str:
@@ -711,26 +686,23 @@ def insert_user(
 ) -> Tuple[Optional[int], Optional[str], str]:
     """Insert a new consultant user into the database with a randomly generated password."""
     try:
-        query = 'SELECT phone FROM users WHERE phone = ?'
-        res_check_user_phone = db_helper.search_table(conn=conn, cursor=cursor, query=query,
-                                                      field=request_data["phone"])
-        if res_check_user_phone is not None:
+        with session_scope() as session:
+            exists = user_phone_exists(session=session, phone=request_data["phone"])
+        if exists:
             return None, None, "شماره تلفن وارد شده در سامانه موجود می‌باشد لطفا شماره تلفن دیگری وارد نمایید."
+
         password = random_generate_password()
-        field = '([phone], [password], [role])'
-        values = (request_data["phone"], encrypt_password(password), 'con',)
-        response = db_helper.insert_value(conn=conn, cursor=cursor, table_name="users", fields=field,
-                                          values=values, id_column="user_id")
-        return response["id"], password, ""
+        with session_scope() as session:
+            user_id = create_user(
+                session=session,
+                phone=request_data["phone"],
+                password=encrypt_password(password),
+                role='con',
+            )
+        return user_id, password, ""
     except Exception as e:
-        # todo use the func_helper for logs
         conn.rollback()
-        field_log = '([user_id], [phone], [end_point], [func_name], [data], [error_p])'
-        values_log = (
-            user_info.get("user_id"), user_info.get("phone"), "ag_api/func_helper", "insert_user",
-            json.dumps(request_data), str(e))
-        db_helper.insert_value(conn=conn, cursor=cursor, table_name='api_logs', fields=field_log,
-                               values=values_log)
+        service_exception_error_logging(conn, cursor, "ag_api/func_helper", "insert_user", str(e), request_data, user_info)
         return None, None, "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
 
 
@@ -743,32 +715,28 @@ def insert_user_student(
     try:
         phone = random_generate_phone(conn, cursor, 8)
         password = random_generate_password()
-        field = '([phone], [password], [role])'
-        values = (phone, encrypt_password(password), 'stu',)
-        response = db_helper.insert_value(conn=conn, cursor=cursor, table_name="users", fields=field,
-                                          values=values, id_column="user_id")
-        return response["id"], password, phone, ""
+        with session_scope() as session:
+            user_id = create_user(
+                session=session,
+                phone=phone,
+                password=encrypt_password(password),
+                role='stu',
+            )
+        return user_id, password, phone, ""
     except Exception as e:
-        # todo use the func_helper for logs
         conn.rollback()
-        field_log = '([user_id], [phone], [end_point], [func_name], [data], [error_p])'
-        values_log = (
-            user_info.get("user_id"), user_info.get("phone"), "ag_api/func_helper", "insert_user",
-            None, str(e))
-        db_helper.insert_value(conn=conn, cursor=cursor, table_name='api_logs', fields=field_log,
-                               values=values_log)
+        service_exception_error_logging(conn, cursor, "ag_api/func_helper", "insert_user", str(e), {}, user_info)
         return None, None, None, "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
 
 
 def get_payment_id(conn: pyodbc.Connection, cursor: pyodbc.Cursor) -> int:
     """Generate a unique payment ID that doesn't exist in the database."""
-    payment_id = randint(1, 999999)
-    query = 'SELECT * FROM payment WHERE payment_id = ?'
-    res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=payment_id)
-    if res is None:
-        return payment_id
-    else:
-        return get_payment_id(conn=conn, cursor=cursor)
+    while True:
+        payment_id = randint(1, 999999)
+        with session_scope() as session:
+            exists = payment_id_exists(session=session, payment_id=payment_id)
+        if not exists:
+            return payment_id
 
 
 def get_price_payment(request_data: Mapping[str, int], discount_percentage: float | None) -> Tuple[int, int, int, int]:
@@ -811,34 +779,16 @@ def add_capacity_signup(
         phone: str,
 ) -> Optional[int]:
     """Create a capacity record and associated package entries for a new user signup."""
-    field = '([user_id])'
-    values = (user_id,)
-    response = db_helper.insert_value(
-        conn=conn,
-        cursor=cursor,
-        table_name="capacity",
-        fields=field,
-        values=values,
-        id_column="capacity_id"
-    )
-    if not response or not response.get("id"):
-        print("Error: capacity insert failed")
+    try:
+        with session_scope() as session:
+            return create_capacity_with_packages(
+                session=session,
+                user_id=user_id,
+                package_names=list(PACKAGES_DATA.keys()),
+            )
+    except Exception as e:
+        print(f"Error: capacity insert failed: {e}")
         return None
-
-    capacity_id = response["id"]
-
-    field_package = '([capacity_id], [user_id], [package_name], [total_allowed], [allowed])'
-    for package_name in PACKAGES_DATA.keys():
-        values_package = (capacity_id, user_id, package_name, 1, 1)
-        db_helper.insert_value(
-            conn=conn,
-            cursor=cursor,
-            table_name="capacity_package",
-            fields=field_package,
-            values=values_package
-        )
-
-    return capacity_id
 
 
 def update_user_and_role_password(
@@ -868,15 +818,13 @@ def update_user_and_role_password(
         New tracking token (str) on success, or None on failure.
     """
     try:
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        user_id = str(user_info["user_id"])
         encrypted_password = encrypt_password(request_data["password"])
-        db_helper.update_record(
-            conn, cursor, 'users',
-            ['password', 'edited_time'],
-            [encrypted_password, now_str],
-            'user_id = ?', [user_id]
-        )
+        with session_scope() as session:
+            update_user_password(
+                session=session,
+                user_id=user_info["user_id"],
+                encrypted_password=encrypted_password,
+            )
 
         token = get_tracking_code()
         return token
@@ -949,23 +897,23 @@ def update_student_access_and_capacity(
         if not stu_id:
             return None, None, "شناسه دانش‌آموز ارسال نشده است."
 
-        query_check = 'SELECT owner_user_id, consultant_user_id, access FROM stu WHERE user_id = ?'
-        res_stu = db_helper.search_table(conn=conn, cursor=cursor, query=query_check, field=stu_id)
+        with session_scope() as session:
+            res_stu = get_student_access_for_relation(session=session, stu_user_id=int(stu_id))
 
         if res_stu is None:
             return None, None, "دانش‌آموز یافت نشد."
 
-        org_id = getattr(res_stu, id_field, None)
+        org_id = res_stu.get(id_field)
         if org_id != user_id:
             return None, None, "این دانش‌آموز به شما تعلق ندارد."
 
-        current_access_str = res_stu.access or '{}'
+        current_access_str = res_stu.get("access") or '{}'
         try:
             current_access = json.loads(current_access_str) if current_access_str else {}
         except (json.JSONDecodeError, TypeError):
             current_access = {}
 
-        kind = request_data.get("kind")
+        kind = str(request_data.get("kind") or "").upper()
         if not kind:
             return None, None, "نوع بسته (kind) ارسال نشده است."
 
@@ -1012,67 +960,35 @@ def update_student_access_and_capacity(
                 "limit": limit
             }
 
-        is_granting = bool(permission)
-
-        if is_granting != was_granted:
-            query_capacity = """
-                SELECT allowed, used
-                FROM capacity_package
-                WHERE user_id = ? AND package_name = ?
-            """
-            res_capacity = db_helper.search_fetchall(
-                conn=conn, cursor=cursor,
-                query=query_capacity,
-                field=(user_id, kind)
-            )
-
-            if not res_capacity:
-                return None, None, f"بسته {get_kind_name(kind=kind)} برای شما تعریف نشده است."
-
-            capacity_info = res_capacity[0]
-            allowed = capacity_info.get("allowed", 0)
-            used = capacity_info.get("used", 0)
-
-            if is_granting:
-                if allowed <= 0:
-                    return None, None, f"ظرفیت بسته {get_kind_name(kind=kind)} تکمیل شده است."
-
-                db_helper.update_record(
-                    conn, cursor, 'capacity_package',
-                    ['used', 'allowed', 'edited_time'],
-                    [used + 1, allowed - 1, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                    'user_id = ? AND package_name = ?',
-                    [str(user_id), kind]
-                )
-            # else:
-            #     # Decrement used count (but don't go below 0)
-            #     new_used = max(0, used - 1)
-            #     db_helper.update_record(
-            #         conn, cursor, 'capacity_package',
-            #         ['used', 'edited_time'],
-            #         [new_used, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-            #         'user_id = ? AND package_name = ?',
-            #         [str(user_id), kind]
-            #     )
-
         updated_access_json = json.dumps(current_access, ensure_ascii=False)
-        db_helper.update_record(
-            conn, cursor, 'stu',
-            ['access', 'edited_time'],
-            [updated_access_json, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-            'user_id = ?',
-            [str(stu_id)]
-        )
-        upsert_student_package_access(
-            conn=conn,
-            cursor=cursor,
-            stu_user_id=int(stu_id),
-            owner_user_id=getattr(res_stu, "owner_user_id", None),
-            consultant_user_id=getattr(res_stu, "consultant_user_id", None),
-            package_name=kind,
-            permission=permission,
-            limit=limit,
-        )
+        with session_scope() as session:
+            is_granting = bool(permission)
+            if is_granting != was_granted:
+                res_capacity = get_capacity_package(session=session, user_id=user_id, package_name=kind)
+                if not res_capacity:
+                    return None, None, f"بسته {get_kind_name(kind=kind)} برای شما تعریف نشده است."
+
+                allowed = int(res_capacity.get("allowed") or 0)
+                if is_granting:
+                    if allowed <= 0:
+                        return None, None, f"ظرفیت بسته {get_kind_name(kind=kind)} تکمیل شده است."
+
+                    consume_result = consume_capacity_package(session=session, user_id=user_id, package_name=kind)
+                    if consume_result == -1:
+                        return None, None, f"ظرفیت بسته {get_kind_name(kind=kind)} تکمیل شده است."
+                    if consume_result == 0:
+                        return None, None, f"بسته {get_kind_name(kind=kind)} برای شما تعریف نشده است."
+
+            update_student_access(session=session, stu_user_id=int(stu_id), access_json=updated_access_json)
+            save_student_package_access(
+                session=session,
+                stu_user_id=int(stu_id),
+                owner_user_id=res_stu.get("owner_user_id"),
+                consultant_user_id=res_stu.get("consultant_user_id"),
+                package_name=kind,
+                permission=permission,
+                limit=limit,
+            )
 
         token = get_tracking_code()
         return token, None, "دسترسی دانش‌آموز با موفقیت به‌روزرسانی شد."

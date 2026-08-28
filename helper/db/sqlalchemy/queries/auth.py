@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -35,6 +37,21 @@ def get_user_identity_by_phone(session: Session, phone: str) -> dict | None:
     return dict(row) if row else None
 
 
+def get_user_identity_by_token(session: Session, token: str) -> dict | None:
+    statement = (
+        select(
+            Token.user_id.label("user_id"),
+            User.phone.label("phone"),
+            User.role.label("role"),
+        )
+        .join(User, User.user_id == Token.user_id)
+        .where(Token.token == token)
+        .limit(1)
+    )
+    row = session.execute(statement).mappings().first()
+    return dict(row) if row else None
+
+
 def user_phone_exists(session: Session, phone: str) -> bool:
     statement = select(User.user_id).where(User.phone == phone).limit(1)
     return session.execute(statement).scalar_one_or_none() is not None
@@ -45,6 +62,16 @@ def create_user(session: Session, phone: str, password: str, role: str) -> int:
     session.add(user)
     session.flush()
     return user.user_id
+
+
+def update_user_password(session: Session, user_id: int, encrypted_password: str) -> int:
+    user = session.get(User, user_id)
+    if not user:
+        return 0
+    user.password = encrypted_password
+    user.edited_time = datetime.now()
+    session.flush()
+    return 1
 
 
 def get_token_for_user(session: Session, user_id: int) -> str | None:

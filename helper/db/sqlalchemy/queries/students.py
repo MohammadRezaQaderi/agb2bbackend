@@ -3,11 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from sqlalchemy import Select, and_, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from helper.db.sqlalchemy.filters import StudentFilters
 from helper.db.sqlalchemy.models import (
+    Capacity,
+    CapacityPackage,
     Consultant,
     Institute,
     Notification,
@@ -327,3 +329,151 @@ def create_redis_log(session: Session, user_id: int, kind: str, result: str, pho
     session.add(RedisLog(user_id=user_id, kind=kind, result=result, status=0, phone=phone))
     session.flush()
     return True
+
+
+def create_capacity_with_packages(session: Session, user_id: int, package_names: list[str]) -> int:
+    capacity = Capacity(user_id=user_id)
+    session.add(capacity)
+    session.flush()
+
+    for package_name in package_names:
+        session.add(
+            CapacityPackage(
+                capacity_id=capacity.capacity_id,
+                user_id=user_id,
+                package_name=package_name,
+                total_allowed=1,
+                allowed=1,
+                used=0,
+            )
+        )
+    session.flush()
+    return capacity.capacity_id
+
+
+def get_student_access_for_relation(session: Session, stu_user_id: int) -> dict | None:
+    statement = (
+        select(
+            Student.owner_user_id.label("owner_user_id"),
+            Student.consultant_user_id.label("consultant_user_id"),
+            Student.access.label("access"),
+        )
+        .where(Student.user_id == stu_user_id)
+        .limit(1)
+    )
+    row = session.execute(statement).mappings().first()
+    return dict(row) if row else None
+
+
+def get_capacity_package(session: Session, user_id: int, package_name: str) -> dict | None:
+    statement = (
+        select(
+            CapacityPackage.allowed.label("allowed"),
+            CapacityPackage.used.label("used"),
+        )
+        .where(
+            CapacityPackage.user_id == user_id,
+            CapacityPackage.package_name == package_name,
+        )
+        .limit(1)
+    )
+    row = session.execute(statement).mappings().first()
+    return dict(row) if row else None
+
+
+def consume_capacity_package(session: Session, user_id: int, package_name: str) -> int:
+    statement = (
+        select(CapacityPackage)
+        .where(
+            CapacityPackage.user_id == user_id,
+            CapacityPackage.package_name == package_name,
+        )
+        .limit(1)
+    )
+    capacity_package = session.execute(statement).scalars().first()
+    if not capacity_package:
+        return 0
+
+    allowed = capacity_package.allowed or 0
+    used = capacity_package.used or 0
+    if allowed <= 0:
+        return -1
+
+    capacity_package.used = used + 1
+    capacity_package.allowed = allowed - 1
+    capacity_package.edited_time = datetime.now()
+    session.flush()
+    return 1
+
+
+def update_student_access(session: Session, stu_user_id: int, access_json: str) -> int:
+    student = session.get(Student, stu_user_id)
+    if not student:
+        return 0
+    student.access = access_json
+    student.edited_time = datetime.now()
+    session.flush()
+    return 1
+
+
+def save_student_package_access(
+    session: Session,
+    stu_user_id: int,
+    owner_user_id: int | None,
+    consultant_user_id: int | None,
+    package_name: str,
+    permission: int,
+    limit: int,
+) -> None:
+    statement = (
+        select(StudentPackageAccess)
+        .where(
+            StudentPackageAccess.stu_user_id == stu_user_id,
+            StudentPackageAccess.package_name == package_name,
+        )
+        .limit(1)
+    )
+    access = session.execute(statement).scalars().first()
+    if access:
+        access.owner_user_id = owner_user_id
+        access.consultant_user_id = consultant_user_id
+        access.permission = permission
+        access.limit = limit
+        access.edited_time = datetime.now()
+    else:
+        session.add(
+            StudentPackageAccess(
+                stu_user_id=stu_user_id,
+                owner_user_id=owner_user_id,
+                consultant_user_id=consultant_user_id,
+                package_name=package_name,
+                permission=permission,
+                limit=limit,
+            )
+        )
+    session.flush()
+
+
+def count_student_packages_for_relation(session: Session, relation_column: str, user_id: int) -> dict[str, int]:
+    relation_columns = {
+        "owner_user_id": StudentPackageAccess.owner_user_id,
+        "consultant_user_id": StudentPackageAccess.consultant_user_id,
+    }
+    column = relation_columns.get(relation_column)
+    if column is None:
+        return {"AG": 0, "SCL": 0}
+
+    statement = (
+        select(
+            StudentPackageAccess.package_name.label("package_name"),
+            func.count().label("total"),
+        )
+        .where(column == user_id, StudentPackageAccess.permission == 1)
+        .group_by(StudentPackageAccess.package_name)
+    )
+    counts = {"AG": 0, "SCL": 0}
+    for row in session.execute(statement).mappings().all():
+        package_name = str(row.get("package_name", "")).upper()
+        if package_name in counts:
+            counts[package_name] = int(row.get("total") or 0)
+    return counts

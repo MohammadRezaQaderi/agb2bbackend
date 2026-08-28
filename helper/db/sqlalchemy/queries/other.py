@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from helper.db.sqlalchemy.models import Comment, Payment, ResultState, SclScore, Score
+from helper.db.sqlalchemy.models import ApiLog, Comment, Payment, ResultState, SclScore, Score
 
 
 def list_user_transactions(session: Session, user_id: int) -> list[dict]:
@@ -62,3 +62,31 @@ def get_score_brain_categories(session: Session, user_id: int) -> str | None:
 def get_scl_score_date(session: Session, user_id: int) -> str | None:
     statement = select(SclScore.scl_date).where(SclScore.user_id == user_id)
     return session.execute(statement).scalar_one_or_none()
+
+
+def payment_id_exists(session: Session, payment_id: int) -> bool:
+    statement = select(Payment.id).where(Payment.payment_id == payment_id).limit(1)
+    return session.execute(statement).scalar_one_or_none() is not None
+
+
+def create_api_log(
+    session: Session,
+    user_id: int | None,
+    phone: str | None,
+    end_point: str,
+    func_name: str,
+    data: str | None,
+    error_p: str,
+) -> bool:
+    session.add(
+        ApiLog(
+            user_id=user_id,
+            phone=phone,
+            end_point=end_point,
+            func_name=func_name,
+            data=data,
+            error_p=error_p,
+        )
+    )
+    session.flush()
+    return True
