@@ -6,13 +6,13 @@ in the dashboard. It uses static configuration to define notification data.
 """
 import os
 import sys
-from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from report.db_helper import get_db_connection, close_db_connection
+from helper.db.sqlalchemy.queries.other import create_notification
+from helper.db.sqlalchemy.session import session_scope
 
 
 # Static notification configuration
@@ -80,8 +80,6 @@ NOTIFICATIONS_CONFIG = [
 
 
 def insert_notification(
-    conn,
-    cursor,
     roles: str,
     title: str,
     description: str,
@@ -95,8 +93,6 @@ def insert_notification(
     Insert a notification into the notifications table.
 
     Args:
-        conn: Database connection.
-        cursor: Database cursor.
         roles: Target roles (e.g., 'institute', 'school', 'ownerConsultant', 'con', 'all').
         title: Notification title.
         description: Short description.
@@ -109,39 +105,18 @@ def insert_notification(
     Returns:
         Notification ID if successful, None otherwise.
     """
-    try:
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # Prepare the SQL query
-        if user_id is not None:
-            query = """
-                INSERT INTO notifications 
-                (roles, user_id, title, description, added_by, priority, persian_date, fullText, created_time, edited_time)
-                OUTPUT INSERTED.id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            cursor.execute(query, (
-                roles, user_id, title, description, added_by, 
-                priority, persian_date, fullText, current_time, current_time
-            ))
-        else:
-            query = """
-                INSERT INTO notifications 
-                (roles, title, description, added_by, priority, persian_date, fullText, created_time, edited_time)
-                OUTPUT INSERTED.id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            cursor.execute(query, (
-                roles, title, description, added_by, 
-                priority, persian_date, fullText, current_time, current_time
-            ))
-        
-        notification_id = cursor.fetchone()[0]
-        return notification_id
-    except Exception as e:
-        print(f"Error inserting notification: {e}")
-        conn.rollback()
-        return None
+    with session_scope() as session:
+        return create_notification(
+            session=session,
+            roles=roles,
+            title=title,
+            description=description,
+            added_by=added_by,
+            priority=priority,
+            persian_date=persian_date,
+            full_text=fullText,
+            user_id=user_id,
+        )
 
 
 def insert_notifications_from_config(
@@ -187,16 +162,10 @@ def insert_notifications_from_config(
             'dry_run': True,
         }
 
-    # Get database connection
-    conn, cursor = get_db_connection()
-
-    try:
-        for idx, notification in enumerate(notifications, 1):
-            print(f"\n[{idx}/{total_count}] Inserting notification: {notification['title']}")
-            
+    for idx, notification in enumerate(notifications, 1):
+        print(f"\n[{idx}/{total_count}] Inserting notification: {notification['title']}")
+        try:
             notification_id = insert_notification(
-                conn=conn,
-                cursor=cursor,
                 roles=notification['roles'],
                 title=notification['title'],
                 description=notification['description'],
@@ -206,40 +175,28 @@ def insert_notifications_from_config(
                 fullText=notification['fullText'],
                 user_id=notification.get('user_id'),
             )
+            inserted_count += 1
+            results.append({
+                'title': notification['title'],
+                'status': 'Success',
+                'notification_id': notification_id,
+            })
+            print(f"  ✓ Successfully inserted (ID: {notification_id})")
+        except Exception as e:
+            error_count += 1
+            results.append({
+                'title': notification['title'],
+                'status': 'Error',
+                'notification_id': None,
+            })
+            print(f"  ✗ Failed to insert: {e}")
 
-            if notification_id:
-                inserted_count += 1
-                results.append({
-                    'title': notification['title'],
-                    'status': 'Success',
-                    'notification_id': notification_id,
-                })
-                print(f"  ✓ Successfully inserted (ID: {notification_id})")
-            else:
-                error_count += 1
-                results.append({
-                    'title': notification['title'],
-                    'status': 'Error',
-                    'notification_id': None,
-                })
-                print(f"  ✗ Failed to insert")
-
-        # Commit all changes
-        conn.commit()
-        print(f"\n=== INSERTION SUMMARY ===")
-        print(f"Total notifications: {total_count}")
-        print(f"Successfully inserted: {inserted_count}")
-        print(f"Errors encountered: {error_count}")
-        if total_count > 0:
-            print(f"Success rate: {(inserted_count / total_count) * 100:.1f}%")
-
-    except Exception as e:
-        print(f"Error during processing: {str(e)}")
-        conn.rollback()
-        raise
-
-    finally:
-        close_db_connection(conn, cursor)
+    print(f"\n=== INSERTION SUMMARY ===")
+    print(f"Total notifications: {total_count}")
+    print(f"Successfully inserted: {inserted_count}")
+    print(f"Errors encountered: {error_count}")
+    if total_count > 0:
+        print(f"Success rate: {(inserted_count / total_count) * 100:.1f}%")
 
     return {
         'total_count': total_count,
@@ -332,4 +289,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-

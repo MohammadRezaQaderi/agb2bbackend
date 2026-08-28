@@ -124,6 +124,31 @@ def get_discount_by_code(session: Session, code: str) -> dict | None:
     }
 
 
+def create_discount(
+    session: Session,
+    code: str,
+    status: str,
+    discount_percentage: float,
+    count: int = 100,
+    count_apply: int = 0,
+    expire_time: datetime | None = None,
+) -> int:
+    now = datetime.now()
+    discount = Discount(
+        code=code,
+        status=status,
+        discount_percentage=discount_percentage,
+        count=count,
+        count_apply=count_apply,
+        expire_time=expire_time,
+        created_time=now,
+        edited_time=now,
+    )
+    session.add(discount)
+    session.flush()
+    return discount.id
+
+
 def record_discount_usage(
     session: Session,
     discount_id: int,
@@ -215,6 +240,35 @@ def create_comment(
         )
     )
     session.flush()
+
+
+def create_notification(
+    session: Session,
+    roles: str,
+    title: str,
+    description: str,
+    added_by: str,
+    priority: str,
+    persian_date: str,
+    full_text: str,
+    user_id: int | None = None,
+) -> int:
+    now = datetime.now()
+    notification = Notification(
+        roles=roles,
+        user_id=user_id,
+        title=title,
+        description=description,
+        added_by=added_by,
+        priority=priority,
+        persian_date=persian_date,
+        full_text=full_text,
+        created_time=now,
+        edited_time=now,
+    )
+    session.add(notification)
+    session.flush()
+    return notification.id
 
 
 def mark_notification_read_if_allowed(
