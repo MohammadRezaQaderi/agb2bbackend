@@ -387,6 +387,15 @@ class ResultState(Base, TimestampMixin):
     i_state: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
 
 
+class HedayatField(Base, TimestampMixin):
+    __tablename__ = "hedayat_fields"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.user_id"), nullable=True)
+    suggested: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    other: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+
+
 __all__ = [
     "ApiLog",
     "Capacity",
@@ -401,6 +410,7 @@ __all__ = [
     "Payment",
     "PaymentLog",
     "Discount",
+    "HedayatField",
     "UsingDiscount",
     "OtpLog",
     "Product",
