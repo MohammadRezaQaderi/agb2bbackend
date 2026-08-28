@@ -1,8 +1,11 @@
-from datetime import datetime
-
-import helper.db.db_helper as db_helper
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.filters import StudentFilters
+from helper.db.sqlalchemy.queries.consultants import (
+    get_consultant_profile,
+    update_consultant_name,
+    update_student_comment_by_consultant,
+    update_student_profile_by_consultant,
+)
 from helper.db.sqlalchemy.queries.dashboard import (
     count_student_packages_for_scope,
     count_students_for_scope,
@@ -24,25 +27,22 @@ from helper.response import (
 
 def get_info(conn, cursor, user_id):
     try:
-        query = '''
-            SELECT c.con_id, u.phone, c.first_name, c.last_name, c.owner_user_id,
-                   owner.role AS owner_role
-            FROM con c
-            INNER JOIN users u ON u.user_id = c.user_id
-            LEFT JOIN users owner ON owner.user_id = c.owner_user_id
-            WHERE c.user_id = ?
-        '''
-        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
-        if res.owner_role == "ins":
-            query_ins = 'SELECT name, logo FROM ins WHERE user_id = ?'
-            res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.owner_user_id)
+        with session_scope() as session:
+            res = get_consultant_profile(session=session, user_id=user_id)
+        if not res:
+            raise ValueError("consultant not found")
+
+        if res.get("owner_role") == "ins":
+            owner_name = res.get("institute_name")
+            owner_logo = res.get("institute_logo")
         else:
-            query_ins = 'SELECT name, logo FROM sch WHERE user_id = ?'
-            res_ins = db_helper.search_table(conn=conn, cursor=cursor, query=query_ins, field=res.owner_user_id)
+            owner_name = res.get("school_name")
+            owner_logo = res.get("school_logo")
         token = func_helper.get_tracking_code()
-        response_info = {"phone": res.phone, "user_id": user_id, "id": res.con_id, "first_name": res.first_name,
-                         "last_name": res.last_name, "role": 'con', "name": res_ins.name, "pic": res_ins.logo,
-                         "owner_user_id": res.owner_user_id, "ins_id": res.owner_user_id}
+        response_info = {"phone": res.get("phone"), "user_id": user_id, "id": res.get("con_id"),
+                         "first_name": res.get("first_name"), "last_name": res.get("last_name"), "role": 'con',
+                         "name": owner_name, "pic": owner_logo,
+                         "owner_user_id": res.get("owner_user_id"), "ins_id": res.get("owner_user_id")}
         return token, response_info, ""
     except Exception as e:
         conn.rollback()
@@ -148,13 +148,17 @@ def get_students(conn, cursor, request_data, user_info):
 # this function is for update the information of consultant
 def change_student(conn, cursor, request_data, user_info):
     try:
-        db_helper.update_record(conn, cursor, 'stu',
-                                ['first_name', 'last_name', 'sex', 'city', 'editor_id', 'birth_date',
-                                 'edited_time'],
-                                [request_data["first_name"], request_data["last_name"], request_data["sex"],
-                                 request_data["city"], user_info["user_id"],
-                                 request_data["birth_date"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                'user_id = ?', [str(request_data["student_id"])])
+        with session_scope() as session:
+            update_student_profile_by_consultant(
+                session=session,
+                student_user_id=int(request_data["student_id"]),
+                editor_id=user_info["user_id"],
+                first_name=request_data["first_name"],
+                last_name=request_data["last_name"],
+                sex=request_data["sex"],
+                city=request_data["city"],
+                birth_date=request_data["birth_date"],
+            )
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
@@ -165,11 +169,13 @@ def change_student(conn, cursor, request_data, user_info):
 
 def change_comment(conn, cursor, request_data, user_info):
     try:
-        db_helper.update_record(conn, cursor, 'stu',
-                                ['comment', 'editor_id', 'edited_time'],
-                                [request_data["consultant_comment"], request_data["user_id"],
-                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                'user_id = ?', [str(request_data["student_id"])])
+        with session_scope() as session:
+            update_student_comment_by_consultant(
+                session=session,
+                student_user_id=int(request_data["student_id"]),
+                editor_id=request_data["user_id"],
+                comment=request_data["consultant_comment"],
+            )
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
@@ -180,11 +186,13 @@ def change_comment(conn, cursor, request_data, user_info):
 
 def change_user_info(conn, cursor, request_data, user_info):
     try:
-        db_helper.update_record(conn, cursor, 'con',
-                                ['first_name', 'last_name', 'edited_time'],
-                                [request_data["first_name"], request_data["last_name"],
-                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                'user_id = ?', [str(user_info["user_id"])])
+        with session_scope() as session:
+            update_consultant_name(
+                session=session,
+                user_id=user_info["user_id"],
+                first_name=request_data["first_name"],
+                last_name=request_data["last_name"],
+            )
         token = func_helper.get_tracking_code()
         return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
