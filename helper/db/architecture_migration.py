@@ -713,6 +713,7 @@ def run_migration(
         rename_table_if_needed(conn, cursor, "discount", "discounts", dry_run)
         rename_table_if_needed(conn, cursor, "error_log", "quiz_missing_answers", dry_run)
         rename_column_if_needed(conn, cursor, "ocon", "wCon_id", "ocon_id", dry_run)
+        ensure_column(conn, cursor, "ocon", "logo", "VARCHAR(MAX) NULL", dry_run)
         rename_column_if_needed(conn, cursor, "quiz_missing_answers", "q_id", "question_id", dry_run)
         normalize_ocon_role_names(conn, cursor, dry_run)
         normalize_relation_columns(conn, cursor, dry_run)
