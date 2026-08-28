@@ -132,3 +132,46 @@ def update_consultant_name(session: Session, user_id: int, first_name: str, last
     consultant.edited_time = datetime.now()
     session.flush()
     return 1
+
+
+def create_consultant_profile(
+    session: Session,
+    user_id: int,
+    owner_user_id: int,
+    editor_id: int,
+    first_name: str,
+    last_name: str,
+    sex: int,
+) -> None:
+    session.add(
+        Consultant(
+            user_id=user_id,
+            owner_user_id=owner_user_id,
+            editor_id=editor_id,
+            first_name=first_name,
+            last_name=last_name,
+            sex=sex,
+        )
+    )
+    session.flush()
+
+
+def update_consultant_profile_for_owner(
+    session: Session,
+    user_id: int,
+    editor_id: int,
+    first_name: str,
+    last_name: str,
+    sex: int,
+) -> int:
+    consultant = session.get(Consultant, user_id)
+    if not consultant:
+        return 0
+
+    consultant.first_name = first_name
+    consultant.last_name = last_name
+    consultant.sex = sex
+    consultant.editor_id = editor_id
+    consultant.edited_time = datetime.now()
+    session.flush()
+    return 1

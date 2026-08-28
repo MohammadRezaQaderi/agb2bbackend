@@ -477,3 +477,58 @@ def count_student_packages_for_relation(session: Session, relation_column: str, 
         if package_name in counts:
             counts[package_name] = int(row.get("total") or 0)
     return counts
+
+
+def create_student_profile(
+    session: Session,
+    user_id: int,
+    owner_user_id: int,
+    consultant_user_id: int,
+    adder_id: int,
+    first_name: str,
+    last_name: str,
+    sex: int,
+    city: str,
+    birth_date: str,
+) -> None:
+    session.add(
+        Student(
+            user_id=user_id,
+            owner_user_id=owner_user_id,
+            consultant_user_id=consultant_user_id,
+            adder_id=adder_id,
+            first_name=first_name,
+            last_name=last_name,
+            sex=sex,
+            city=city,
+            birth_date=birth_date,
+        )
+    )
+    session.flush()
+
+
+def update_student_profile_for_owner(
+    session: Session,
+    student_user_id: int,
+    editor_id: int,
+    first_name: str,
+    last_name: str,
+    sex: int,
+    city: str,
+    consultant_user_id: int,
+    birth_date: str,
+) -> int:
+    student = session.get(Student, student_user_id)
+    if not student:
+        return 0
+
+    student.first_name = first_name
+    student.last_name = last_name
+    student.sex = sex
+    student.city = city
+    student.consultant_user_id = consultant_user_id
+    student.birth_date = birth_date
+    student.editor_id = editor_id
+    student.edited_time = datetime.now()
+    session.flush()
+    return 1
