@@ -1,9 +1,10 @@
-from datetime import datetime
-
 import config
-import helper.db.db_helper as db_helper
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.filters import StudentFilters
+from helper.db.sqlalchemy.queries.consultants import (
+    update_student_comment_by_consultant,
+    update_student_profile_by_consultant,
+)
 from helper.db.sqlalchemy.queries.dashboard import (
     count_student_packages_for_scope,
     count_students_for_scope,
@@ -11,8 +12,18 @@ from helper.db.sqlalchemy.queries.dashboard import (
     list_notifications_for_user,
     list_quiz_attempts_for_scope,
 )
+from helper.db.sqlalchemy.queries.owner_consultants import (
+    create_owner_consultant_profile,
+    get_owner_consultant_profile,
+    update_owner_consultant_profile,
+    verify_owner_consultant,
+)
 from helper.db.sqlalchemy.queries.reports import list_quiz_attempts_for_users
-from helper.db.sqlalchemy.queries.students import list_students_for_consultant
+from helper.db.sqlalchemy.queries.settings import upsert_setting
+from helper.db.sqlalchemy.queries.students import (
+    create_student_profile,
+    list_students_for_consultant,
+)
 import helper.func_helper as func_helper
 from helper.response import (
     build_dashboard_info_response,
@@ -24,16 +35,20 @@ from helper.response import (
 
 def get_info(conn, cursor, user_id):
     try:
-        query = '''
-            SELECT o.ocon_id, u.phone, o.first_name, o.last_name, o.logo
-            FROM ocon o
-            INNER JOIN users u ON u.user_id = o.user_id
-            WHERE o.user_id = ?
-        '''
-        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
+        with session_scope() as session:
+            res = get_owner_consultant_profile(session=session, user_id=user_id)
+        if not res:
+            raise ValueError("owner consultant not found")
         token = func_helper.get_tracking_code()
-        user_info = {"phone": res.phone, "user_id": user_id, "id": res.ocon_id, "first_name": res.first_name, "role": "ocon",
-                "last_name": res.last_name, "pic": res.logo}
+        user_info = {
+            "phone": res.get("phone"),
+            "user_id": user_id,
+            "id": res.get("ocon_id"),
+            "first_name": res.get("first_name"),
+            "role": "ocon",
+            "last_name": res.get("last_name"),
+            "pic": res.get("logo"),
+        }
         return token, user_info, ""
     except Exception as e:
         conn.rollback()
@@ -83,15 +98,17 @@ def get_dashboard(conn, cursor, request_data, user_info):
 
 def add_owner_consultant(conn, cursor, request_data, user_id):
     try:
-        table = "ocon"
         sex = request_data.get("sex")
         if not sex:
             sex = 1
-        field = '([first_name], [last_name], [user_id], [sex])'
-        values = (
-            request_data["first_name"], request_data["last_name"], user_id, sex)
-        db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
-                               values=values)
+        with session_scope() as session:
+            create_owner_consultant_profile(
+                session=session,
+                user_id=user_id,
+                first_name=request_data["first_name"],
+                last_name=request_data["last_name"],
+                sex=sex,
+            )
         func_helper.add_capacity_signup(conn, cursor, user_id, request_data["phone"])
         token = func_helper.get_tracking_code()
         return token, None, ""
@@ -140,14 +157,19 @@ def get_management_report(conn, cursor, request_data, user_info):
 
 def add_student(conn, cursor, request_data, stu_user_id, user_info):
     try:
-        table = "stu"
-        field = '([user_id], [first_name], [last_name], [sex], [city], [owner_user_id], [consultant_user_id], [adder_id], [editor_id], [birth_date])'
-        values = (
-            stu_user_id, request_data["first_name"], request_data["last_name"], request_data["sex"], request_data["city"],
-            request_data["user_id"],
-            user_info["user_id"], user_info["user_id"], user_info["user_id"], request_data["birth_date"],)
-        db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
-                               values=values)
+        with session_scope() as session:
+            create_student_profile(
+                session=session,
+                user_id=stu_user_id,
+                owner_user_id=request_data["user_id"],
+                consultant_user_id=user_info["user_id"],
+                adder_id=user_info["user_id"],
+                first_name=request_data["first_name"],
+                last_name=request_data["last_name"],
+                sex=request_data["sex"],
+                city=request_data["city"],
+                birth_date=request_data["birth_date"],
+            )
         token = func_helper.get_tracking_code()
         return token, None, "دانش‌آموز شما با موفقیت ثبت شد."
     except Exception as e:
@@ -158,13 +180,17 @@ def add_student(conn, cursor, request_data, stu_user_id, user_info):
 
 def change_student(conn, cursor, request_data, user_info):
     try:
-        db_helper.update_record(conn, cursor, 'stu',
-                                ['first_name', 'last_name', 'sex', 'city', 'editor_id', 'birth_date',
-                                 'edited_time'],
-                                [request_data["first_name"], request_data["last_name"], request_data["sex"],
-                                 request_data["city"], user_info["user_id"],
-                                 request_data["birth_date"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                'user_id = ?', [str(request_data["student_id"])])
+        with session_scope() as session:
+            update_student_profile_by_consultant(
+                session=session,
+                student_user_id=int(request_data["student_id"]),
+                editor_id=user_info["user_id"],
+                first_name=request_data["first_name"],
+                last_name=request_data["last_name"],
+                sex=request_data["sex"],
+                city=request_data["city"],
+                birth_date=request_data["birth_date"],
+            )
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
@@ -175,11 +201,13 @@ def change_student(conn, cursor, request_data, user_info):
 
 def change_comment(conn, cursor, request_data, user_info):
     try:
-        db_helper.update_record(conn, cursor, 'stu',
-                                ['comment', 'editor_id', 'edited_time'],
-                                [request_data["consultant_comment"], user_info["user_id"],
-                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                'user_id = ?', [str(request_data["student_id"])])
+        with session_scope() as session:
+            update_student_comment_by_consultant(
+                session=session,
+                student_user_id=int(request_data["student_id"]),
+                editor_id=user_info["user_id"],
+                comment=request_data["consultant_comment"],
+            )
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
@@ -190,25 +218,19 @@ def change_comment(conn, cursor, request_data, user_info):
 
 def change_user_info(conn, cursor, request_data, user_info):
     try:
-        update_fields = ['first_name', 'last_name', 'edited_time']
-        update_values = [
-            request_data["first_name"],
-            request_data["last_name"],
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        ]
         pic = func_helper.save_base64_image(
             request_data.get("pic"),
             request_data.get("last_pic"),
             config.INS_PIC_DIR,
         )
-        if pic is not None:
-            update_fields.insert(2, 'logo')
-            update_values.insert(2, pic)
-
-        db_helper.update_record(conn, cursor, 'ocon',
-                                update_fields,
-                                update_values,
-                                'user_id = ?', [str(user_info["user_id"])])
+        with session_scope() as session:
+            update_owner_consultant_profile(
+                session=session,
+                user_id=user_info["user_id"],
+                first_name=request_data["first_name"],
+                last_name=request_data["last_name"],
+                logo=pic,
+            )
         token = func_helper.get_tracking_code()
         response = {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}
         if pic is not None:
@@ -223,18 +245,17 @@ def change_user_info(conn, cursor, request_data, user_info):
 
 def get_students(conn, cursor, request_data, user_info):
     try:
-        query = 'SELECT first_name, last_name FROM ocon WHERE user_id = ?'
-        res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
-        con_name = ""
-        if res_con and len(res_con) >= 2:
-            con_name = f"{res_con.first_name} {res_con.last_name}"
-        filters = StudentFilters.from_request(request_data)
         with session_scope() as session:
+            res_con = get_owner_consultant_profile(session=session, user_id=user_info["user_id"])
+            filters = StudentFilters.from_request(request_data)
             students = list_students_for_consultant(
                 session=session,
                 consultant_user_id=user_info["user_id"],
                 filters=filters,
             )
+        con_name = ""
+        if res_con:
+            con_name = f"{res_con.get('first_name')} {res_con.get('last_name')}"
         stu_info = build_student_list_response(
             students,
             default_con_name=con_name,
@@ -251,21 +272,16 @@ def get_students(conn, cursor, request_data, user_info):
 def change_user_voice(conn, cursor, request_data, user_info):
     try:
         token = func_helper.get_tracking_code()
-        if request_data["setting_id"] == "no setting":
-            table = "setting"
-            field = '([user_id], [description], [voice], [quiz_id])'
-            values = (
-                request_data["user_id"], request_data["description"], request_data["voice"], request_data["quiz_id"],)
-            db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
-                                   values=values)
-            return token, None, "اطلاعات شما با موفقیت تغییر یافت."
-        else:
-            db_helper.update_record(conn, cursor, 'setting',
-                                    ['description', 'voice', 'edited_time'],
-                                    [request_data["description"], request_data["voice"],
-                                     datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                    'setting_id = ?', [str(request_data["setting_id"])])
-            return token, None, "اطلاعات شما با موفقیت تغییر یافت."
+        with session_scope() as session:
+            upsert_setting(
+                session=session,
+                setting_id=request_data["setting_id"],
+                user_id=request_data["user_id"],
+                description=request_data["description"],
+                voice=request_data["voice"],
+                quiz_id=request_data["quiz_id"],
+            )
+        return token, None, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_user_voice", str(e), request_data,
@@ -275,22 +291,17 @@ def change_user_voice(conn, cursor, request_data, user_info):
 
 def change_setting(conn, cursor, request_data, user_info):
     try:
-        if request_data["setting_id"] == "no setting":
-            table = "setting"
-            field = '([user_id], [description], [voice], [quiz_id])'
-            values = (
-                request_data["user_id"], request_data["description"], request_data["voice"], request_data["quiz_id"],)
-            db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
-                                   values=values)
-            token = func_helper.get_tracking_code()
-            return token, None, "پیش اطلاعات اولیه آزمون شما تغییر یافت."
-        else:
-            db_helper.update_record(conn, cursor, 'setting',
-                                    ['description', 'edited_time'],
-                                    [request_data["description"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                    'setting_id = ?', [str(request_data["setting_id"])])
-            token = func_helper.get_tracking_code()
-            return token, None, "پیش اطلاعات اولیه آزمون شما تغییر یافت."
+        with session_scope() as session:
+            upsert_setting(
+                session=session,
+                setting_id=request_data["setting_id"],
+                user_id=request_data["user_id"],
+                description=request_data["description"],
+                voice=request_data.get("voice"),
+                quiz_id=request_data["quiz_id"],
+            )
+        token = func_helper.get_tracking_code()
+        return token, None, "پیش اطلاعات اولیه آزمون شما تغییر یافت."
     except Exception as e:
         conn.rollback()
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_setting", str(e), request_data, user_info)
@@ -299,20 +310,21 @@ def change_setting(conn, cursor, request_data, user_info):
 
 def verify_user(conn, cursor, user_id):
     try:
-        db_helper.update_record(conn, cursor, 'ocon',
-                                ['verify', 'edited_time'],
-                                [1, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                'user_id = ?', [str(user_id)])
+        with session_scope() as session:
+            verify_owner_consultant(session=session, user_id=user_id)
+            res = get_owner_consultant_profile(session=session, user_id=user_id)
+        if not res:
+            raise ValueError("owner consultant not found")
         token = func_helper.get_tracking_code()
-        query = '''
-            SELECT o.ocon_id, u.phone, o.first_name, o.last_name, o.logo
-            FROM ocon o
-            INNER JOIN users u ON u.user_id = o.user_id
-            WHERE o.user_id = ?
-        '''
-        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
-        user_info = {"phone": res.phone, "user_id": user_id, "id": res.ocon_id, "first_name": res.first_name, "role": "ocon",
-                "last_name": res.last_name, "pic": res.logo}
+        user_info = {
+            "phone": res.get("phone"),
+            "user_id": user_id,
+            "id": res.get("ocon_id"),
+            "first_name": res.get("first_name"),
+            "role": "ocon",
+            "last_name": res.get("last_name"),
+            "pic": res.get("logo"),
+        }
         return token, user_info, ""
     except Exception as e:
         conn.rollback()

@@ -19,7 +19,6 @@ from helper.db.sqlalchemy.queries.institutes import (
     create_institute_profile,
     get_institute_profile,
     update_institute_profile,
-    upsert_setting,
     verify_institute,
 )
 from helper.db.sqlalchemy.queries.students import (
@@ -27,6 +26,7 @@ from helper.db.sqlalchemy.queries.students import (
     list_students_for_owner,
     update_student_profile_for_owner,
 )
+from helper.db.sqlalchemy.queries.settings import upsert_setting
 import helper.func_helper as func_helper
 from helper.response import (
     build_consultant_list_response,
