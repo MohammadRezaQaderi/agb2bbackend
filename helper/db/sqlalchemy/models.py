@@ -241,6 +241,16 @@ class UsingDiscount(Base, TimestampMixin):
     phone: Mapped[str] = mapped_column(Unicode(12), nullable=False)
 
 
+class OtpLog(Base, TimestampMixin):
+    __tablename__ = "otp_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    phone: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    type_otp: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    provider_resp: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+
+
 class Product(Base, TimestampMixin):
     __tablename__ = "product"
 
@@ -392,6 +402,7 @@ __all__ = [
     "PaymentLog",
     "Discount",
     "UsingDiscount",
+    "OtpLog",
     "Product",
     "QuizAttempt",
     "QuizQuestionAnswer",

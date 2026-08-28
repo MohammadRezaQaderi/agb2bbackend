@@ -1,6 +1,8 @@
-import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
 import helper.quiz.quiz_data_extractor as quiz_data_extractor
+from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.settings import get_setting_for_user_quiz
+from helper.db.sqlalchemy.queries.students import get_student_access_for_relation
 import services.admin.admin_service as admin_service
 import services.auth.auth_service as auth_service
 import services.consultant.consultant_service as consultant_service
@@ -490,8 +492,8 @@ def check_student_access(conn, cursor, student_user_id, user_info):
     Returns True if access is granted, False otherwise.
     """
     try:
-        query = 'SELECT owner_user_id, consultant_user_id FROM stu WHERE user_id = ?'
-        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=student_user_id)
+        with session_scope() as session:
+            res = get_student_access_for_relation(session=session, stu_user_id=int(student_user_id))
         if not res:
             return False
         
@@ -499,9 +501,9 @@ def check_student_access(conn, cursor, student_user_id, user_info):
         user_id = user_info.get("user_id")
         
         if role in ["ins", "sch"]:
-            return res.owner_user_id == user_id
+            return res["owner_user_id"] == user_id
         elif role in ["con", "ocon"]:
-            return res.consultant_user_id == user_id
+            return res["consultant_user_id"] == user_id
         
         return False
     except Exception as e:
@@ -615,23 +617,20 @@ def get_quiz_setting(conn, cursor, request_data, user_info):
         return error_response
 
     quiz_id = request_data["quiz_id"]
-    query_select_setting = "select * from setting where setting.user_id = '" + str(
-        user_info["user_id"]) + "' and setting.quiz_id = '" + str(quiz_id) + "' "
-    cursor.execute(query_select_setting)
-    res = cursor.fetchone()
-    conn.commit()
+    with session_scope() as session:
+        res = get_setting_for_user_quiz(
+            session=session,
+            user_id=int(user_info["user_id"]),
+            quiz_id=int(quiz_id),
+        )
     token = func_helper.get_tracking_code()
-    if res is None:
+    if not res:
         quiz_info = quiz_data_extractor.get_quiz_info(quiz_id=quiz_id)
         info_data = {"voice": quiz_info["voice"], "description": quiz_info["description"], "setting_id": "no setting"}
         return _service_response(method_type, token, info_data)
-    elif len(res) == 0:
-        quiz_info = quiz_data_extractor.get_quiz_info(quiz_id=quiz_id)
-        info_data = {"voice": quiz_info["voice"], "description": quiz_info["description"], "setting_id": "no setting"}
-        return _service_response(method_type, token, info_data)
-    else:
-        info_data = {"voice": res[3], "description": res[2], "setting_id": res[0]}
-        return _service_response(method_type, token, info_data)
+
+    info_data = {"voice": res["voice"], "description": res["description"], "setting_id": res["setting_id"]}
+    return _service_response(method_type, token, info_data)
 
 
 def get_report(conn, cursor, request_data, user_info):
