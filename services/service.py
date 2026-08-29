@@ -197,7 +197,7 @@ def student_change_user_info(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.update_stu_user_profile(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -223,7 +223,7 @@ def student_change_password(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.update_stu_password(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -234,7 +234,7 @@ def student_get_dashboard(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.select_stu_dashboard(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -248,7 +248,7 @@ def student_get_quiz_setting(request_data, user_info, conn=None, cursor=None):
     )
     if not is_valid:
         return error_response
-    return get_quiz_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+    return get_quiz_setting(request_data=request_data, user_info=user_info)
 
 
 def student_get_quiz_table_info(request_data, user_info, conn=None, cursor=None):
@@ -264,7 +264,7 @@ def student_get_quiz_table_info(request_data, user_info, conn=None, cursor=None)
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.select_stu_quiz_table_info(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -282,7 +282,7 @@ def student_get_quiz_info(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.select_stu_quiz_info(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     if not response_data:
         return _error_response(method_type, response_message or "آزمون مورد نظر شما در دسترس شما نیست.")
@@ -302,7 +302,7 @@ def student_change_quiz_answer(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.submit_quiz_answer(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -313,7 +313,7 @@ def student_get_access_product(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.select_student_access_info(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -365,7 +365,7 @@ def change_student_access(request_data, user_info, conn=None, cursor=None):
 
 
 def change_user_quiz_setting(request_data, user_info, conn=None, cursor=None):
-    return change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+    return change_setting(request_data=request_data, user_info=user_info)
 
 
 # The users functionality
@@ -622,7 +622,7 @@ def change_comment(request_data, user_info, conn=None, cursor=None):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def get_quiz_setting(request_data, user_info, conn=None, cursor=None):
+def get_quiz_setting(request_data, user_info):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,

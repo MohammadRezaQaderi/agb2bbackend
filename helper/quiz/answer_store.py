@@ -43,7 +43,7 @@ def normalize_answer_value(value: Any) -> Any:
     return value
 
 
-def get_attempts(conn, cursor, user_id: int, quiz_kind: str):
+def get_attempts(user_id: int, quiz_kind: str):
     with session_scope() as session:
         return list_attempts_for_user_kind(
             session=session,
@@ -52,7 +52,7 @@ def get_attempts(conn, cursor, user_id: int, quiz_kind: str):
         )
 
 
-def get_attempt(conn, cursor, user_id: int, quiz_kind: str, quiz_id: int):
+def get_attempt(user_id: int, quiz_kind: str, quiz_id: int):
     with session_scope() as session:
         return get_attempt_for_user_kind_quiz(
             session=session,
@@ -62,7 +62,7 @@ def get_attempt(conn, cursor, user_id: int, quiz_kind: str, quiz_id: int):
         )
 
 
-def upsert_attempt(conn, cursor, user_id: int, quiz_kind: str, quiz_id: int, state: int,
+def upsert_attempt(user_id: int, quiz_kind: str, quiz_id: int, state: int,
                    owner_user_id: int | None, consultant_user_id: int | None, remain_time: int | None = None):
     quiz_kind = normalize_quiz_kind(quiz_kind)
     with session_scope() as session:
@@ -78,7 +78,7 @@ def upsert_attempt(conn, cursor, user_id: int, quiz_kind: str, quiz_id: int, sta
         )
 
 
-def finish_attempt(conn, cursor, user_id: int, quiz_kind: str, quiz_id: int):
+def finish_attempt(user_id: int, quiz_kind: str, quiz_id: int):
     with session_scope() as session:
         return mark_attempt_finished(
             session=session,
@@ -88,7 +88,7 @@ def finish_attempt(conn, cursor, user_id: int, quiz_kind: str, quiz_id: int):
         )
 
 
-def upsert_question_answer(conn, cursor, attempt: dict, question_id: int, answer_value: Any):
+def upsert_question_answer(attempt: dict, question_id: int, answer_value: Any):
     stored_value = encode_answer_value(normalize_answer_value(answer_value))
     with session_scope() as session:
         return save_question_answer(
@@ -99,13 +99,13 @@ def upsert_question_answer(conn, cursor, attempt: dict, question_id: int, answer
         )
 
 
-def get_answers_for_attempt(conn, cursor, attempt_id: int) -> dict[str, Any]:
+def get_answers_for_attempt(attempt_id: int) -> dict[str, Any]:
     with session_scope() as session:
         rows = list_answers_for_attempt(session=session, attempt_id=attempt_id)
     return {str(row["question_id"]): decode_answer_value(row.get("answer_value")) for row in rows}
 
 
-def get_answers_for_user_kind(conn, cursor, user_id: int, quiz_kind: str) -> dict[str, Any]:
+def get_answers_for_user_kind(user_id: int, quiz_kind: str) -> dict[str, Any]:
     with session_scope() as session:
         rows = list_answers_for_user_kind(
             session=session,
@@ -115,7 +115,7 @@ def get_answers_for_user_kind(conn, cursor, user_id: int, quiz_kind: str) -> dic
     return {str(row["question_id"]): decode_answer_value(row.get("answer_value")) for row in rows}
 
 
-def get_completed_count(conn, cursor, user_id: int, quiz_kind: str) -> int:
+def get_completed_count(user_id: int, quiz_kind: str) -> int:
     with session_scope() as session:
         return count_completed_attempts(
             session=session,

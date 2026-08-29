@@ -122,7 +122,7 @@ def sign_in_student(request_data):
             return None, None, "متاسفانه شما از این سامانه اجازه ورود ندارید."
 
         token_user = _create_token(user_info=[res["user_id"], phone, res["role"]])
-        _, user_info, _ = student_service.select_student_info(conn=None, cursor=None, user_id=res["user_id"])
+        _, user_info, _ = student_service.select_student_info(user_id=res["user_id"])
         return token_user, user_info, ""
     except Exception as e:
         func_helper.service_exception_error_logging(None, None, "ags_api/auth", "sign_in_student", str(e), request_data, {})

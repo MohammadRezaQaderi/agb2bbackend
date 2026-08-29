@@ -775,8 +775,6 @@ class AGReportScheduler:
         """Compute SCL labels for a user based on quiz question answer rows."""
         try:
             user_answers: Dict[str, Any] = answer_store.get_answers_for_user_kind(
-                self.db_conn,
-                self.db_cursor,
                 int(user_id),
                 "SCL",
             )
@@ -1347,7 +1345,7 @@ class AGReportScheduler:
             # Compute brain info
             master_file, master_sheet = load_master_excel()
             data, fields, categories, branches, correct, wrong, unanswered = compute_brain_info(
-                self.db_conn, self.db_cursor, user_id,
+                user_id,
                 phone=phone,
                 master_file=master_file,
                 master_sheet=master_sheet
