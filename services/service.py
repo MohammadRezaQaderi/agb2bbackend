@@ -131,13 +131,12 @@ def check_otp(redis_db, request_data, conn=None, cursor=None):
 def change_user_info(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.change_user_info(request_data=request_data,
                                                           user_info=user_info),
-        "sch": lambda: school_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.change_user_info(request_data=request_data,
                                                        user_info=user_info),
         "con": lambda: consultant_service.change_user_info(request_data=request_data, user_info=user_info),
-        "ocon": lambda: owner_consultant_service.change_user_info(conn=conn, cursor=cursor,
-                                                                  request_data=request_data, user_info=user_info),
+        "ocon": lambda: owner_consultant_service.change_user_info(request_data=request_data, user_info=user_info),
     })
     if result is None:
         return func_helper.not_method_access_return()
@@ -325,11 +324,11 @@ def change_setting(request_data, user_info, conn=None, cursor=None):
         return _error_response(method_type, ACCESS_DENIED_MESSAGE)
 
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.change_setting(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.change_setting(request_data=request_data,
                                                         user_info=user_info),
-        "sch": lambda: school_service.change_setting(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.change_setting(request_data=request_data,
                                                      user_info=user_info),
-        "ocon": lambda: owner_consultant_service.change_setting(conn=conn, cursor=cursor, request_data=request_data,
+        "ocon": lambda: owner_consultant_service.change_setting(request_data=request_data,
                                                                 user_info=user_info),
     })
     if result is None:
@@ -352,12 +351,11 @@ def change_student_access(request_data, user_info, conn=None, cursor=None):
         return _error_response(method_type, ACCESS_DENIED_MESSAGE)
 
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.change_student_access(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.change_student_access(request_data=request_data,
                                                                user_info=user_info),
-        "sch": lambda: school_service.change_student_access(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.change_student_access(request_data=request_data,
                                                             user_info=user_info),
-        "ocon": lambda: owner_consultant_service.change_student_access(conn=conn, cursor=cursor,
-                                                                       request_data=request_data, user_info=user_info),
+        "ocon": lambda: owner_consultant_service.change_student_access(request_data=request_data, user_info=user_info),
     })
     if result is None:
         return func_helper.not_method_access_return()
@@ -375,11 +373,11 @@ def change_user_quiz_setting(request_data, user_info, conn=None, cursor=None):
 def get_dashboard(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.get_dashboard(request_data=request_data,
                                                        user_info=user_info),
-        "sch": lambda: school_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.get_dashboard(request_data=request_data,
                                                     user_info=user_info),
-        "ocon": lambda: owner_consultant_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
+        "ocon": lambda: owner_consultant_service.get_dashboard(request_data=request_data,
                                                                user_info=user_info),
         "con": lambda: consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
     })
@@ -394,9 +392,9 @@ def get_dashboard(request_data, user_info, conn=None, cursor=None):
 def get_consultants(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.get_consultants(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.get_consultants(request_data=request_data,
                                                          user_info=user_info),
-        "sch": lambda: school_service.get_consultants(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.get_consultants(request_data=request_data,
                                                       user_info=user_info),
     })
     if result is None:
@@ -466,9 +464,9 @@ def add_consultant(request_data, user_info, conn=None, cursor=None):
 def change_consultant(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.change_consultant(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.change_consultant(request_data=request_data,
                                                            user_info=user_info),
-        "sch": lambda: school_service.change_consultant(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.change_consultant(request_data=request_data,
                                                         user_info=user_info),
     })
     if result is None:
@@ -482,12 +480,12 @@ def change_consultant(request_data, user_info, conn=None, cursor=None):
 def get_students(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.get_students(request_data=request_data,
                                                       user_info=user_info),
-        "sch": lambda: school_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.get_students(request_data=request_data,
                                                    user_info=user_info),
         "con": lambda: consultant_service.get_students(request_data=request_data, user_info=user_info),
-        "ocon": lambda: owner_consultant_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
+        "ocon": lambda: owner_consultant_service.get_students(request_data=request_data,
                                                               user_info=user_info),
     })
     if result is None:
@@ -594,11 +592,11 @@ def change_student(request_data, user_info, conn=None, cursor=None):
     if not is_valid:
         return error_response
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.change_student(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.change_student(request_data=request_data,
                                                         user_info=user_info),
-        "sch": lambda: school_service.change_student(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.change_student(request_data=request_data,
                                                      user_info=user_info),
-        "ocon": lambda: owner_consultant_service.change_student(conn=conn, cursor=cursor, request_data=request_data,
+        "ocon": lambda: owner_consultant_service.change_student(request_data=request_data,
                                                                 user_info=user_info),
         "con": lambda: consultant_service.change_student(request_data=request_data, user_info=user_info),
     })
@@ -614,7 +612,7 @@ def change_comment(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     result = _role_handler(user_info, {
         "con": lambda: consultant_service.change_comment(request_data=request_data, user_info=user_info),
-        "ocon": lambda: owner_consultant_service.change_comment(conn=conn, cursor=cursor, request_data=request_data,
+        "ocon": lambda: owner_consultant_service.change_comment(request_data=request_data,
                                                                 user_info=user_info),
     })
     if result is None:
@@ -654,11 +652,11 @@ def get_quiz_setting(request_data, user_info, conn=None, cursor=None):
 def get_report(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.get_report(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.get_report(request_data=request_data,
                                                     user_info=user_info),
-        "sch": lambda: school_service.get_report(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.get_report(request_data=request_data,
                                                  user_info=user_info),
-        "ocon": lambda: owner_consultant_service.get_report(conn=conn, cursor=cursor, request_data=request_data,
+        "ocon": lambda: owner_consultant_service.get_report(request_data=request_data,
                                                             user_info=user_info),
         "con": lambda: consultant_service.get_report(request_data=request_data, user_info=user_info),
     })
@@ -675,12 +673,11 @@ def get_management_report(request_data, user_info, conn=None, cursor=None):
         return _error_response(method_type, "متاسفانه شما از این سامانه به این سرویس دسترسی ندارید.")
 
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.get_management_report(request_data=request_data,
                                                                user_info=user_info),
-        "sch": lambda: school_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.get_management_report(request_data=request_data,
                                                             user_info=user_info),
-        "ocon": lambda: owner_consultant_service.get_management_report(conn=conn, cursor=cursor,
-                                                                       request_data=request_data,
+        "ocon": lambda: owner_consultant_service.get_management_report(request_data=request_data,
                                                                        user_info=user_info),
         "con": lambda: consultant_service.get_management_report(request_data=request_data, user_info=user_info),
     })
