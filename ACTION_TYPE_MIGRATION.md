@@ -138,6 +138,7 @@ Role service files now use the same local vocabulary:
 | `insert_order_payment` | `ag_add_payment_order` |
 | `insert_consultant` | `ag_add_consultant` |
 | `insert_student` | `ag_add_student` |
+| `mark_notification_read` | `ag_mark_notification_read` |
 
 ## /ag_api/select_request
 

@@ -12,7 +12,8 @@ from typing import List, Dict, Any, Optional
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from report.db_helper import get_db_connection, close_db_connection
+from helper.db.sqlalchemy.queries.other import create_discount
+from helper.db.sqlalchemy.session import session_scope
 
 
 # Static discount configuration
@@ -51,9 +52,13 @@ DISCOUNTS_CONFIG = [
 ]
 
 
+def parse_expire_time(expire_time: Optional[str]) -> Optional[datetime]:
+    if not expire_time:
+        return None
+    return datetime.strptime(expire_time, "%Y-%m-%d %H:%M:%S")
+
+
 def insert_discount(
-    conn,
-    cursor,
     code: str,
     status: str,
     discount_percentage: float,
@@ -65,8 +70,6 @@ def insert_discount(
     Insert a discount into the discounts table.
 
     Args:
-        conn: Database connection.
-        cursor: Database cursor.
         code: Discount code (VARCHAR(10)).
         status: Discount status (e.g., 'active', 'inactive').
         discount_percentage: Discount percentage (FLOAT).
@@ -77,39 +80,16 @@ def insert_discount(
     Returns:
         Discount ID if successful, None otherwise.
     """
-    try:
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # Prepare the SQL query
-        if expire_time is not None:
-            query = """
-                INSERT INTO discounts 
-                (code, status, discount_percentage, count, count_apply, expire_time, created_time, edited_time)
-                OUTPUT INSERTED.id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            cursor.execute(query, (
-                code, status, discount_percentage, count, count_apply,
-                expire_time, current_time, current_time
-            ))
-        else:
-            query = """
-                INSERT INTO discounts 
-                (code, status, discount_percentage, count, count_apply, created_time, edited_time)
-                OUTPUT INSERTED.id
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """
-            cursor.execute(query, (
-                code, status, discount_percentage, count, count_apply,
-                current_time, current_time
-            ))
-        
-        discount_id = cursor.fetchone()[0]
-        return discount_id
-    except Exception as e:
-        print(f"Error inserting discount: {e}")
-        conn.rollback()
-        return None
+    with session_scope() as session:
+        return create_discount(
+            session=session,
+            code=code,
+            status=status,
+            discount_percentage=discount_percentage,
+            count=count,
+            count_apply=count_apply,
+            expire_time=parse_expire_time(expire_time),
+        )
 
 
 def insert_discounts_from_config(
@@ -156,16 +136,10 @@ def insert_discounts_from_config(
             'dry_run': True,
         }
 
-    # Get database connection
-    conn, cursor = get_db_connection()
-
-    try:
-        for idx, discount in enumerate(discounts, 1):
-            print(f"\n[{idx}/{total_count}] Inserting discount: {discount['code']}")
-
+    for idx, discount in enumerate(discounts, 1):
+        print(f"\n[{idx}/{total_count}] Inserting discount: {discount['code']}")
+        try:
             discount_id = insert_discount(
-                conn=conn,
-                cursor=cursor,
                 code=discount['code'],
                 status=discount['status'],
                 discount_percentage=discount['discount_percentage'],
@@ -173,40 +147,28 @@ def insert_discounts_from_config(
                 count_apply=discount.get('count_apply', 0),
                 expire_time=discount.get('expire_time'),
             )
+            inserted_count += 1
+            results.append({
+                'code': discount['code'],
+                'status': 'Success',
+                'discount_id': discount_id,
+            })
+            print(f"  ✓ Successfully inserted (ID: {discount_id})")
+        except Exception as e:
+            error_count += 1
+            results.append({
+                'code': discount['code'],
+                'status': 'Error',
+                'discount_id': None,
+            })
+            print(f"  ✗ Failed to insert: {e}")
 
-            if discount_id:
-                inserted_count += 1
-                results.append({
-                    'code': discount['code'],
-                    'status': 'Success',
-                    'discount_id': discount_id,
-                })
-                print(f"  ✓ Successfully inserted (ID: {discount_id})")
-            else:
-                error_count += 1
-                results.append({
-                    'code': discount['code'],
-                    'status': 'Error',
-                    'discount_id': None,
-                })
-                print(f"  ✗ Failed to insert")
-
-        # Commit all changes
-        conn.commit()
-        print(f"\n=== INSERTION SUMMARY ===")
-        print(f"Total discounts: {total_count}")
-        print(f"Successfully inserted: {inserted_count}")
-        print(f"Errors encountered: {error_count}")
-        if total_count > 0:
-            print(f"Success rate: {(inserted_count / total_count) * 100:.1f}%")
-
-    except Exception as e:
-        print(f"Error during processing: {str(e)}")
-        conn.rollback()
-        raise
-
-    finally:
-        close_db_connection(conn, cursor)
+    print(f"\n=== INSERTION SUMMARY ===")
+    print(f"Total discounts: {total_count}")
+    print(f"Successfully inserted: {inserted_count}")
+    print(f"Errors encountered: {error_count}")
+    if total_count > 0:
+        print(f"Success rate: {(inserted_count / total_count) * 100:.1f}%")
 
     return {
         'total_count': total_count,

@@ -1,6 +1,8 @@
-import helper.db.db_helper as db_helper
 import helper.func_helper as func_helper
 import helper.quiz.quiz_data_extractor as quiz_data_extractor
+from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.settings import get_setting_for_user_quiz
+from helper.db.sqlalchemy.queries.students import get_student_access_for_relation
 import services.admin.admin_service as admin_service
 import services.auth.auth_service as auth_service
 import services.consultant.consultant_service as consultant_service
@@ -40,15 +42,15 @@ def _role_handler(user_info, handlers):
     return handler() if handler else None
 
 
-def remove_token(conn, cursor, request_data, user_info):
+def remove_token(request_data, user_info, conn=None, cursor=None):
     method_type = "DELETE"
     tracking_token, response_data, response_message = auth_service.remove_token(
-        conn=conn, cursor=cursor, request_data=request_data, user_info=user_info
+        request_data=request_data, user_info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def sign_in(conn, cursor, request_data):
+def sign_in(request_data, conn=None, cursor=None):
     method_type = "SIGNIN"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -58,13 +60,11 @@ def sign_in(conn, cursor, request_data):
     if not is_valid:
         return error_response
 
-    tracking_token, response_data, response_message = auth_service.sign_in(
-        conn=conn, cursor=cursor, request_data=request_data
-    )
+    tracking_token, response_data, response_message = auth_service.sign_in(request_data=request_data)
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def student_sign_in(conn, cursor, request_data):
+def student_sign_in(request_data, conn=None, cursor=None):
     method_type = "SIGNIN"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -74,13 +74,11 @@ def student_sign_in(conn, cursor, request_data):
     if not is_valid:
         return error_response
 
-    tracking_token, response_data, response_message = auth_service.sign_in_student(
-        conn=conn, cursor=cursor, request_data=request_data
-    )
+    tracking_token, response_data, response_message = auth_service.sign_in_student(request_data=request_data)
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def sign_up(conn, cursor, redis_db, request_data):
+def sign_up(redis_db, request_data, conn=None, cursor=None):
     method_type = "INSERT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -91,12 +89,12 @@ def sign_up(conn, cursor, redis_db, request_data):
         return error_response
 
     tracking_token, response_data, response_message = auth_service.sign_up(
-        conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data
+        redis_db=redis_db, request_data=request_data
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def send_otp(conn, cursor, redis_db, request_data):
+def send_otp(redis_db, request_data, conn=None, cursor=None):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -107,12 +105,12 @@ def send_otp(conn, cursor, redis_db, request_data):
         return error_response
 
     tracking_token, response_data, response_message = auth_service.send_otp(
-        conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data
+        redis_db=redis_db, request_data=request_data
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def check_otp(conn, cursor, redis_db, request_data):
+def check_otp(redis_db, request_data, conn=None, cursor=None):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -123,20 +121,19 @@ def check_otp(conn, cursor, redis_db, request_data):
         return error_response
 
     tracking_token, response_data, response_message = auth_service.check_otp(
-        conn=conn, cursor=cursor, redis_db=redis_db, request_data=request_data
+        redis_db=redis_db, request_data=request_data
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def change_user_info(conn, cursor, request_data, user_info):
+def change_user_info(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     result = _role_handler(user_info, {
         "ins": lambda: institute_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data,
                                                           user_info=user_info),
         "sch": lambda: school_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data,
                                                        user_info=user_info),
-        "con": lambda: consultant_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data,
-                                                           user_info=user_info),
+        "con": lambda: consultant_service.change_user_info(request_data=request_data, user_info=user_info),
         "ocon": lambda: owner_consultant_service.change_user_info(conn=conn, cursor=cursor,
                                                                   request_data=request_data, user_info=user_info),
     })
@@ -147,7 +144,7 @@ def change_user_info(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def change_password(conn, cursor, request_data, user_info):
+def change_password(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -177,8 +174,6 @@ def change_password(conn, cursor, request_data, user_info):
         return func_helper.not_method_access_return()
 
     tracking_token = func_helper.update_user_and_role_password(
-        conn=conn,
-        cursor=cursor,
         request_data=request_data,
         user_info=user_info,
         role_table=role_table,
@@ -188,7 +183,7 @@ def change_password(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def student_change_user_info(conn, cursor, request_data, user_info):
+def student_change_user_info(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -206,7 +201,7 @@ def student_change_user_info(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def student_change_password(conn, cursor, request_data, user_info):
+def student_change_password(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -232,7 +227,7 @@ def student_change_password(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def student_get_dashboard(conn, cursor, request_data, user_info):
+def student_get_dashboard(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     if user_info["role"] != "stu":
         return func_helper.not_method_access_return()
@@ -243,7 +238,7 @@ def student_get_dashboard(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def student_get_quiz_setting(conn, cursor, request_data, user_info):
+def student_get_quiz_setting(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -255,7 +250,7 @@ def student_get_quiz_setting(conn, cursor, request_data, user_info):
     return get_quiz_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
 
 
-def student_get_quiz_table_info(conn, cursor, request_data, user_info):
+def student_get_quiz_table_info(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -273,7 +268,7 @@ def student_get_quiz_table_info(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def student_get_quiz_info(conn, cursor, request_data, user_info):
+def student_get_quiz_info(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -293,7 +288,7 @@ def student_get_quiz_info(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def student_change_quiz_answer(conn, cursor, request_data, user_info):
+def student_change_quiz_answer(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -311,7 +306,7 @@ def student_change_quiz_answer(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def student_get_access_product(conn, cursor, request_data, user_info):
+def student_get_access_product(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     if user_info["role"] != "stu":
         return func_helper.not_method_access_return()
@@ -322,7 +317,7 @@ def student_get_access_product(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def change_setting(conn, cursor, request_data, user_info):
+def change_setting(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     if user_info["role"] == "con":
         return _error_response(method_type, ACCESS_DENIED_MESSAGE)
@@ -342,7 +337,7 @@ def change_setting(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def change_student_access(conn, cursor, request_data, user_info):
+def change_student_access(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -369,13 +364,13 @@ def change_student_access(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def change_user_quiz_setting(conn, cursor, request_data, user_info):
+def change_user_quiz_setting(request_data, user_info, conn=None, cursor=None):
     return change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
 
 
 # The users functionality
 
-def get_dashboard(conn, cursor, request_data, user_info):
+def get_dashboard(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     result = _role_handler(user_info, {
         "ins": lambda: institute_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
@@ -384,8 +379,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
                                                     user_info=user_info),
         "ocon": lambda: owner_consultant_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
                                                                user_info=user_info),
-        "con": lambda: consultant_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
-                                                        user_info=user_info),
+        "con": lambda: consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
     })
     if result is None:
         return func_helper.not_method_access_return()
@@ -395,7 +389,7 @@ def get_dashboard(conn, cursor, request_data, user_info):
 
 
 # this gateway is for get the consultants list of roles
-def get_consultants(conn, cursor, request_data, user_info):
+def get_consultants(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     result = _role_handler(user_info, {
         "ins": lambda: institute_service.get_consultants(conn=conn, cursor=cursor, request_data=request_data,
@@ -417,7 +411,7 @@ def get_consultants(conn, cursor, request_data, user_info):
 
 
 # this gateway for insert consultant for user role
-def add_consultant(conn, cursor, request_data, user_info):
+def add_consultant(request_data, user_info, conn=None, cursor=None):
     method_type = "INSERT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -427,7 +421,7 @@ def add_consultant(conn, cursor, request_data, user_info):
     if not is_valid:
         return error_response
 
-    con_user_id, password, error_message = func_helper.insert_user(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+    con_user_id, password, error_message = func_helper.insert_user(request_data=request_data, user_info=user_info)
     if not con_user_id:
         return _error_response(method_type, error_message)
     request_data["password"] = password
@@ -448,7 +442,7 @@ def add_consultant(conn, cursor, request_data, user_info):
 
 
 # this gateway for update the consultant information from user role
-def change_consultant(conn, cursor, request_data, user_info):
+def change_consultant(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     result = _role_handler(user_info, {
         "ins": lambda: institute_service.change_consultant(conn=conn, cursor=cursor, request_data=request_data,
@@ -464,15 +458,14 @@ def change_consultant(conn, cursor, request_data, user_info):
 
 
 # this gateway for get list of student from user role
-def get_students(conn, cursor, request_data, user_info):
+def get_students(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     result = _role_handler(user_info, {
         "ins": lambda: institute_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
                                                       user_info=user_info),
         "sch": lambda: school_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
                                                    user_info=user_info),
-        "con": lambda: consultant_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
-                                                       user_info=user_info),
+        "con": lambda: consultant_service.get_students(request_data=request_data, user_info=user_info),
         "ocon": lambda: owner_consultant_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
                                                               user_info=user_info),
     })
@@ -482,7 +475,7 @@ def get_students(conn, cursor, request_data, user_info):
     tracking_token, response_data, response_message = result
     return _service_response(method_type, tracking_token, response_data, response_message)
 
-def check_student_access(conn, cursor, student_user_id, user_info):
+def check_student_access(student_user_id, user_info, conn=None, cursor=None):
     """
     Check if the current user has access to the specified student.
     For ins/sch roles: check if student's owner_user_id matches user_id.
@@ -490,8 +483,8 @@ def check_student_access(conn, cursor, student_user_id, user_info):
     Returns True if access is granted, False otherwise.
     """
     try:
-        query = 'SELECT owner_user_id, consultant_user_id FROM stu WHERE user_id = ?'
-        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=student_user_id)
+        with session_scope() as session:
+            res = get_student_access_for_relation(session=session, stu_user_id=int(student_user_id))
         if not res:
             return False
         
@@ -499,9 +492,9 @@ def check_student_access(conn, cursor, student_user_id, user_info):
         user_id = user_info.get("user_id")
         
         if role in ["ins", "sch"]:
-            return res.owner_user_id == user_id
+            return res["owner_user_id"] == user_id
         elif role in ["con", "ocon"]:
-            return res.consultant_user_id == user_id
+            return res["consultant_user_id"] == user_id
         
         return False
     except Exception as e:
@@ -509,7 +502,7 @@ def check_student_access(conn, cursor, student_user_id, user_info):
         return False
 
 
-def get_report_data(conn, cursor, request_data, user_info):
+def get_report_data(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -522,7 +515,7 @@ def get_report_data(conn, cursor, request_data, user_info):
     if user_info["role"] in ["ins", "sch", "con", "ocon"]:
         student_id = request_data.get("student_id")
         # Check if user has access to this student
-        if not check_student_access(conn, cursor, student_id, user_info):
+        if not check_student_access(student_user_id=student_id, user_info=user_info):
             return _error_response(method_type, "شما به این دانش‌آموز دسترسی ندارید.")
         
         tracking_token, response_data, response_message = other_service.get_report_data(conn=conn, cursor=cursor, request_data=request_data,
@@ -534,11 +527,11 @@ def get_report_data(conn, cursor, request_data, user_info):
         return func_helper.not_method_access_return()
 
 # this gateway for insert student for user role
-def add_student(conn, cursor, request_data, user_info):
+def add_student(request_data, user_info, conn=None, cursor=None):
     method_type = "INSERT"
     # No strict required fields here because phone/password are generated,
     # but you can add validation for optional metadata if needed.
-    stu_user_id, password, phone, error_message = func_helper.insert_user_student(conn=conn, cursor=cursor, user_info=user_info)
+    stu_user_id, password, phone, error_message = func_helper.insert_user_student(user_info=user_info)
     if not stu_user_id:
         return _error_response(method_type, error_message)
     request_data["phone"] = phone
@@ -559,7 +552,7 @@ def add_student(conn, cursor, request_data, user_info):
 
 
 # this gateway for update the student information from user role
-def change_student(conn, cursor, request_data, user_info):
+def change_student(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     required_fields = ["first_name", "last_name", "sex", "city", "birth_date", "student_id"]
     if user_info["role"] in ["ins", "sch"]:
@@ -578,8 +571,7 @@ def change_student(conn, cursor, request_data, user_info):
                                                      user_info=user_info),
         "ocon": lambda: owner_consultant_service.change_student(conn=conn, cursor=cursor, request_data=request_data,
                                                                 user_info=user_info),
-        "con": lambda: consultant_service.change_student(conn=conn, cursor=cursor, request_data=request_data,
-                                                         user_info=user_info),
+        "con": lambda: consultant_service.change_student(request_data=request_data, user_info=user_info),
     })
     if result is None:
         return func_helper.not_method_access_return()
@@ -589,11 +581,10 @@ def change_student(conn, cursor, request_data, user_info):
 
 
 # this gateway is for make or update the comment of the student
-def change_comment(conn, cursor, request_data, user_info):
+def change_comment(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     result = _role_handler(user_info, {
-        "con": lambda: consultant_service.change_comment(conn=conn, cursor=cursor, request_data=request_data,
-                                                         user_info=user_info),
+        "con": lambda: consultant_service.change_comment(request_data=request_data, user_info=user_info),
         "ocon": lambda: owner_consultant_service.change_comment(conn=conn, cursor=cursor, request_data=request_data,
                                                                 user_info=user_info),
     })
@@ -604,7 +595,7 @@ def change_comment(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def get_quiz_setting(conn, cursor, request_data, user_info):
+def get_quiz_setting(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -615,26 +606,23 @@ def get_quiz_setting(conn, cursor, request_data, user_info):
         return error_response
 
     quiz_id = request_data["quiz_id"]
-    query_select_setting = "select * from setting where setting.user_id = '" + str(
-        user_info["user_id"]) + "' and setting.quiz_id = '" + str(quiz_id) + "' "
-    cursor.execute(query_select_setting)
-    res = cursor.fetchone()
-    conn.commit()
+    with session_scope() as session:
+        res = get_setting_for_user_quiz(
+            session=session,
+            user_id=int(user_info["user_id"]),
+            quiz_id=int(quiz_id),
+        )
     token = func_helper.get_tracking_code()
-    if res is None:
+    if not res:
         quiz_info = quiz_data_extractor.get_quiz_info(quiz_id=quiz_id)
         info_data = {"voice": quiz_info["voice"], "description": quiz_info["description"], "setting_id": "no setting"}
         return _service_response(method_type, token, info_data)
-    elif len(res) == 0:
-        quiz_info = quiz_data_extractor.get_quiz_info(quiz_id=quiz_id)
-        info_data = {"voice": quiz_info["voice"], "description": quiz_info["description"], "setting_id": "no setting"}
-        return _service_response(method_type, token, info_data)
-    else:
-        info_data = {"voice": res[3], "description": res[2], "setting_id": res[0]}
-        return _service_response(method_type, token, info_data)
+
+    info_data = {"voice": res["voice"], "description": res["description"], "setting_id": res["setting_id"]}
+    return _service_response(method_type, token, info_data)
 
 
-def get_report(conn, cursor, request_data, user_info):
+def get_report(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     result = _role_handler(user_info, {
         "ins": lambda: institute_service.get_report(conn=conn, cursor=cursor, request_data=request_data,
@@ -643,8 +631,7 @@ def get_report(conn, cursor, request_data, user_info):
                                                  user_info=user_info),
         "ocon": lambda: owner_consultant_service.get_report(conn=conn, cursor=cursor, request_data=request_data,
                                                             user_info=user_info),
-        "con": lambda: consultant_service.get_report(conn=conn, cursor=cursor, request_data=request_data,
-                                                     user_info=user_info),
+        "con": lambda: consultant_service.get_report(request_data=request_data, user_info=user_info),
     })
     if result is None:
         return func_helper.not_method_access_return()
@@ -653,7 +640,7 @@ def get_report(conn, cursor, request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def get_management_report(conn, cursor, request_data, user_info):
+def get_management_report(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     if user_info["role"] == "stu":
         return _error_response(method_type, "متاسفانه شما از این سامانه به این سرویس دسترسی ندارید.")
@@ -666,8 +653,7 @@ def get_management_report(conn, cursor, request_data, user_info):
         "ocon": lambda: owner_consultant_service.get_management_report(conn=conn, cursor=cursor,
                                                                        request_data=request_data,
                                                                        user_info=user_info),
-        "con": lambda: consultant_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data,
-                                                                user_info=user_info),
+        "con": lambda: consultant_service.get_management_report(request_data=request_data, user_info=user_info),
     })
     if result is None:
         return func_helper.not_method_access_return()
@@ -677,7 +663,7 @@ def get_management_report(conn, cursor, request_data, user_info):
 
 
 # get the information of quiz (quiz id, quiz description, quiz voice, quiz sections, quiz name)
-def get_quiz_info(conn, cursor, request_data, user_info):
+def get_quiz_info(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     if user_info["role"] not in ["ins", "sch", "ocon", "con"]:
         return _error_response(method_type, "متاسفانه شما از این سامانه به این سرویس دسترسی ندارید.")
@@ -688,7 +674,7 @@ def get_quiz_info(conn, cursor, request_data, user_info):
 
 
 # transactions and payments
-def get_transactions(conn, cursor, request_data, user_info):
+def get_transactions(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     if user_info["role"] in ["ocon", "ins", "sch"]:
         tracking_token, response_data, response_message = other_service.get_transactions(conn, cursor, request_data, user_info)
@@ -696,7 +682,7 @@ def get_transactions(conn, cursor, request_data, user_info):
     return func_helper.not_method_access_return()
 
 
-def apply_discount(conn, cursor, request_data, user_info):
+def apply_discount(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -711,7 +697,7 @@ def apply_discount(conn, cursor, request_data, user_info):
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
-def add_payment_order(conn, cursor, request_data, user_info):
+def add_payment_order(request_data, user_info, conn=None, cursor=None):
     method_type = "INSERT"
     # is_valid, error_response = func_helper.validate_request_data_fields(
     #     request_data=request_data,
@@ -727,13 +713,13 @@ def add_payment_order(conn, cursor, request_data, user_info):
         return _service_response(method_type, tracking_token, response_data, response_message)
     return _error_response(method_type, DEFAULT_SERVICE_ERROR)
 
-def get_comments(conn, cursor):
+def get_comments(conn=None, cursor=None):
     method_type = "SELECT"
     tracking_token, response_data, response_message = other_service.get_comments(conn=conn, cursor=cursor)
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def add_comment(conn, cursor, request_data):
+def add_comment(request_data, conn=None, cursor=None):
     method_type = "INSERT"
     tracking_token, response_data, response_message = other_service.add_comment(
         conn=conn, cursor=cursor, request_data=request_data
@@ -741,8 +727,24 @@ def add_comment(conn, cursor, request_data):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
+def mark_notification_read(request_data, user_info, conn=None, cursor=None):
+    method_type = "INSERT"
+    is_valid, error_response = func_helper.validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["notification_id"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return error_response
+
+    tracking_token, response_data, response_message = other_service.mark_notification_read(
+        conn=conn, cursor=cursor, request_data=request_data, user_info=user_info
+    )
+    return _service_response(method_type, tracking_token, response_data, response_message)
+
+
 # Admin functions
-def admin_change_capacity(conn, cursor, request_data):
+def admin_change_capacity(request_data, conn=None, cursor=None):
     method_type = "UPDATE"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -756,7 +758,7 @@ def admin_change_capacity(conn, cursor, request_data):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def admin_get_user_info(conn, cursor, request_data):
+def admin_get_user_info(request_data, conn=None, cursor=None):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -770,7 +772,7 @@ def admin_get_user_info(conn, cursor, request_data):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def admin_check_student_quiz_answer(conn, cursor, request_data):
+def admin_check_student_quiz_answer(request_data, conn=None, cursor=None):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,

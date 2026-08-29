@@ -6,12 +6,20 @@ import pyodbc
 import logging
 import sys
 import io
-from datetime import datetime
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 
 from helper.chart import bar, bidirection, gauge, bidirection_two_side, tube, scatter, horizontal
-import helper.db.db_helper as db_helper
+from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.scheduler_reports import (
+    count_completed_quiz_attempts,
+    get_scheduler_student_context,
+    update_redis_log_status,
+    upsert_hedayat_fields,
+    upsert_result_state,
+    upsert_scl_score,
+    upsert_score,
+)
 from helper.quiz import answer_store
 from helper.office.excel_helper import LoadExcelSourceFile, compute_brain_info
 from helper.quiz.check_score import score_computation_scl
@@ -208,32 +216,22 @@ class AGReportScheduler:
     def _log_error(self, user_id: str, kind: str, error: str) -> None:
         """Log errors to database with user context."""
         try:
-            db_helper.update_record(
-                self.db_conn,
-                self.db_cursor,
-                "redis_logs",
-                ["result", "status", "edited_time"],
-                [f"Error: {error}", 3, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                "user_id = ? AND kind = ?",
-                [str(user_id), (kind or "").upper()],
-            )
+            with session_scope() as session:
+                update_redis_log_status(
+                    session=session,
+                    user_id=user_id,
+                    kind=kind,
+                    result=f"Error: {error}",
+                    status=3,
+                )
         except Exception as e:
             logging.error(f"Failed to log error to database: {str(e)}")
 
     def _get_student_info(self, user_id: str):
         """Retrieve student information with institute and consultant details."""
         try:
-            student_query = '''
-                SELECT s.user_id, s.first_name, s.last_name, u.phone,
-                       s.owner_user_id, s.consultant_user_id, owner.role AS owner_role
-                FROM stu s
-                INNER JOIN users u ON u.user_id = s.user_id
-                LEFT JOIN users owner ON owner.user_id = s.owner_user_id
-                WHERE s.user_id = ?
-            '''
-            student = db_helper.search_table(
-                self.db_conn, self.db_cursor, student_query, user_id
-            )
+            with session_scope() as session:
+                student = get_scheduler_student_context(session=session, user_id=user_id)
 
             if not student:
                 raise ValueError(f"Student with ID {user_id} not found")
@@ -242,34 +240,26 @@ class AGReportScheduler:
             consultant_name = ""
             logo_path = None
 
-            if student[6] == "ins":
-                ins_query = 'SELECT user_id, name, logo FROM ins WHERE user_id = ?'
-                institute = db_helper.search_table(self.db_conn, self.db_cursor, ins_query, student[4])
-                institute_name = institute[1] if institute else ""
-
-                if institute and institute[2]:
-                    logo_path = os.path.join(INS_PIC_DIR, institute[2])
-
-            elif student[6] == "sch":
-                sch_query = 'SELECT user_id, name, logo FROM sch WHERE user_id = ?'
-                school = db_helper.search_table(self.db_conn, self.db_cursor, sch_query, student[4])
-                institute_name = school[1] if school else ""
-
-                if school and school[2]:
-                    logo_path = os.path.join(INS_PIC_DIR, school[2])
+            if student["owner_role"] == "ins":
+                institute_name = student.get("institute_name") or ""
+                if student.get("institute_logo"):
+                    logo_path = os.path.join(INS_PIC_DIR, student["institute_logo"])
+            elif student["owner_role"] == "sch":
+                institute_name = student.get("school_name") or ""
+                if student.get("school_logo"):
+                    logo_path = os.path.join(INS_PIC_DIR, student["school_logo"])
             else:
-                ocon_query = 'SELECT first_name, last_name FROM ocon WHERE user_id = ?'
-                consultant = db_helper.search_table(self.db_conn, self.db_cursor, ocon_query, student[4])
-                institute_name = f"{consultant[0]} {consultant[1]}" if consultant else ""
-                consultant_name = f"{consultant[0]} {consultant[1]}" if consultant else ""
+                consultant_name = f"{student.get('ocon_first_name') or ''} {student.get('ocon_last_name') or ''}".strip()
+                institute_name = consultant_name
 
-            if student[5] and student[6] not in ["ocon"]:
-                con_query = 'SELECT user_id, first_name, last_name FROM con WHERE user_id = ?'
-                consultant = db_helper.search_table(self.db_conn, self.db_cursor, con_query, student[5])
-                consultant_name = f"{consultant[1]} {consultant[2]}" if consultant else ""
+            if student.get("consultant_user_id") and student["owner_role"] != "ocon":
+                consultant_name = (
+                    f"{student.get('consultant_first_name') or ''} "
+                    f"{student.get('consultant_last_name') or ''}"
+                ).strip()
 
-            student_name = f"{student[1]} {student[2]}"
-            phone = student[3]
+            student_name = f"{student.get('first_name') or ''} {student.get('last_name') or ''}".strip()
+            phone = student["phone"]
 
             return student, student_name, phone, institute_name, consultant_name, logo_path
 
@@ -281,18 +271,12 @@ class AGReportScheduler:
     def _validate_quiz_data(self, user_id: str, report_kind: str) -> None:
         """Validate that user has sufficient quiz data."""
         try:
-            query = """
-                SELECT COUNT(*) AS completed
-                FROM quiz_attempt
-                WHERE user_id = ? AND quiz_kind = ? AND state = 2
-            """
-            rows = db_helper.search_fetchall(
-                conn=self.db_conn,
-                cursor=self.db_cursor,
-                query=query,
-                field=(user_id, report_kind),
-            )
-            completed_count = int(rows[0]["completed"] or 0) if rows else 0
+            with session_scope() as session:
+                completed_count = count_completed_quiz_attempts(
+                    session=session,
+                    user_id=user_id,
+                    report_kind=report_kind,
+                )
 
             if report_kind == "AG" and completed_count < 7:
                 raise ValueError("Insufficient quiz data for report generation")
@@ -561,36 +545,22 @@ class AGReportScheduler:
 
         return ','.join(suggested_names), ','.join(other_names)
 
-    def _update_hedayat_fields(self, user_id: str, phone: str, suggested: str, other: str) -> None:
+    def _update_hedayat_fields(self, user_id: str, suggested: str, other: str) -> None:
         """Update or insert hedayat_fields record."""
         try:
-            query = 'SELECT user_id FROM hedayat_fields WHERE user_id = ?'
-            exists = db_helper.search_table(self.db_conn, self.db_cursor, query, user_id)
-
-            if exists is None:
-                # Insert new record
-                db_helper.insert_value(
-                    self.db_conn, self.db_cursor,
-                    "hedayat_fields",
-                    "([user_id], [phone], [suggested], [other])",
-                    (user_id, phone, suggested, other)
-                )
-            else:
-                # Update existing record
-                db_helper.update_record(
-                    self.db_conn, self.db_cursor,
-                    "hedayat_fields",
-                    ['suggested', 'other', 'edited_time'],
-                    [suggested, other, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                    "user_id = ?",
-                    [str(user_id)]
+            with session_scope() as session:
+                upsert_hedayat_fields(
+                    session=session,
+                    user_id=user_id,
+                    suggested=suggested,
+                    other=other,
                 )
             logging.info(f"Updated hedayat_fields for user {user_id}")
         except Exception as e:
             logging.error(f"Error updating hedayat_fields for user {user_id}: {str(e)}")
             # Don't raise - this is not critical for report generation
 
-    def _update_scl_scores(self, user_id: str, phone: str, scl_calc_data: Dict[str, float]) -> None:
+    def _update_scl_scores(self, user_id: str, scl_calc_data: Dict[str, float]) -> None:
         """Update or insert scl_scores record with JSON data containing value, name, color, chart_name, and image_name for each key."""
         try:
 
@@ -624,28 +594,8 @@ class AGReportScheduler:
             # Convert to JSON string
             scl_date_json = json.dumps(scl_scores_json, ensure_ascii=False)
 
-            # Check if record exists
-            query = 'SELECT user_id FROM scl_scores WHERE user_id = ?'
-            exists = db_helper.search_table(self.db_conn, self.db_cursor, query, user_id)
-
-            if exists is None:
-                # Insert new record
-                db_helper.insert_value(
-                    self.db_conn, self.db_cursor,
-                    "scl_scores",
-                    "([user_id], [phone], [scl_date])",
-                    (user_id, phone, scl_date_json)
-                )
-            else:
-                # Update existing record
-                db_helper.update_record(
-                    self.db_conn, self.db_cursor,
-                    "scl_scores",
-                    ['scl_date', 'edited_time'],
-                    [scl_date_json, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                    "user_id = ?",
-                    [str(user_id)]
-                )
+            with session_scope() as session:
+                upsert_scl_score(session=session, user_id=user_id, scl_date=scl_date_json)
             logging.info(f"Updated scl_scores for user {user_id}")
         except Exception as e:
             logging.error(f"Error updating scl_scores for user {user_id}: {str(e)}")
@@ -756,46 +706,8 @@ class AGReportScheduler:
             state_data.append(fields_match[0])
             report_info[tag_branch_color] = fields_match[1]
 
-        # Persist result_state once per user_id (avoid duplicates)
-        query = "SELECT user_id FROM result_state WHERE user_id = ?"
-        exists = db_helper.search_table(self.db_conn, self.db_cursor, query, user_id)
-
-        if exists is None:
-            db_helper.insert_value(
-                self.db_conn, self.db_cursor,
-                "result_state",
-                "([user_id], [phone], [t_state], [r_state], [e_state], [a_state], [m_state], [f_state], [i_state])",
-                (
-                    user_id,
-                    phone,
-                    state_data[0],
-                    state_data[1],
-                    state_data[2],
-                    state_data[3],
-                    state_data[4],
-                    state_data[5],
-                    state_data[6],
-                ),
-            )
-        else:
-            db_helper.update_record(
-                self.db_conn, self.db_cursor,
-                "result_state",
-                ["phone", "t_state", "r_state", "e_state", "a_state", "m_state", "f_state", "i_state", "edited_time"],
-                [
-                    phone,
-                    state_data[0],
-                    state_data[1],
-                    state_data[2],
-                    state_data[3],
-                    state_data[4],
-                    state_data[5],
-                    state_data[6],
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                ],
-                "user_id = ?",
-                [str(user_id)],
-            )
+        with session_scope() as session:
+            upsert_result_state(session=session, user_id=user_id, state_data=state_data)
         return {
             "branch_lines": branch_lines,
             "current_x": current_x,
@@ -965,19 +877,14 @@ class AGReportScheduler:
             # Create report directory
             user_directory = self._create_report_directory(phone)
 
-            db_helper.update_record(
-                self.db_conn,
-                self.db_cursor,
-                "redis_logs",
-                ["result", "status", "edited_time"],
-                [
-                    "SCL computation started in scheduler",
-                    1,
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                ],
-                "user_id = ? AND kind = ?",
-                [str(user_id), "SCL"],
-            )
+            with session_scope() as session:
+                update_redis_log_status(
+                    session=session,
+                    user_id=user_id,
+                    kind="SCL",
+                    result="SCL computation started in scheduler",
+                    status=1,
+                )
 
             labels, missing_questions = self._compute_scl_scores(user_id)
             scl_calc_data = self._calculate_scl_calc_data(labels)
@@ -1389,21 +1296,16 @@ class AGReportScheduler:
                 )
 
             # Update or insert scl_scores record
-            self._update_scl_scores(user_id, phone, scl_calc_data)
+            self._update_scl_scores(user_id, scl_calc_data)
 
-            db_helper.update_record(
-                self.db_conn,
-                self.db_cursor,
-                "redis_logs",
-                ["result", "status", "edited_time"],
-                [
-                    "user info checked in scheduler",
-                    2,
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                ],
-                "user_id = ? AND kind = ?",
-                [str(user_id), "SCL"],
-            )
+            with session_scope() as session:
+                update_redis_log_status(
+                    session=session,
+                    user_id=user_id,
+                    kind="SCL",
+                    result="user info checked in scheduler",
+                    status=2,
+                )
 
             logging.info(
                 "Successfully computed SCL labels for user %s in %.2f seconds",
@@ -1433,19 +1335,14 @@ class AGReportScheduler:
             user_directory = self._create_report_directory(phone)
 
             # Update log status for AG job
-            db_helper.update_record(
-                self.db_conn,
-                self.db_cursor,
-                "redis_logs",
-                ["result", "status", "edited_time"],
-                [
-                    "user info check in scheduler",
-                    1,
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                ],
-                "user_id = ? AND kind = ?",
-                [str(user_id), "AG"],
-            )
+            with session_scope() as session:
+                update_redis_log_status(
+                    session=session,
+                    user_id=user_id,
+                    kind="AG",
+                    result="user info check in scheduler",
+                    status=1,
+                )
 
             # Compute brain info
             master_file, master_sheet = load_master_excel()
@@ -1464,39 +1361,14 @@ class AGReportScheduler:
             brain_categories_json = json.dumps(categories, ensure_ascii=False)
             brain_branches_json = json.dumps(branches, ensure_ascii=False)
 
-            # Persist scores once per user_id (avoid duplicates)
-            query = "SELECT user_id FROM scores WHERE user_id = ?"
-            exists = db_helper.search_table(self.db_conn, self.db_cursor, query, user_id)
-
-            if exists is None:
-                db_helper.insert_value(
-                    self.db_conn, self.db_cursor,
-                    "scores",
-                    "([user_id], [phone], [quiz_score], [brain_fields], [brain_categories], [brain_branches])",
-                    (
-                        user_id,
-                        phone,
-                        quiz_score_json,
-                        brain_fields_json,
-                        brain_categories_json,
-                        brain_branches_json,
-                    ),
-                )
-            else:
-                db_helper.update_record(
-                    self.db_conn, self.db_cursor,
-                    "scores",
-                    ["phone", "quiz_score", "brain_fields", "brain_categories", "brain_branches", "edited_time"],
-                    [
-                        phone,
-                        quiz_score_json,
-                        brain_fields_json,
-                        brain_categories_json,
-                        brain_branches_json,
-                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    ],
-                    "user_id = ?",
-                    [str(user_id)],
+            with session_scope() as session:
+                upsert_score(
+                    session=session,
+                    user_id=user_id,
+                    quiz_score=quiz_score_json,
+                    brain_fields=brain_fields_json,
+                    brain_categories=brain_categories_json,
+                    brain_branches=brain_branches_json,
                 )
 
             # Persist raw fields to JSON for debugging/inspection
@@ -1508,7 +1380,7 @@ class AGReportScheduler:
 
             # Process and update hedayat_fields
             suggested_names, other_names = self._process_hedayat_fields(fields)
-            self._update_hedayat_fields(user_id, phone, suggested_names, other_names)
+            self._update_hedayat_fields(user_id, suggested_names, other_names)
 
             # Add student info to data
             data["student_name"] = student_name
@@ -1579,19 +1451,14 @@ class AGReportScheduler:
             )
 
             # Update completion status
-            db_helper.update_record(
-                self.db_conn,
-                self.db_cursor,
-                "redis_logs",
-                ["result", "status", "edited_time"],
-                [
-                    "user info checked in scheduler",
-                    2,
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                ],
-                "user_id = ? AND kind = ?",
-                [str(user_id), "AG"],
-            )
+            with session_scope() as session:
+                update_redis_log_status(
+                    session=session,
+                    user_id=user_id,
+                    kind="AG",
+                    result="user info checked in scheduler",
+                    status=2,
+                )
 
             logging.info(
                 f"Successfully generated complete report for user {user_id}. "
