@@ -257,6 +257,17 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
+    "notification_reads": """
+        CREATE TABLE notification_reads (
+            id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+            notification_id INT NOT NULL,
+            user_id INT NOT NULL,
+            created_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT fk_notification_reads_notification FOREIGN KEY (notification_id) REFERENCES notifications(id),
+            CONSTRAINT fk_notification_reads_user FOREIGN KEY (user_id) REFERENCES users(user_id),
+            CONSTRAINT ux_notification_reads_notification_user UNIQUE (notification_id, user_id)
+        )
+    """,
     "payment": """
         CREATE TABLE payment (
             id INT IDENTITY(1, 1) PRIMARY KEY,
@@ -415,7 +426,8 @@ TABLE_DEFINITIONS = {
 DEFAULT_TABLES: Sequence[str] = (
     'users', 'ins', 'sch', 'ocon', 'con', 'stu', 'setting', 'capacity', 'capacity_package',
     'student_package_access', 'capacity_logs',
-    'quiz_attempt', 'quiz_question_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications', 'payment',
+    'quiz_attempt', 'quiz_question_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications',
+    'notification_reads', 'payment',
     'payment_log', 'discounts', 'using_discount', 'tokens', 'comments', 'otp_logs', 'redis_logs', 'quiz_missing_answers',
     'api_logs'
 )

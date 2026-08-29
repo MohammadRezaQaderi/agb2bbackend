@@ -6,14 +6,8 @@
       "health_check_path": "/ag_api/health",
       "instances": [
         {
-          "name": "ag-api-primary-1",
-          "port": 5301,
-          "workers": 2,
-          "description": "AG management API instance"
-        },
-        {
-          "name": "ag-api-primary-2",
-          "port": 5302,
+          "name": "ag-test-api-primary-1",
+          "port": 5559,
           "workers": 2,
           "description": "AG management API instance"
         }
@@ -23,25 +17,13 @@
       "health_check_path": "/ags_api/health",
       "instances": [
         {
-          "name": "ags-student-api-primary-1",
-          "port": 5351,
-          "workers": 2,
-          "description": "AG student API instance"
-        },
-        {
-          "name": "ags-student-api-primary-2",
-          "port": 5352,
+          "name": "ags-test-student-api-primary-1",
+          "port": 5560,
           "workers": 2,
           "description": "AG student API instance"
         }
       ]
     }
-  },
-  "scheduler": {
-    "enabled": true,
-    "name": "ag-report-scheduler",
-    "script": "scheduler/scheduler.py",
-    "description": "AG/SCL report generation scheduler"
   },
   "health_check_interval": 30000,
   "health_check_timeout": 5000,

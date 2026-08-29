@@ -1,26 +1,57 @@
-import json
-from datetime import datetime
-
 import config
-import helper.db.db_helper as db_helper
+from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.filters import StudentFilters
+from helper.db.sqlalchemy.queries.consultants import (
+    update_student_comment_by_consultant,
+    update_student_profile_by_consultant,
+)
+from helper.db.sqlalchemy.queries.dashboard import (
+    count_student_packages_for_scope,
+    count_students_for_scope,
+    list_capacity_packages_for_user,
+    list_notifications_for_user,
+    list_quiz_attempts_for_scope,
+)
+from helper.db.sqlalchemy.queries.owner_consultants import (
+    create_owner_consultant_profile,
+    get_owner_consultant_profile,
+    update_owner_consultant_profile,
+    verify_owner_consultant,
+)
+from helper.db.sqlalchemy.queries.reports import list_quiz_attempts_for_users
+from helper.db.sqlalchemy.queries.settings import upsert_setting
+from helper.db.sqlalchemy.queries.students import (
+    create_student_profile,
+    list_students_for_consultant,
+)
 import helper.func_helper as func_helper
+from helper.response import (
+    build_dashboard_info_response,
+    build_student_list_response,
+    build_student_management_report_response,
+    build_student_report_response,
+)
 
 
 def get_info(conn, cursor, user_id):
     try:
-        query = '''
-            SELECT o.ocon_id, u.phone, o.first_name, o.last_name, o.logo
-            FROM ocon o
-            INNER JOIN users u ON u.user_id = o.user_id
-            WHERE o.user_id = ?
-        '''
-        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
+        with session_scope() as session:
+            res = get_owner_consultant_profile(session=session, user_id=user_id)
+        if not res:
+            raise ValueError("owner consultant not found")
         token = func_helper.get_tracking_code()
-        user_info = {"phone": res.phone, "user_id": user_id, "id": res.ocon_id, "first_name": res.first_name, "role": "ocon",
-                "last_name": res.last_name, "pic": res.logo}
+        user_info = {
+            "phone": res.get("phone"),
+            "user_id": user_id,
+            "id": res.get("ocon_id"),
+            "first_name": res.get("first_name"),
+            "role": "ocon",
+            "last_name": res.get("last_name"),
+            "pic": res.get("logo"),
+        }
         return token, user_info, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_info", str(e), {},
                                         {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
@@ -36,133 +67,30 @@ def get_dashboard(conn, cursor, request_data, user_info):
     """
     try:
         user_id = user_info["user_id"]
-
-        package_quiz_count = {
-            "AG": 7,
-            "SCL": 4
-        }
-
-        query_capacity = """
-            SELECT package_name, allowed, used
-            FROM capacity_package
-            WHERE user_id = ?
-        """
-        res_capacity = db_helper.search_fetchall(conn=conn, cursor=cursor, query=query_capacity, field=user_id)
-
-        capacity_info = {
-            row["package_name"]: {"allowed": row["allowed"], "used": row["used"]}
-            for row in res_capacity
-        }
-
-        queries = {
-            "stu_count": "SELECT COUNT(*) AS total FROM stu WHERE consultant_user_id = ?"
-        }
-
-        results = {key: db_helper.search_fetchall(conn, cursor, query, field=user_id) for key, query in queries.items()}
-
-        stu_count = results["stu_count"][0]["total"] if results["stu_count"] else 0
-
-        stu_package_count = func_helper.get_student_package_access_counts(
-            conn, cursor, user_id, "consultant_user_id"
-        )
-        if stu_package_count is None:
-            query_stu_access = "SELECT access FROM stu WHERE consultant_user_id = ?"
-            res_stu_access = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query_stu_access, field=user_id)
-
-            stu_package_count = {"AG": 0, "SCL": 0}
-            if res_stu_access:
-                for stu in res_stu_access:
-                    raw_access = getattr(stu, "access", None) or "{}"
-                    try:
-                        access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-                    except (json.JSONDecodeError, TypeError):
-                        access_data = {}
-
-                    for package_name in ["AG", "SCL"]:
-                        package_info = access_data.get(package_name, {})
-                        permission = 0
-                        if isinstance(package_info, dict):
-                            permission = int(package_info.get("permission") or 0)
-                        elif isinstance(package_info, bool):
-                            permission = 1 if package_info else 0
-                        elif isinstance(package_info, (int, float, str)):
-                            try:
-                                permission = int(package_info) if str(package_info).strip() != "" else 0
-                            except ValueError:
-                                permission = 0
-
-                        if permission == 1:
-                            stu_package_count[package_name] += 1
-
-        quiz_report = {}
-        for package_name in ["AG", "SCL"]:
-            total_quizzes = package_quiz_count.get(package_name, 0)
-
-            query_finish_quiz = """
-                SELECT COUNT(DISTINCT user_id) AS total 
-                FROM quiz_attempt 
-                WHERE consultant_user_id = ? AND quiz_kind = ? AND state = 2 AND quiz_id = ?
-            """
-            res_finish_quiz = db_helper.search_fetchall(conn, cursor, query_finish_quiz,
-                                                        field=(user_id, package_name, total_quizzes))
-            finish_quiz = res_finish_quiz[0]["total"] if res_finish_quiz and res_finish_quiz[0]["total"] else 0
-
-            query_started_quiz = """
-                SELECT COUNT(DISTINCT user_id) AS total 
-                FROM quiz_attempt 
-                WHERE consultant_user_id = ? AND quiz_kind = ?
-            """
-            res_started_quiz = db_helper.search_fetchall(conn, cursor, query_started_quiz,
-                                                         field=(user_id, package_name))
-            started_quiz = res_started_quiz[0]["total"] if res_started_quiz and res_started_quiz[0]["total"] else 0
-
-            query_c_quiz = """
-                SELECT COUNT(*) AS total 
-                FROM quiz_attempt 
-                WHERE consultant_user_id = ? AND quiz_kind = ? AND state = 2
-            """
-            res_c_quiz = db_helper.search_fetchall(conn, cursor, query_c_quiz, field=(user_id, package_name))
-            c_quiz = res_c_quiz[0]["total"] if res_c_quiz and res_c_quiz[0]["total"] else 0
-
-            query_total_first = """
-                SELECT COUNT(*) AS total 
-                FROM quiz_attempt 
-                WHERE consultant_user_id = ? AND quiz_kind = ?
-            """
-            res_total_first = db_helper.search_fetchall(conn, cursor, query_total_first, field=(user_id, package_name))
-            total_first = res_total_first[0]["total"] if res_total_first and res_total_first[0]["total"] else 0
-
-            nc_quiz = total_first - c_quiz
-
-            quiz_report[package_name] = {
-                "finish_quiz": finish_quiz,
-                "started_quiz": started_quiz,
-                "c_quiz": c_quiz,
-                "nc_quiz": nc_quiz
-            }
-
-        notifications_query = """
-            SELECT id, title, description, added_by, priority, fullText, persian_date
-            FROM notifications
-            WHERE (roles LIKE '%ownerConsultant%' OR roles LIKE '%all%' OR user_id = ?)
-            ORDER BY created_time DESC
-        """
-        cursor.execute(notifications_query, (user_id,))
-        columns = [col[0] for col in cursor.description]
-        notifications = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        with session_scope() as session:
+            capacity_packages = list_capacity_packages_for_user(session=session, user_id=user_id)
+            student_count = count_students_for_scope(session=session, scope="consultant", user_id=user_id)
+            package_counts = count_student_packages_for_scope(session=session, scope="consultant", user_id=user_id)
+            quiz_attempts = list_quiz_attempts_for_scope(session=session, scope="consultant", user_id=user_id)
+            notifications = list_notifications_for_user(
+                session=session,
+                user_id=user_id,
+                role_terms=["ownerConsultant"],
+            )
 
         token = func_helper.get_tracking_code()
-        cons_info = {
-            "capacity": capacity_info,
-            "stu_count": stu_count,
-            "stu": stu_package_count,
-            "quiz_report": quiz_report
-        }
+        cons_info = build_dashboard_info_response(
+            capacity_packages=capacity_packages,
+            student_count=student_count,
+            package_counts=package_counts,
+            quiz_attempts=quiz_attempts,
+            packages_data=func_helper.PACKAGES_DATA,
+        )
 
         return token, {"dashboard_info": cons_info, "notifications": notifications}, ""
 
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_dashboard", str(e), request_data,
                                         user_info)
         return None, None, "اطلاعات داشبورد دریافت نشد."
@@ -170,20 +98,22 @@ def get_dashboard(conn, cursor, request_data, user_info):
 
 def add_owner_consultant(conn, cursor, request_data, user_id):
     try:
-        table = "ocon"
         sex = request_data.get("sex")
         if not sex:
             sex = 1
-        field = '([first_name], [last_name], [user_id], [sex])'
-        values = (
-            request_data["first_name"], request_data["last_name"], user_id, sex)
-        db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
-                               values=values)
-        func_helper.add_capacity_signup(conn, cursor, user_id, request_data["phone"])
+        with session_scope() as session:
+            create_owner_consultant_profile(
+                session=session,
+                user_id=user_id,
+                first_name=request_data["first_name"],
+                last_name=request_data["last_name"],
+                sex=sex,
+            )
+        func_helper.add_capacity_signup(user_id=user_id)
         token = func_helper.get_tracking_code()
         return token, None, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "add_owner_consultant", str(e), request_data,
                                         {"user_id": user_id, "phone": request_data["phone"]})
         return None, None, "مشکل در ثبت مشاور ارشد رخ داده است."
@@ -191,124 +121,35 @@ def add_owner_consultant(conn, cursor, request_data, user_id):
 
 def get_report(conn, cursor, request_data, user_info):
     try:
-        query = '''
-            SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex,
-                   s.city, s.access, s.comment
-            FROM stu s
-            INNER JOIN users u ON u.user_id = s.user_id
-            WHERE s.consultant_user_id = ?
-        '''
-        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
-        report_info = []
-        if res is not None:
-            for stu in res:
-                raw_access = getattr(stu, "access", None) or "{}"
-                try:
-                    access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-                except (json.JSONDecodeError, TypeError):
-                    access_data = {}
-                user_info = {"id": stu.stu_id, "student_id": stu.user_id, "phone": stu.phone, "first_name": stu.first_name,
-                        "last_name": stu.last_name,
-                        "password": None, "sex": stu.sex, "city": stu.city,
-                        "access": access_data, "full_name": stu.first_name + " " + stu.last_name,
-                        "consultant_comment": stu.comment, "report_id": stu.user_id}
-                report_info.append(user_info)
+        with session_scope() as session:
+            students = list_students_for_consultant(session=session, consultant_user_id=user_info["user_id"])
+        report_info = build_student_report_response(students)
         token = func_helper.get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_report", str(e), request_data, user_info)
         return None, [], "مشکل در دریافت گزارش رخ داده است."
 
 
 def get_management_report(conn, cursor, request_data, user_info):
     try:
-        query = '''
-            SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex, s.city, s.access
-            FROM stu s
-            INNER JOIN users u ON u.user_id = s.user_id
-            WHERE s.consultant_user_id = ?
-        '''
-        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
-
-        report_info = []
-
-        package_quiz_count = {
-            "AG": 7,
-            "SCL": 4
-        }
-
-        if res is not None:
-            for stu in res:
-                raw_access = getattr(stu, "access", None) or "{}"
-                try:
-                    access_data = json.loads(raw_access) if isinstance(raw_access, str) else (raw_access or {})
-                except (json.JSONDecodeError, TypeError):
-                    access_data = {}
-
-                access_state = {}
-                for package_name in func_helper.PACKAGES_DATA.keys():
-                    package_info = access_data.get(package_name, {})
-
-                    permission = 0
-                    if isinstance(package_info, dict):
-                        permission = int(package_info.get("permission") or 0)
-                    elif isinstance(package_info, bool):
-                        permission = 1 if package_info else 0
-                    elif isinstance(package_info, (int, float, str)):
-                        try:
-                            permission = int(package_info) if str(package_info).strip() != "" else 0
-                        except ValueError:
-                            permission = 0
-
-                    state = "-"
-                    last_quiz_id = 0
-                    if permission == 1:
-                        total_quizzes = package_quiz_count.get(package_name)
-
-                        if total_quizzes:
-                            query_quiz = (
-                                'SELECT state, quiz_id FROM quiz_attempt '
-                                'WHERE user_id = ? AND quiz_kind = ? ORDER BY quiz_id ASC'
-                            )
-                            res_quiz = db_helper.search_allin_table(
-                                conn=conn,
-                                cursor=cursor,
-                                query=query_quiz,
-                                field=(stu.user_id, package_name)
-                            )
-                            last_quiz_id = 1
-                            if not res_quiz or len(res_quiz) == 0:
-                                state = "not-started"
-                            else:
-                                last_quiz = res_quiz[-1]
-                                last_state = getattr(last_quiz, "state", None)
-                                last_quiz_id = getattr(last_quiz, "quiz_id", None)
-
-                                if last_state == 2 and last_quiz_id == total_quizzes:
-                                    state = "completed"
-                                else:
-                                    state = "in-progress"
-
-                    access_state[package_name] = {
-                        "permission": permission,
-                        "state": state,
-                        "current_quiz_name": func_helper.get_quiz_name(package_name, last_quiz_id)
-                    }
-
-                info_response = {
-                    "student_id": stu.user_id,
-                    "first_name": stu.first_name,
-                    "last_name": stu.last_name,
-                    "full_name": stu.first_name + " " + stu.last_name,
-                    "access": access_data,
-                    "access_state": access_state,
-                }
-                report_info.append(info_response)
+        with session_scope() as session:
+            students = list_students_for_consultant(session=session, consultant_user_id=user_info["user_id"])
+            quiz_attempts = list_quiz_attempts_for_users(
+                session=session,
+                user_ids=[student["user_id"] for student in students],
+            )
+        report_info = build_student_management_report_response(
+            students,
+            quiz_attempts,
+            packages_data=func_helper.PACKAGES_DATA,
+            get_quiz_name=func_helper.get_quiz_name,
+        )
         token = func_helper.get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_management_report", str(e),
                                         request_data, user_info)
         return None, None, "مشکل در دریافت گزارش مدیریتی رخ داده است."
@@ -316,82 +157,87 @@ def get_management_report(conn, cursor, request_data, user_info):
 
 def add_student(conn, cursor, request_data, stu_user_id, user_info):
     try:
-        table = "stu"
-        field = '([user_id], [first_name], [last_name], [sex], [city], [owner_user_id], [consultant_user_id], [adder_id], [editor_id], [birth_date])'
-        values = (
-            stu_user_id, request_data["first_name"], request_data["last_name"], request_data["sex"], request_data["city"],
-            request_data["user_id"],
-            user_info["user_id"], user_info["user_id"], user_info["user_id"], request_data["birth_date"],)
-        db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
-                               values=values)
+        with session_scope() as session:
+            create_student_profile(
+                session=session,
+                user_id=stu_user_id,
+                owner_user_id=request_data["user_id"],
+                consultant_user_id=user_info["user_id"],
+                adder_id=user_info["user_id"],
+                first_name=request_data["first_name"],
+                last_name=request_data["last_name"],
+                sex=request_data["sex"],
+                city=request_data["city"],
+                birth_date=request_data["birth_date"],
+            )
         token = func_helper.get_tracking_code()
         return token, None, "دانش‌آموز شما با موفقیت ثبت شد."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "add_student", str(e), request_data, user_info)
         return None, None, "مشکلی در افزودن دانش‌آموز رخ داده است."
 
 
 def change_student(conn, cursor, request_data, user_info):
     try:
-        db_helper.update_record(conn, cursor, 'stu',
-                                ['first_name', 'last_name', 'sex', 'city', 'editor_id', 'birth_date',
-                                 'edited_time'],
-                                [request_data["first_name"], request_data["last_name"], request_data["sex"],
-                                 request_data["city"], user_info["user_id"],
-                                 request_data["birth_date"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                'user_id = ?', [str(request_data["student_id"])])
+        with session_scope() as session:
+            update_student_profile_by_consultant(
+                session=session,
+                student_user_id=int(request_data["student_id"]),
+                editor_id=user_info["user_id"],
+                first_name=request_data["first_name"],
+                last_name=request_data["last_name"],
+                sex=request_data["sex"],
+                city=request_data["city"],
+                birth_date=request_data["birth_date"],
+            )
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_student", str(e), request_data, user_info)
         return None, None, "مشکلی در تغییر اطلاعات دانش‌آموز رخ داده است."
 
 
 def change_comment(conn, cursor, request_data, user_info):
     try:
-        db_helper.update_record(conn, cursor, 'stu',
-                                ['comment', 'editor_id', 'edited_time'],
-                                [request_data["consultant_comment"], user_info["user_id"],
-                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                'user_id = ?', [str(request_data["student_id"])])
+        with session_scope() as session:
+            update_student_comment_by_consultant(
+                session=session,
+                student_user_id=int(request_data["student_id"]),
+                editor_id=user_info["user_id"],
+                comment=request_data["consultant_comment"],
+            )
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_comment", str(e), request_data, user_info)
         return None, None, "مشکلی در تغییر توضیحات دانش‌آموز رخ داده است."
 
 
 def change_user_info(conn, cursor, request_data, user_info):
     try:
-        update_fields = ['first_name', 'last_name', 'edited_time']
-        update_values = [
-            request_data["first_name"],
-            request_data["last_name"],
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        ]
         pic = func_helper.save_base64_image(
             request_data.get("pic"),
             request_data.get("last_pic"),
             config.INS_PIC_DIR,
         )
-        if pic is not None:
-            update_fields.insert(2, 'logo')
-            update_values.insert(2, pic)
-
-        db_helper.update_record(conn, cursor, 'ocon',
-                                update_fields,
-                                update_values,
-                                'user_id = ?', [str(user_info["user_id"])])
+        with session_scope() as session:
+            update_owner_consultant_profile(
+                session=session,
+                user_id=user_info["user_id"],
+                first_name=request_data["first_name"],
+                last_name=request_data["last_name"],
+                logo=pic,
+            )
         token = func_helper.get_tracking_code()
         response = {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}
         if pic is not None:
             response["pic"] = pic
         return token, response, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_user_info", str(e), request_data,
                                         user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
@@ -399,32 +245,26 @@ def change_user_info(conn, cursor, request_data, user_info):
 
 def get_students(conn, cursor, request_data, user_info):
     try:
-        query = 'SELECT first_name, last_name FROM ocon WHERE user_id = ?'
-        res_con = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
+        with session_scope() as session:
+            res_con = get_owner_consultant_profile(session=session, user_id=user_info["user_id"])
+            filters = StudentFilters.from_request(request_data)
+            students = list_students_for_consultant(
+                session=session,
+                consultant_user_id=user_info["user_id"],
+                filters=filters,
+            )
         con_name = ""
-        if res_con and len(res_con) >= 2:
-            con_name = f"{res_con.first_name} {res_con.last_name}"
-        query = '''
-            SELECT s.stu_id, s.user_id, u.phone, s.first_name, s.last_name, s.sex,
-                   s.city, s.birth_date, s.access, s.consultant_user_id AS con_id
-            FROM stu s
-            INNER JOIN users u ON u.user_id = s.user_id
-            WHERE s.consultant_user_id = ?
-        '''
-        res = db_helper.search_allin_table(conn=conn, cursor=cursor, query=query, field=user_info["user_id"])
-        stu_info = []
-        if res is not None:
-            for stu in res:
-                user_info = {"stu_id": stu.stu_id, "user_id": stu.user_id, "phone": stu.phone, "first_name": stu.first_name,
-                        "last_name": stu.last_name, "con_name": con_name,
-                        "con_id": stu.con_id, "password": None, "sex": stu.sex,
-                        "city": stu.city, "full_name": stu.first_name + " " + stu.last_name,
-                        "birth_date": stu.birth_date, "access": json.loads(stu.access)}
-                stu_info.append(user_info)
+        if res_con:
+            con_name = f"{res_con.get('first_name')} {res_con.get('last_name')}"
+        stu_info = build_student_list_response(
+            students,
+            default_con_name=con_name,
+            default_con_id=user_info["user_id"],
+        )
         token = func_helper.get_tracking_code()
         return token, stu_info, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "get_students", str(e), request_data, user_info)
         return None, [], "اطلاعات دانش‌آموزان دریافت نشد."
 
@@ -432,23 +272,18 @@ def get_students(conn, cursor, request_data, user_info):
 def change_user_voice(conn, cursor, request_data, user_info):
     try:
         token = func_helper.get_tracking_code()
-        if request_data["setting_id"] == "no setting":
-            table = "setting"
-            field = '([user_id], [description], [voice], [quiz_id])'
-            values = (
-                request_data["user_id"], request_data["description"], request_data["voice"], request_data["quiz_id"],)
-            db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
-                                   values=values)
-            return token, None, "اطلاعات شما با موفقیت تغییر یافت."
-        else:
-            db_helper.update_record(conn, cursor, 'setting',
-                                    ['description', 'voice', 'edited_time'],
-                                    [request_data["description"], request_data["voice"],
-                                     datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                    'setting_id = ?', [str(request_data["setting_id"])])
-            return token, None, "اطلاعات شما با موفقیت تغییر یافت."
+        with session_scope() as session:
+            upsert_setting(
+                session=session,
+                setting_id=request_data["setting_id"],
+                user_id=request_data["user_id"],
+                description=request_data["description"],
+                voice=request_data["voice"],
+                quiz_id=request_data["quiz_id"],
+            )
+        return token, None, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_user_voice", str(e), request_data,
                                         user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
@@ -456,47 +291,43 @@ def change_user_voice(conn, cursor, request_data, user_info):
 
 def change_setting(conn, cursor, request_data, user_info):
     try:
-        if request_data["setting_id"] == "no setting":
-            table = "setting"
-            field = '([user_id], [description], [voice], [quiz_id])'
-            values = (
-                request_data["user_id"], request_data["description"], request_data["voice"], request_data["quiz_id"],)
-            db_helper.insert_value(conn=conn, cursor=cursor, table_name=table, fields=field,
-                                   values=values)
-            token = func_helper.get_tracking_code()
-            return token, None, "پیش اطلاعات اولیه آزمون شما تغییر یافت."
-        else:
-            db_helper.update_record(conn, cursor, 'setting',
-                                    ['description', 'edited_time'],
-                                    [request_data["description"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                    'setting_id = ?', [str(request_data["setting_id"])])
-            token = func_helper.get_tracking_code()
-            return token, None, "پیش اطلاعات اولیه آزمون شما تغییر یافت."
+        with session_scope() as session:
+            upsert_setting(
+                session=session,
+                setting_id=request_data["setting_id"],
+                user_id=request_data["user_id"],
+                description=request_data["description"],
+                voice=request_data.get("voice"),
+                quiz_id=request_data["quiz_id"],
+            )
+        token = func_helper.get_tracking_code()
+        return token, None, "پیش اطلاعات اولیه آزمون شما تغییر یافت."
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "change_setting", str(e), request_data, user_info)
         return None, None, "پیش اطلاعات اولیه آزمون شما تغییر نیافت."
 
 
 def verify_user(conn, cursor, user_id):
     try:
-        db_helper.update_record(conn, cursor, 'ocon',
-                                ['verify', 'edited_time'],
-                                [1, datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-                                'user_id = ?', [str(user_id)])
+        with session_scope() as session:
+            verify_owner_consultant(session=session, user_id=user_id)
+            res = get_owner_consultant_profile(session=session, user_id=user_id)
+        if not res:
+            raise ValueError("owner consultant not found")
         token = func_helper.get_tracking_code()
-        query = '''
-            SELECT o.ocon_id, u.phone, o.first_name, o.last_name, o.logo
-            FROM ocon o
-            INNER JOIN users u ON u.user_id = o.user_id
-            WHERE o.user_id = ?
-        '''
-        res = db_helper.search_table(conn=conn, cursor=cursor, query=query, field=user_id)
-        user_info = {"phone": res.phone, "user_id": user_id, "id": res.ocon_id, "first_name": res.first_name, "role": "ocon",
-                "last_name": res.last_name, "pic": res.logo}
+        user_info = {
+            "phone": res.get("phone"),
+            "user_id": user_id,
+            "id": res.get("ocon_id"),
+            "first_name": res.get("first_name"),
+            "role": "ocon",
+            "last_name": res.get("last_name"),
+            "pic": res.get("logo"),
+        }
         return token, user_info, ""
     except Exception as e:
-        conn.rollback()
+        func_helper.safe_rollback(conn)
         func_helper.service_exception_error_logging(conn, cursor, "ag_api/ocon", "verify_user", str(e), None,
                                         {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
@@ -509,8 +340,6 @@ def change_student_access(conn, cursor, request_data, user_info):
     Uses the reusable helper function func_helper.update_student_access_and_capacity.
     """
     return func_helper.update_student_access_and_capacity(
-        conn=conn,
-        cursor=cursor,
         request_data=request_data,
         user_info=user_info,
         role_type="ocon",

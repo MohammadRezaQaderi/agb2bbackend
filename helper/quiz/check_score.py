@@ -1,7 +1,9 @@
 import time
 from typing import Any, Dict, List, Tuple
 
-import helper.db.db_helper as db_helper
+from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.quiz import create_missing_answer
+from helper.db.sqlalchemy.queries.students import get_student_birth_date
 from helper.quiz import answer_store
 from helper.quiz.ag_answer_info import quiz_labels, quiz_questions_answer_schema
 from helper.quiz.scl_answer_info import (
@@ -160,28 +162,16 @@ def _insert_missing_answer(conn, cursor, user_id, question_id) -> None:
     """
     Insert a row into quiz_missing_answers for a missing answer.
     """
-    field = '([user_id], [question_id])'
-    values = (user_id, question_id)
-    db_helper.insert_value(
-        conn=conn,
-        cursor=cursor,
-        table_name="quiz_missing_answers",
-        fields=field,
-        values=values,
-    )
+    with session_scope() as session:
+        create_missing_answer(session=session, user_id=user_id, question_id=question_id)
 
 
 def ag_score_computation(conn, cursor, user_id, user_age=9):
     start = time.time()
-    query = 'SELECT birth_date FROM stu WHERE user_id = ?'
-    res_stu = db_helper.search_table(
-        conn=conn,
-        cursor=cursor,
-        query=query,
-        field=user_id,
-    )
-    if res_stu:
-        user_age = 1400 - int(res_stu[0]) - 1
+    with session_scope() as session:
+        birth_date = get_student_birth_date(session=session, user_id=user_id)
+    if birth_date:
+        user_age = 1400 - int(birth_date) - 1
     completed_count = answer_store.get_completed_count(conn, cursor, user_id, "AG")
     if completed_count < 7:
         raise ValueError("Insufficient AG quiz data")

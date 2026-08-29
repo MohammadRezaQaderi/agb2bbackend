@@ -1,14 +1,13 @@
-import pyodbc
 import json
 from typing import Any, Optional
 from kavenegar import KavenegarAPI, APIException, HTTPException
 
 from config import KAVENEGAR_API_KEY, KAVENEGAR_OTP_TEMPLATE
-import helper.db.db_helper as db_helper
+from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.otp import create_otp_log
 
 
-def send_otp_message(conn: pyodbc.Connection | None, cursor: pyodbc.Cursor | None, code: str | int, phone: str,
-                     type: str) -> Optional[dict[str, Any]]:
+def send_otp_message(code: str | int, phone: str, type: str) -> Optional[dict[str, Any]]:
     """
     Send an OTP code via Kavenegar SMS service.
 
@@ -28,12 +27,14 @@ def send_otp_message(conn: pyodbc.Connection | None, cursor: pyodbc.Cursor | Non
         }
         response = api.verify_lookup(params=params)
         try:
-            field_log = '([phone], [code], [provider_resp], [type_otp])'
-            values_log = (
-                phone, code,
-                json.dumps(response, ensure_ascii=False), type)
-            db_helper.insert_value(conn=conn, cursor=cursor, table_name='otp_logs', fields=field_log,
-                                   values=values_log)
+            with session_scope() as session:
+                create_otp_log(
+                    session=session,
+                    phone=phone,
+                    code=code,
+                    provider_resp=json.dumps(response, ensure_ascii=False),
+                    type_otp=type,
+                )
         except Exception as e:
             print(f"[Logging Error] otp_logs failed: {e}")
         return response
