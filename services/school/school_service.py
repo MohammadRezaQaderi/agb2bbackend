@@ -2,7 +2,6 @@ import config
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.filters import ConsultantFilters, StudentFilters
 from helper.db.sqlalchemy.queries.consultants import (
-    create_consultant_profile,
     list_consultants_for_owner,
     update_consultant_profile_for_owner,
 )
@@ -16,14 +15,12 @@ from helper.db.sqlalchemy.queries.dashboard import (
 )
 from helper.db.sqlalchemy.queries.reports import list_quiz_attempts_for_users
 from helper.db.sqlalchemy.queries.schools import (
-    create_school_profile,
     get_school_profile,
     update_school_profile,
     verify_school,
 )
 from helper.db.sqlalchemy.queries.settings import upsert_setting
 from helper.db.sqlalchemy.queries.students import (
-    create_student_profile,
     list_students_for_owner,
     update_student_profile_for_owner,
 )
@@ -37,7 +34,7 @@ from helper.response import (
 )
 
 
-def get_info(conn, cursor, user_id):
+def get_info(user_id):
     try:
         with session_scope() as session:
             res = get_school_profile(session=session, user_id=user_id)
@@ -54,13 +51,12 @@ def get_info(conn, cursor, user_id):
         }
         return token, info_response, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "get_info", str(e), None,
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "get_info", str(e), None,
                                         {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 
 
-def get_dashboard(conn, cursor, request_data, user_info):
+def get_dashboard(request_data, user_info):
     """
     Fetches dashboard data for school users, including capacity user_info,
     student/consultant counts, quiz progress, and notifications.
@@ -92,26 +88,11 @@ def get_dashboard(conn, cursor, request_data, user_info):
         return token, {"dashboard_info": sch_info, "notifications": notifications}, ""
 
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "get_dashboard", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "get_dashboard", str(e), request_data, user_info)
         return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
-def add_school(conn, cursor, request_data, user_id):
-    try:
-        with session_scope() as session:
-            create_school_profile(session=session, user_id=user_id, name=request_data["name"])
-        func_helper.add_capacity_signup(user_id=user_id)
-        token = func_helper.get_tracking_code()
-        return token, None, ""
-    except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "add_school", str(e), request_data,
-                                        {"user_id": user_id, "phone": request_data["phone"]})
-        return None, None, "مشکل در ثبت مدرسه رخ داده است."
-
-
-def get_report(conn, cursor, request_data, user_info):
+def get_report(request_data, user_info):
     try:
         with session_scope() as session:
             students = list_students_for_owner(session=session, owner_user_id=user_info["user_id"])
@@ -119,12 +100,11 @@ def get_report(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "get_report", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "get_report", str(e), request_data, user_info)
         return None, [], "مشکل در دریافت گزارش رخ داده است."
 
 
-def get_management_report(conn, cursor, request_data, user_info):
+def get_management_report(request_data, user_info):
     try:
         with session_scope() as session:
             students = list_students_for_owner(session=session, owner_user_id=user_info["user_id"])
@@ -142,36 +122,14 @@ def get_management_report(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "get_management_report", str(e),
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "get_management_report", str(e),
                                         request_data,
                                         user_info)
         return None, [], "مشکل در دریافت گزارش مدیریتی رخ داده است."
 
 
-# this function is add consultant in school
-def add_consultant(conn, cursor, request_data, con_user_id, user_info):
-    try:
-        with session_scope() as session:
-            create_consultant_profile(
-                session=session,
-                user_id=con_user_id,
-                owner_user_id=user_info["user_id"],
-                editor_id=user_info["user_id"],
-                first_name=request_data["first_name"],
-                last_name=request_data["last_name"],
-                sex=request_data["sex"],
-            )
-        token = func_helper.get_tracking_code()
-        return token, None, "مشاور شما با موفقیت ثبت شد."
-    except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "add_consultant", str(e), request_data, user_info)
-        return None, None, "مشکلی در ثبت نهایی اطلاعات مشاور رخ داده است لطفا با پیشیبانی در ارتباط باشید."
-
-
 # this function is for update the information of consultant
-def change_consultant(conn, cursor, request_data, user_info):
+def change_consultant(request_data, user_info):
     try:
         with session_scope() as session:
             update_consultant_profile_for_owner(
@@ -185,13 +143,12 @@ def change_consultant(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات مشاور شما با موفقیت تغییر کرد."
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "change_consultant", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "change_consultant", str(e), request_data, user_info)
         return None, None, "مشکلی در ثبت نهایی اطلاعات مشاور رخ داده است لطفا با پیشیبانی در ارتباط باشید."
 
 
 # this function use for get consultant of sch for list of consultants and add students cons pick filed
-def get_consultants(conn, cursor, request_data, user_info):
+def get_consultants(request_data, user_info):
     try:
         filters = ConsultantFilters.from_request(request_data)
         with session_scope() as session:
@@ -204,37 +161,12 @@ def get_consultants(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, cons_info, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "get_consultants", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "get_consultants", str(e), request_data, user_info)
         return None, [], "اطلاعات مشاورین دریافت نشد."
 
 
-# this function for insert student to school
-def add_student(conn, cursor, request_data, stu_user_id, user_info):
-    try:
-        with session_scope() as session:
-            create_student_profile(
-                session=session,
-                user_id=stu_user_id,
-                owner_user_id=user_info["user_id"],
-                consultant_user_id=request_data["con_id"],
-                adder_id=user_info["user_id"],
-                first_name=request_data["first_name"],
-                last_name=request_data["last_name"],
-                sex=request_data["sex"],
-                city=request_data["city"],
-                birth_date=request_data["birth_date"],
-            )
-        token = func_helper.get_tracking_code()
-        return token, None, "دانش‌آموز شما با موفقیت ثبت شد."
-    except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "add_student", str(e), request_data, user_info)
-        return None, None, "مشکلی در افزودن دانش‌آموز رخ داده است."
-
-
 # this function is for update the information of consultant
-def change_student(conn, cursor, request_data, user_info):
+def change_student(request_data, user_info):
     try:
         with session_scope() as session:
             update_student_profile_for_owner(
@@ -251,13 +183,12 @@ def change_student(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "change_student", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "change_student", str(e), request_data, user_info)
         return None, None, "مشکلی در تغییر اطلاعات دانش‌آموز رخ داده است."
 
 
 # this function use for get students of sch for list of students
-def get_students(conn, cursor, request_data, user_info):
+def get_students(request_data, user_info):
     try:
         filters = StudentFilters.from_request(request_data)
         with session_scope() as session:
@@ -270,12 +201,11 @@ def get_students(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, stu_info, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "get_students", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "get_students", str(e), request_data, user_info)
         return None, [], "اطلاعات دانش‌آموزان دریافت نشد."
 
 
-def change_user_info(conn, cursor, request_data, user_info):
+def change_user_info(request_data, user_info):
     try:
         pic = func_helper.save_base64_image(
             request_data.get("pic"),
@@ -295,13 +225,12 @@ def change_user_info(conn, cursor, request_data, user_info):
             response["pic"] = pic
         return token, response, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "change_user_info", str(e), request_data,
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "change_user_info", str(e), request_data,
                                         user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
 
-def change_user_image(conn, cursor, request_data, user_info):
+def change_user_image(request_data, user_info):
     try:
         with session_scope() as session:
             update_school_profile(
@@ -313,13 +242,12 @@ def change_user_image(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, {"name": request_data["name"], "pic": request_data["pic"]}, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "change_user_image", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "change_user_image", str(e), request_data, user_info)
 
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
 
-def change_user_voice(conn, cursor, request_data, user_info):
+def change_user_voice(request_data, user_info):
     try:
         token = func_helper.get_tracking_code()
         with session_scope() as session:
@@ -333,12 +261,11 @@ def change_user_voice(conn, cursor, request_data, user_info):
             )
         return token, None, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "change_user_voice", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "change_user_voice", str(e), request_data, user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
 
-def change_setting(conn, cursor, request_data, user_info):
+def change_setting(request_data, user_info):
     try:
         with session_scope() as session:
             upsert_setting(
@@ -352,12 +279,11 @@ def change_setting(conn, cursor, request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, None, "پیش اطلاعات اولیه آزمون شما تغییر یافت."
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "change_setting", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "change_setting", str(e), request_data, user_info)
         return None, None, "پیش اطلاعات اولیه آزمون شما تغییر نیافت."
 
 
-def verify_user(conn, cursor, user_id):
+def verify_user(user_id):
     try:
         with session_scope() as session:
             verify_school(session=session, user_id=user_id)
@@ -375,13 +301,12 @@ def verify_user(conn, cursor, user_id):
         }
         return token, user_info, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        func_helper.service_exception_error_logging(conn, cursor, "ag_api/sch", "verify_user", str(e), None,
+        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "verify_user", str(e), None,
                                         {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 
 
-def change_student_access(conn, cursor, request_data, user_info):
+def change_student_access(request_data, user_info):
     """
     Update student access permissions and manage capacity tracking for school.
     

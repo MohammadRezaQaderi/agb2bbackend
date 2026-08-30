@@ -1,6 +1,8 @@
 import helper.func_helper as func_helper
 import helper.quiz.quiz_data_extractor as quiz_data_extractor
 from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.accounts import create_consultant_account, create_student_account
+from helper.db.sqlalchemy.queries.auth import user_phone_exists
 from helper.db.sqlalchemy.queries.settings import get_setting_for_user_quiz
 from helper.db.sqlalchemy.queries.students import get_student_access_for_relation
 import services.admin.admin_service as admin_service
@@ -129,13 +131,12 @@ def check_otp(redis_db, request_data, conn=None, cursor=None):
 def change_user_info(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.change_user_info(request_data=request_data,
                                                           user_info=user_info),
-        "sch": lambda: school_service.change_user_info(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.change_user_info(request_data=request_data,
                                                        user_info=user_info),
         "con": lambda: consultant_service.change_user_info(request_data=request_data, user_info=user_info),
-        "ocon": lambda: owner_consultant_service.change_user_info(conn=conn, cursor=cursor,
-                                                                  request_data=request_data, user_info=user_info),
+        "ocon": lambda: owner_consultant_service.change_user_info(request_data=request_data, user_info=user_info),
     })
     if result is None:
         return func_helper.not_method_access_return()
@@ -196,7 +197,7 @@ def student_change_user_info(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.update_stu_user_profile(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -222,7 +223,7 @@ def student_change_password(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.update_stu_password(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -233,7 +234,7 @@ def student_get_dashboard(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.select_stu_dashboard(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -247,7 +248,7 @@ def student_get_quiz_setting(request_data, user_info, conn=None, cursor=None):
     )
     if not is_valid:
         return error_response
-    return get_quiz_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+    return get_quiz_setting(request_data=request_data, user_info=user_info)
 
 
 def student_get_quiz_table_info(request_data, user_info, conn=None, cursor=None):
@@ -263,7 +264,7 @@ def student_get_quiz_table_info(request_data, user_info, conn=None, cursor=None)
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.select_stu_quiz_table_info(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -281,7 +282,7 @@ def student_get_quiz_info(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.select_stu_quiz_info(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     if not response_data:
         return _error_response(method_type, response_message or "آزمون مورد نظر شما در دسترس شما نیست.")
@@ -301,7 +302,7 @@ def student_change_quiz_answer(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.submit_quiz_answer(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -312,7 +313,7 @@ def student_get_access_product(request_data, user_info, conn=None, cursor=None):
         return func_helper.not_method_access_return()
 
     tracking_token, response_data, response_message = student_service.select_student_access_info(
-        conn=conn, cursor=cursor, request_data=request_data, info=user_info
+        request_data=request_data, info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -323,11 +324,11 @@ def change_setting(request_data, user_info, conn=None, cursor=None):
         return _error_response(method_type, ACCESS_DENIED_MESSAGE)
 
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.change_setting(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.change_setting(request_data=request_data,
                                                         user_info=user_info),
-        "sch": lambda: school_service.change_setting(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.change_setting(request_data=request_data,
                                                      user_info=user_info),
-        "ocon": lambda: owner_consultant_service.change_setting(conn=conn, cursor=cursor, request_data=request_data,
+        "ocon": lambda: owner_consultant_service.change_setting(request_data=request_data,
                                                                 user_info=user_info),
     })
     if result is None:
@@ -350,12 +351,11 @@ def change_student_access(request_data, user_info, conn=None, cursor=None):
         return _error_response(method_type, ACCESS_DENIED_MESSAGE)
 
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.change_student_access(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.change_student_access(request_data=request_data,
                                                                user_info=user_info),
-        "sch": lambda: school_service.change_student_access(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.change_student_access(request_data=request_data,
                                                             user_info=user_info),
-        "ocon": lambda: owner_consultant_service.change_student_access(conn=conn, cursor=cursor,
-                                                                       request_data=request_data, user_info=user_info),
+        "ocon": lambda: owner_consultant_service.change_student_access(request_data=request_data, user_info=user_info),
     })
     if result is None:
         return func_helper.not_method_access_return()
@@ -365,7 +365,7 @@ def change_student_access(request_data, user_info, conn=None, cursor=None):
 
 
 def change_user_quiz_setting(request_data, user_info, conn=None, cursor=None):
-    return change_setting(conn=conn, cursor=cursor, request_data=request_data, user_info=user_info)
+    return change_setting(request_data=request_data, user_info=user_info)
 
 
 # The users functionality
@@ -373,11 +373,11 @@ def change_user_quiz_setting(request_data, user_info, conn=None, cursor=None):
 def get_dashboard(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.get_dashboard(request_data=request_data,
                                                        user_info=user_info),
-        "sch": lambda: school_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.get_dashboard(request_data=request_data,
                                                     user_info=user_info),
-        "ocon": lambda: owner_consultant_service.get_dashboard(conn=conn, cursor=cursor, request_data=request_data,
+        "ocon": lambda: owner_consultant_service.get_dashboard(request_data=request_data,
                                                                user_info=user_info),
         "con": lambda: consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
     })
@@ -392,9 +392,9 @@ def get_dashboard(request_data, user_info, conn=None, cursor=None):
 def get_consultants(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.get_consultants(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.get_consultants(request_data=request_data,
                                                          user_info=user_info),
-        "sch": lambda: school_service.get_consultants(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.get_consultants(request_data=request_data,
                                                       user_info=user_info),
     })
     if result is None:
@@ -421,33 +421,52 @@ def add_consultant(request_data, user_info, conn=None, cursor=None):
     if not is_valid:
         return error_response
 
-    con_user_id, password, error_message = func_helper.insert_user(request_data=request_data, user_info=user_info)
-    if not con_user_id:
-        return _error_response(method_type, error_message)
-    request_data["password"] = password
     if user_info["role"] in ["con", "ocon"]:
         return _error_response(method_type, ACCESS_DENIED_MESSAGE)
-
-    result = _role_handler(user_info, {
-        "ins": lambda: institute_service.add_consultant(conn=conn, cursor=cursor, request_data=request_data,
-                                                        con_user_id=con_user_id, user_info=user_info),
-        "sch": lambda: school_service.add_consultant(conn=conn, cursor=cursor, request_data=request_data,
-                                                     con_user_id=con_user_id, user_info=user_info),
-    })
-    if result is None:
+    if user_info["role"] not in ["ins", "sch"]:
         return func_helper.not_method_access_return()
 
-    tracking_token, response_data, response_message = result
-    return _service_response(method_type, tracking_token, response_data, response_message)
+    try:
+        with session_scope() as session:
+            if user_phone_exists(session=session, phone=request_data["phone"]):
+                return _error_response(
+                    method_type,
+                    "شماره تلفن وارد شده در سامانه موجود می‌باشد لطفا شماره تلفن دیگری وارد نمایید.",
+                )
+
+            password = func_helper.random_generate_password()
+            create_consultant_account(
+                session=session,
+                phone=request_data["phone"],
+                encrypted_password=func_helper.encrypt_password(password),
+                request_data=request_data,
+                owner_user_id=user_info["user_id"],
+            )
+            request_data["password"] = password
+
+        return _service_response(
+            method_type,
+            func_helper.get_tracking_code(),
+            None,
+            "مشاور شما با موفقیت ثبت شد.",
+        )
+    except Exception as e:
+        func_helper.service_exception_error_logging(
+            None, None, "ag_api/service", "add_consultant", str(e), request_data, user_info
+        )
+        return _error_response(
+            method_type,
+            "مشکلی در ثبت نهایی اطلاعات مشاور رخ داده است لطفا با پیشیبانی در ارتباط باشید.",
+        )
 
 
 # this gateway for update the consultant information from user role
 def change_consultant(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.change_consultant(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.change_consultant(request_data=request_data,
                                                            user_info=user_info),
-        "sch": lambda: school_service.change_consultant(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.change_consultant(request_data=request_data,
                                                         user_info=user_info),
     })
     if result is None:
@@ -461,12 +480,12 @@ def change_consultant(request_data, user_info, conn=None, cursor=None):
 def get_students(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.get_students(request_data=request_data,
                                                       user_info=user_info),
-        "sch": lambda: school_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.get_students(request_data=request_data,
                                                    user_info=user_info),
         "con": lambda: consultant_service.get_students(request_data=request_data, user_info=user_info),
-        "ocon": lambda: owner_consultant_service.get_students(conn=conn, cursor=cursor, request_data=request_data,
+        "ocon": lambda: owner_consultant_service.get_students(request_data=request_data,
                                                               user_info=user_info),
     })
     if result is None:
@@ -529,26 +548,34 @@ def get_report_data(request_data, user_info, conn=None, cursor=None):
 # this gateway for insert student for user role
 def add_student(request_data, user_info, conn=None, cursor=None):
     method_type = "INSERT"
-    # No strict required fields here because phone/password are generated,
-    # but you can add validation for optional metadata if needed.
-    stu_user_id, password, phone, error_message = func_helper.insert_user_student(user_info=user_info)
-    if not stu_user_id:
-        return _error_response(method_type, error_message)
-    request_data["phone"] = phone
-    request_data["password"] = password
-    result = _role_handler(user_info, {
-        "ins": lambda: institute_service.add_student(conn=conn, cursor=cursor, request_data=request_data,
-                                                     stu_user_id=stu_user_id, user_info=user_info),
-        "sch": lambda: school_service.add_student(conn=conn, cursor=cursor, request_data=request_data,
-                                                  stu_user_id=stu_user_id, user_info=user_info),
-        "ocon": lambda: owner_consultant_service.add_student(conn=conn, cursor=cursor, request_data=request_data,
-                                                             stu_user_id=stu_user_id, user_info=user_info),
-    })
-    if result is None:
+    if user_info["role"] not in ["ins", "sch", "ocon"]:
         return _error_response(method_type, ACCESS_DENIED_MESSAGE)
 
-    tracking_token, response_data, response_message = result
-    return _service_response(method_type, tracking_token, response_data, response_message)
+    try:
+        phone = func_helper.random_generate_phone(8)
+        password = func_helper.random_generate_password()
+        with session_scope() as session:
+            create_student_account(
+                session=session,
+                phone=phone,
+                encrypted_password=func_helper.encrypt_password(password),
+                request_data=request_data,
+                user_info=user_info,
+            )
+            request_data["phone"] = phone
+            request_data["password"] = password
+
+        return _service_response(
+            method_type,
+            func_helper.get_tracking_code(),
+            None,
+            "دانش‌آموز شما با موفقیت ثبت شد.",
+        )
+    except Exception as e:
+        func_helper.service_exception_error_logging(
+            None, None, "ag_api/service", "add_student", str(e), request_data, user_info
+        )
+        return _error_response(method_type, "مشکلی در افزودن دانش‌آموز رخ داده است.")
 
 
 # this gateway for update the student information from user role
@@ -565,11 +592,11 @@ def change_student(request_data, user_info, conn=None, cursor=None):
     if not is_valid:
         return error_response
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.change_student(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.change_student(request_data=request_data,
                                                         user_info=user_info),
-        "sch": lambda: school_service.change_student(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.change_student(request_data=request_data,
                                                      user_info=user_info),
-        "ocon": lambda: owner_consultant_service.change_student(conn=conn, cursor=cursor, request_data=request_data,
+        "ocon": lambda: owner_consultant_service.change_student(request_data=request_data,
                                                                 user_info=user_info),
         "con": lambda: consultant_service.change_student(request_data=request_data, user_info=user_info),
     })
@@ -585,7 +612,7 @@ def change_comment(request_data, user_info, conn=None, cursor=None):
     method_type = "UPDATE"
     result = _role_handler(user_info, {
         "con": lambda: consultant_service.change_comment(request_data=request_data, user_info=user_info),
-        "ocon": lambda: owner_consultant_service.change_comment(conn=conn, cursor=cursor, request_data=request_data,
+        "ocon": lambda: owner_consultant_service.change_comment(request_data=request_data,
                                                                 user_info=user_info),
     })
     if result is None:
@@ -595,7 +622,7 @@ def change_comment(request_data, user_info, conn=None, cursor=None):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def get_quiz_setting(request_data, user_info, conn=None, cursor=None):
+def get_quiz_setting(request_data, user_info):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -625,11 +652,11 @@ def get_quiz_setting(request_data, user_info, conn=None, cursor=None):
 def get_report(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.get_report(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.get_report(request_data=request_data,
                                                     user_info=user_info),
-        "sch": lambda: school_service.get_report(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.get_report(request_data=request_data,
                                                  user_info=user_info),
-        "ocon": lambda: owner_consultant_service.get_report(conn=conn, cursor=cursor, request_data=request_data,
+        "ocon": lambda: owner_consultant_service.get_report(request_data=request_data,
                                                             user_info=user_info),
         "con": lambda: consultant_service.get_report(request_data=request_data, user_info=user_info),
     })
@@ -646,12 +673,11 @@ def get_management_report(request_data, user_info, conn=None, cursor=None):
         return _error_response(method_type, "متاسفانه شما از این سامانه به این سرویس دسترسی ندارید.")
 
     result = _role_handler(user_info, {
-        "ins": lambda: institute_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data,
+        "ins": lambda: institute_service.get_management_report(request_data=request_data,
                                                                user_info=user_info),
-        "sch": lambda: school_service.get_management_report(conn=conn, cursor=cursor, request_data=request_data,
+        "sch": lambda: school_service.get_management_report(request_data=request_data,
                                                             user_info=user_info),
-        "ocon": lambda: owner_consultant_service.get_management_report(conn=conn, cursor=cursor,
-                                                                       request_data=request_data,
+        "ocon": lambda: owner_consultant_service.get_management_report(request_data=request_data,
                                                                        user_info=user_info),
         "con": lambda: consultant_service.get_management_report(request_data=request_data, user_info=user_info),
     })
