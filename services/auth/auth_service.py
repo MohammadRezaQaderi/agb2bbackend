@@ -4,9 +4,9 @@ from config import REDIS_CACHE_OTP
 import helper.func_helper as func_helper
 import helper.otp.otp_helper as otp_helper
 from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.accounts import create_signup_account
 from helper.db.sqlalchemy.queries.auth import (
     create_token,
-    create_user,
     delete_token_for_user,
     get_role_verify_status,
     get_token_for_user,
@@ -74,7 +74,7 @@ def sign_in(request_data):
                     user_info={"user_id": res["user_id"], "phone": phone},
                 )
                 return None, None, "شما هنوز احراز هویت انجام نداده‌اید."
-            _, user_info, _ = institute_service.get_info(conn=None, cursor=None, user_id=res["user_id"])
+            _, user_info, _ = institute_service.get_info(user_id=res["user_id"])
         elif res["role"] == "sch":
             with session_scope() as session:
                 verify_status = get_role_verify_status(session=session, user_id=res["user_id"], role=res["role"])
@@ -84,7 +84,7 @@ def sign_in(request_data):
                     user_info={"user_id": res["user_id"], "phone": phone},
                 )
                 return None, None, "شما هنوز احراز هویت انجام نداده‌اید."
-            _, user_info, _ = school_service.get_info(conn=None, cursor=None, user_id=res["user_id"])
+            _, user_info, _ = school_service.get_info(user_id=res["user_id"])
         elif res["role"] == "ocon":
             with session_scope() as session:
                 verify_status = get_role_verify_status(session=session, user_id=res["user_id"], role=res["role"])
@@ -94,7 +94,7 @@ def sign_in(request_data):
                     user_info={"user_id": res["user_id"], "phone": phone},
                 )
                 return None, None, "شما هنوز احراز هویت انجام نداده‌اید."
-            _, user_info, _ = owner_consultant_service.get_info(conn=None, cursor=None, user_id=res["user_id"])
+            _, user_info, _ = owner_consultant_service.get_info(user_id=res["user_id"])
 
         elif res["role"] == "con":
             _, user_info, _ = consultant_service.get_info(user_id=res["user_id"])
@@ -122,7 +122,7 @@ def sign_in_student(request_data):
             return None, None, "متاسفانه شما از این سامانه اجازه ورود ندارید."
 
         token_user = _create_token(user_info=[res["user_id"], phone, res["role"]])
-        _, user_info, _ = student_service.select_student_info(conn=None, cursor=None, user_id=res["user_id"])
+        _, user_info, _ = student_service.select_student_info(user_id=res["user_id"])
         return token_user, user_info, ""
     except Exception as e:
         func_helper.service_exception_error_logging(None, None, "ags_api/auth", "sign_in_student", str(e), request_data, {})
@@ -151,31 +151,18 @@ def sign_up(redis_db, request_data):
         if exists:
             return None, None, "این شماره تلفن موجود می‌باشد."
 
+        if role not in {"ins", "sch", "ocon"}:
+            return None, None, "نقش کاربری معتبر نیست."
+
         with session_scope() as session:
-            user_id = create_user(
+            create_signup_account(
                 session=session,
                 phone=phone,
-                password=func_helper.encrypt_password(password),
+                encrypted_password=func_helper.encrypt_password(password),
                 role=role,
+                request_data=request_data,
+                package_names=list(func_helper.PACKAGES_DATA.keys()),
             )
-        if role == "ins":
-            token, _, _ = institute_service.add_institute(conn=None, cursor=None, request_data=request_data,
-                                                          user_id=user_id)
-
-        elif role == "sch":
-            token, _, _ = school_service.add_school(conn=None, cursor=None, request_data=request_data,
-                                                    user_id=user_id)
-
-        elif role == "ocon":
-            token, _, _ = owner_consultant_service.add_owner_consultant(
-                conn=None, cursor=None, request_data=request_data, user_id=user_id
-            )
-
-        else:
-            token = None
-
-        if token is None:
-            return None, None, "مشکل در ثبت نام رخ داده با پشتیبانی در ارتباط باشید."
 
         cache = redis_db.cache(REDIS_CACHE_OTP)
         cache_record = cache.get(phone)
@@ -186,7 +173,7 @@ def sign_up(redis_db, request_data):
         res_otp = otp_helper.send_otp_message(code=code, phone=phone, type="VERIFY")
         cache.set(phone, json.dumps({"code": code}), 60 * 60 * 24 * 100)
 
-        return token, None, "ثبت نام شما با موفقیت انجام شد."
+        return func_helper.get_tracking_code(), None, "ثبت نام شما با موفقیت انجام شد."
 
     except Exception as e:
         func_helper.service_exception_error_logging(None, None, "ag_api/auth", "sign_up", str(e), request_data, {})
@@ -270,11 +257,11 @@ def check_otp(redis_db, request_data):
         if type_otp == "otp":
 
             if res["role"] == "ins":
-                _, user_info, _ = institute_service.get_info(conn=None, cursor=None, user_id=res["user_id"])
+                _, user_info, _ = institute_service.get_info(user_id=res["user_id"])
             elif res["role"] == "sch":
-                _, user_info, _ = school_service.get_info(conn=None, cursor=None, user_id=res["user_id"])
+                _, user_info, _ = school_service.get_info(user_id=res["user_id"])
             elif res["role"] == "ocon":
-                _, user_info, _ = owner_consultant_service.get_info(conn=None, cursor=None, user_id=res["user_id"])
+                _, user_info, _ = owner_consultant_service.get_info(user_id=res["user_id"])
             elif res["role"] == "con":
                 _, user_info, _ = consultant_service.get_info(user_id=res["user_id"])
             else:
@@ -283,11 +270,11 @@ def check_otp(redis_db, request_data):
 
         else:
             if res["role"] == "ins":
-                _, user_info, _ = institute_service.verify_user(conn=None, cursor=None, user_id=res["user_id"])
+                _, user_info, _ = institute_service.verify_user(user_id=res["user_id"])
             elif res["role"] == "sch":
-                _, user_info, _ = school_service.verify_user(conn=None, cursor=None, user_id=res["user_id"])
+                _, user_info, _ = school_service.verify_user(user_id=res["user_id"])
             elif res["role"] == "ocon":
-                _, user_info, _ = owner_consultant_service.verify_user(conn=None, cursor=None, user_id=res["user_id"])
+                _, user_info, _ = owner_consultant_service.verify_user(user_id=res["user_id"])
             else:
                 return None, None, "شما به این سرویس دسترسی ندارید."
             return token_user, user_info, ""

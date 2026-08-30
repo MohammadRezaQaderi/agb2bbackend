@@ -327,11 +327,11 @@ def exit_handler(SourceExcelFile):
     SourceExcelFile.close()
 
 
-def compute_brain_info(conn, cursor, user_id, phone, master_file, master_sheet):
+def compute_brain_info(user_id, phone, master_file, master_sheet):
     master_sheet.copy(after=master_sheet, name=f'brain{phone}')
     master_sheet2 = master_file.sheets[f'brain{phone}']
     start = time.time()
-    data, c, w, n = ag_score_computation(conn, cursor, user_id, user_age=14)
+    data, c, w, n = ag_score_computation(user_id, user_age=14)
     # user_directory = os.path.dirname(os.path.abspath(__file__))
     # try:
     #     with open(os.path.join(user_directory, f"data_{phone}.json"), "w", encoding="utf-8") as f:

@@ -17,7 +17,6 @@ from sqlalchemy import text
 
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.auth import (
-    create_user,
     get_user_identity_by_token,
     update_user_password,
     user_phone_exists,
@@ -26,7 +25,6 @@ from helper.db.sqlalchemy.queries.other import create_api_log, payment_id_exists
 from helper.db.sqlalchemy.queries.students import (
     consume_capacity_package,
     count_student_packages_for_relation,
-    create_capacity_with_packages,
     get_capacity_package,
     get_student_access_for_relation,
     save_student_package_access,
@@ -617,51 +615,6 @@ def password_format_check(password: str) -> Tuple[bool, str]:
         return val, message
 
 
-def insert_user(
-        request_data: Mapping[str, Any],
-        user_info: Mapping[str, Any],
-) -> Tuple[Optional[int], Optional[str], str]:
-    """Insert a new consultant user into the database with a randomly generated password."""
-    try:
-        with session_scope() as session:
-            exists = user_phone_exists(session=session, phone=request_data["phone"])
-        if exists:
-            return None, None, "شماره تلفن وارد شده در سامانه موجود می‌باشد لطفا شماره تلفن دیگری وارد نمایید."
-
-        password = random_generate_password()
-        with session_scope() as session:
-            user_id = create_user(
-                session=session,
-                phone=request_data["phone"],
-                password=encrypt_password(password),
-                role='con',
-        )
-        return user_id, password, ""
-    except Exception as e:
-        service_exception_error_logging(None, None, "ag_api/func_helper", "insert_user", str(e), request_data, user_info)
-        return None, None, "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
-
-
-def insert_user_student(
-        user_info: Mapping[str, Any],
-) -> Tuple[Optional[int], Optional[str], Optional[str], str]:
-    """Insert a new student user with a randomly generated phone number and password."""
-    try:
-        phone = random_generate_phone(8)
-        password = random_generate_password()
-        with session_scope() as session:
-            user_id = create_user(
-                session=session,
-                phone=phone,
-                password=encrypt_password(password),
-                role='stu',
-        )
-        return user_id, password, phone, ""
-    except Exception as e:
-        service_exception_error_logging(None, None, "ag_api/func_helper", "insert_user", str(e), {}, user_info)
-        return None, None, None, "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
-
-
 def get_payment_id() -> int:
     """Generate a unique payment ID that doesn't exist in the database."""
     while True:
@@ -703,22 +656,6 @@ def get_price_payment(request_data: Mapping[str, int], discount_percentage: floa
         new_value = total
 
     return total, new_value, ag_count, scl_count
-
-
-def add_capacity_signup(
-        user_id: int,
-) -> Optional[int]:
-    """Create a capacity record and associated package entries for a new user signup."""
-    try:
-        with session_scope() as session:
-            return create_capacity_with_packages(
-                session=session,
-                user_id=user_id,
-                package_names=list(PACKAGES_DATA.keys()),
-            )
-    except Exception as e:
-        print(f"Error: capacity insert failed: {e}")
-        return None
 
 
 def update_user_and_role_password(

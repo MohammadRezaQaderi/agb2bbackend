@@ -158,7 +158,7 @@ def get_iq_score(catel_score: int, age: int):
     return iq_scores_ages[age][catel_score]
 
 
-def _insert_missing_answer(conn, cursor, user_id, question_id) -> None:
+def _insert_missing_answer(user_id, question_id) -> None:
     """
     Insert a row into quiz_missing_answers for a missing answer.
     """
@@ -166,16 +166,16 @@ def _insert_missing_answer(conn, cursor, user_id, question_id) -> None:
         create_missing_answer(session=session, user_id=user_id, question_id=question_id)
 
 
-def ag_score_computation(conn, cursor, user_id, user_age=9):
+def ag_score_computation(user_id, user_age=9):
     start = time.time()
     with session_scope() as session:
         birth_date = get_student_birth_date(session=session, user_id=user_id)
     if birth_date:
         user_age = 1400 - int(birth_date) - 1
-    completed_count = answer_store.get_completed_count(conn, cursor, user_id, "AG")
+    completed_count = answer_store.get_completed_count(user_id, "AG")
     if completed_count < 7:
         raise ValueError("Insufficient AG quiz data")
-    user_answers = answer_store.get_answers_for_user_kind(conn, cursor, user_id, "AG")
+    user_answers = answer_store.get_answers_for_user_kind(user_id, "AG")
     labels = quiz_labels.copy()
     catel_answer = {str(i): user_answers.get(str(i), []) for i in range(1, 62)}
     for _, question in enumerate(quiz_questions_answer_schema):
@@ -183,7 +183,7 @@ def ag_score_computation(conn, cursor, user_id, user_age=9):
             qid = str(question['question_id'])
 
             if qid not in user_answers:
-                _insert_missing_answer(conn, cursor, user_id, question['question_id'])
+                _insert_missing_answer(user_id, question['question_id'])
                 continue
 
             question_answers = user_answers[qid]

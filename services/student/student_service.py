@@ -52,7 +52,7 @@ def _load_access_from_json(raw_access):
     return parsed if isinstance(parsed, dict) else {}
 
 
-def _load_student_access(conn, cursor, user_id):
+def _load_student_access(user_id):
     try:
         with session_scope() as session:
             rows = list_student_package_access(session=session, user_id=user_id)
@@ -85,7 +85,7 @@ def _package_permission(access, kind):
     return permission, permission
 
 
-def select_student_info(conn, cursor, user_id):
+def select_student_info(user_id):
     try:
         with session_scope() as session:
             res = get_student_profile(session=session, user_id=user_id)
@@ -121,13 +121,12 @@ def select_student_info(conn, cursor, user_id):
                            "pic": None, "owner_user_id": res.get("owner_user_id"),
                            "ins_id": res.get("owner_user_id")}, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        service_exception_error_logging(conn, cursor, "ags_api/stu", "select_student_info", str(e), {},
+        service_exception_error_logging(None, None, "ags_api/stu", "select_student_info", str(e), {},
                                         {"user_id": user_id})
         return None, None, "اطلاعات دانش‌آموز یافت نشد."
 
 
-def select_stu_dashboard(conn, cursor, request_data, info):
+def select_stu_dashboard(request_data, info):
     try:
         user_id = info["user_id"]
 
@@ -137,7 +136,7 @@ def select_stu_dashboard(conn, cursor, request_data, info):
             except Exception:
                 return value
 
-        stu_access = _load_student_access(conn, cursor, user_id)
+        stu_access = _load_student_access(user_id)
 
         # Helper function to check if a product kind has access (permission and limit both 1)
         def _has_access(kind):
@@ -153,7 +152,7 @@ def select_stu_dashboard(conn, cursor, request_data, info):
         quiz_progress = {}
 
         if ag_has_permission:
-            ag_completed_count = answer_store.get_completed_count(conn, cursor, user_id, "AG")
+            ag_completed_count = answer_store.get_completed_count(user_id, "AG")
             ag_total_quizzes = len(get_quiz_table_info(kind="AG"))
             quiz_progress["AG"] = {
                 "completed": ag_completed_count,
@@ -162,7 +161,7 @@ def select_stu_dashboard(conn, cursor, request_data, info):
             }
 
         if scl_has_permission:
-            scl_completed_count = answer_store.get_completed_count(conn, cursor, user_id, "SCL")
+            scl_completed_count = answer_store.get_completed_count(user_id, "SCL")
             scl_total_quizzes = len(get_quiz_table_info(kind="SCL"))
             quiz_progress["SCL"] = {
                 "completed": scl_completed_count,
@@ -214,12 +213,11 @@ def select_stu_dashboard(conn, cursor, request_data, info):
         token = str(uuid.uuid4())
         return token, dashboard_info, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        service_exception_error_logging(conn, cursor, "ags_api/stu", "select_stu_dashboard", str(e), request_data, info)
+        service_exception_error_logging(None, None, "ags_api/stu", "select_stu_dashboard", str(e), request_data, info)
         return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
-def update_stu_user_profile(conn, cursor, request_data, info):
+def update_stu_user_profile(request_data, info):
     # TODO log for update the profile with the some attribute
     try:
         with session_scope() as session:
@@ -232,13 +230,12 @@ def update_stu_user_profile(conn, cursor, request_data, info):
         token = str(uuid.uuid4())
         return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        service_exception_error_logging(conn, cursor, "ags_api/stu", "update_stu_user_profile", str(e), request_data,
+        service_exception_error_logging(None, None, "ags_api/stu", "update_stu_user_profile", str(e), request_data,
                                         info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
 
-def update_stu_password(conn, cursor, request_data, info):
+def update_stu_password(request_data, info):
     try:
         encrypted_password = func_helper.encrypt_password(request_data["password"])
         with session_scope() as session:
@@ -246,12 +243,11 @@ def update_stu_password(conn, cursor, request_data, info):
         token = str(uuid.uuid4())
         return token, None, "رمز عبور شما با موفقیت تغییر کرد."
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        service_exception_error_logging(conn, cursor, "ags_api/stu", "update_stu_password", str(e), request_data, info)
+        service_exception_error_logging(None, None, "ags_api/stu", "update_stu_password", str(e), request_data, info)
         return None, None, "رمز عبور شما تغییر نیافت."
 
 
-def select_stu_quiz_table_info(conn, cursor, request_data, info):
+def select_stu_quiz_table_info(request_data, info):
     try:
         # Product kind (e.g. AG, SCL) for this quiz pack
         kind = (request_data.get("kind") or "").upper()
@@ -259,7 +255,7 @@ def select_stu_quiz_table_info(conn, cursor, request_data, info):
         if not kind:
             token = str(uuid.uuid4())
             return token, [], ""
-        stu_access = _load_student_access(conn, cursor, info["user_id"])
+        stu_access = _load_student_access(info["user_id"])
         permission, _ = _package_permission(stu_access, kind)
         has_access = permission == 1
 
@@ -274,7 +270,7 @@ def select_stu_quiz_table_info(conn, cursor, request_data, info):
 
         # Use quiz_kind column (per-pack quizzes start from id 1)
         # Support legacy rows where quiz_kind might be NULL.
-        all_attempts = answer_store.get_attempts(conn, cursor, info["user_id"], kind)
+        all_attempts = answer_store.get_attempts(info["user_id"], kind)
         student_quiz_info = []
 
         def _build_quiz_item(q, status=0, can_start=0):
@@ -310,13 +306,12 @@ def select_stu_quiz_table_info(conn, cursor, request_data, info):
         token = str(uuid.uuid4())
         return token, student_quiz_info, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        service_exception_error_logging(conn, cursor, "ags_api/stu", "select_stu_quiz_table_info", str(e), request_data,
+        service_exception_error_logging(None, None, "ags_api/stu", "select_stu_quiz_table_info", str(e), request_data,
                                         info)
         return None, None, "اطلاعات آزمون دریافت نشد."
 
 
-def select_stu_quiz_info(conn, cursor, request_data, info):
+def select_stu_quiz_info(request_data, info):
     try:
         token = str(uuid.uuid4())
         quiz_id = request_data["quiz_id"]
@@ -328,14 +323,14 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
 
         with session_scope() as session:
             owner_user_id = get_student_owner_user_id(session=session, user_id=info["user_id"])
-        stu_access = _load_student_access(conn, cursor, info["user_id"])
+        stu_access = _load_student_access(info["user_id"])
         permission, _ = _package_permission(stu_access, quiz_kind)
         has_access = permission == 1
 
         if not has_access:
             return None, None, "شما به این محصول دسترسی ندارید."
         # Limit answers to this user and this quiz kind (support legacy NULL quiz_kind)
-        all_attempts = answer_store.get_attempts(conn, cursor, info["user_id"], quiz_kind)
+        all_attempts = answer_store.get_attempts(info["user_id"], quiz_kind)
 
         with session_scope() as session:
             res_quiz_setting = get_quiz_setting(session=session, owner_user_id=owner_user_id, quiz_id=quiz_id)
@@ -377,7 +372,7 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
             elif last_quiz_state == 1:
                 # In-progress quiz can be continued with existing answers
                 quiz_info_obj = _apply_setting_overrides(_load_quiz_info(), res_quiz_setting)
-                quiz_answer = answer_store.get_answers_for_attempt(conn, cursor, last_attempt["id"])
+                quiz_answer = answer_store.get_answers_for_attempt(last_attempt["id"])
                 return token, {"data": quiz_info_obj, "quizAnswers": quiz_answer}, ""
 
         # If requesting the next quiz in sequence
@@ -393,8 +388,7 @@ def select_stu_quiz_info(conn, cursor, request_data, info):
         # Any other quiz_id (skipping ahead or going back) is not allowed
         return None, None, "آزمون مورد نظر شما در دسترس شما نیست."
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        service_exception_error_logging(conn, cursor, "ags_api/stu", "select_stu_quiz_info", str(e), request_data, info)
+        service_exception_error_logging(None, None, "ags_api/stu", "select_stu_quiz_info", str(e), request_data, info)
         return None, None, "آزمون مورد نظر شما در دسترس شما نیست."
 
 
@@ -414,7 +408,7 @@ SCL_LAST_QUESTION_ID = max(
 )
 
 
-def _enqueue_result_generation(conn, cursor, user_id, phone, kind: str):
+def _enqueue_result_generation(user_id, phone, kind: str):
     """
     Push user to Redis queue and log in redis_logs table.
 
@@ -449,7 +443,7 @@ def _enqueue_result_generation(conn, cursor, user_id, phone, kind: str):
         )
 
 
-def submit_quiz_answer(conn, cursor, request_data, info):
+def submit_quiz_answer(request_data, info):
     try:
         token = str(uuid.uuid4())
         # example request_data ==> {"quiz_id": 1, "quiz_kind": "AG", "user_id": 5,
@@ -474,11 +468,11 @@ def submit_quiz_answer(conn, cursor, request_data, info):
 
         # If quiz has timed-out on client side, just mark state=2 and exit
         if request_data.get("state") and request_data.get("state") != "":
-            answer_store.finish_attempt(conn, cursor, info["user_id"], quiz_kind, quiz_id)
+            answer_store.finish_attempt(info["user_id"], quiz_kind, quiz_id)
             token = str(uuid.uuid4())
             return token, None, "آزمون شما به علت اتمام زمان به پایان رسید."
 
-        attempt = answer_store.get_attempt(conn, cursor, info["user_id"], quiz_kind, quiz_id)
+        attempt = answer_store.get_attempt(info["user_id"], quiz_kind, quiz_id)
 
         message = ""
 
@@ -498,10 +492,10 @@ def submit_quiz_answer(conn, cursor, request_data, info):
             if first_q_id is not None and question_number != first_q_id:
                 return None, None, "this question number is not valid reload quiz"
 
-            owner_user_id, consultant_user_id = get_stu_other_info(conn=conn, cursor=cursor, user_id=info["user_id"])
+            owner_user_id, consultant_user_id = get_stu_other_info(user_id=info["user_id"])
             state = 2 if last_question_id is not None and question_number == last_question_id else 1
             attempt = answer_store.upsert_attempt(
-                conn, cursor, info["user_id"], quiz_kind, quiz_id, state, owner_user_id, consultant_user_id
+                info["user_id"], quiz_kind, quiz_id, state, owner_user_id, consultant_user_id
             )
         else:
             state = attempt["state"]
@@ -509,8 +503,6 @@ def submit_quiz_answer(conn, cursor, request_data, info):
                 state = 2
             if state != attempt["state"]:
                 attempt = answer_store.upsert_attempt(
-                    conn,
-                    cursor,
                     info["user_id"],
                     quiz_kind,
                     quiz_id,
@@ -520,14 +512,12 @@ def submit_quiz_answer(conn, cursor, request_data, info):
                     attempt.get("remain_time"),
                 )
 
-        answer_store.upsert_question_answer(conn, cursor, attempt, question_number, question_answer)
+        answer_store.upsert_question_answer(attempt, question_number, question_answer)
 
         # After the whole product is finished, add user to Redis queue.
         # For AG product, this happens when the very last question (global id) is answered.
         if quiz_kind == "AG" and question_number == AG_LAST_QUESTION_ID:
             _enqueue_result_generation(
-                conn=conn,
-                cursor=cursor,
                 user_id=info["user_id"],
                 phone=info.get("phone"),
                 kind="AG",
@@ -536,8 +526,6 @@ def submit_quiz_answer(conn, cursor, request_data, info):
 
         if quiz_kind == "SCL" and question_number == SCL_LAST_QUESTION_ID:
             _enqueue_result_generation(
-                conn=conn,
-                cursor=cursor,
                 user_id=info["user_id"],
                 phone=info.get("phone"),
                 kind="SCL",
@@ -546,12 +534,11 @@ def submit_quiz_answer(conn, cursor, request_data, info):
 
         return token, None, message
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        service_exception_error_logging(conn, cursor, "ags_api/stu", "submit_quiz_answer", str(e), request_data, info)
+        service_exception_error_logging(None, None, "ags_api/stu", "submit_quiz_answer", str(e), request_data, info)
         return None, None, ""
 
 
-def get_stu_other_info(conn, cursor, user_id):
+def get_stu_other_info(user_id):
     with session_scope() as session:
         result = get_student_owner_consultant_ids(session=session, user_id=user_id)
     if not result:
@@ -559,16 +546,15 @@ def get_stu_other_info(conn, cursor, user_id):
     return result
 
 
-def select_student_access_info(conn, cursor, request_data, info):
+def select_student_access_info(request_data, info):
     try:
         with session_scope() as session:
             res_stu_access = get_student_access_comment(session=session, user_id=info["user_id"])
-        stu_access = _load_student_access(conn, cursor, info["user_id"])
+        stu_access = _load_student_access(info["user_id"])
         token = str(uuid.uuid4())
         comment = res_stu_access.get("comment") if res_stu_access else None
         return token, {"access": stu_access or _empty_access(), "comment": comment}, ""
     except Exception as e:
-        func_helper.safe_rollback(conn)
-        service_exception_error_logging(conn, cursor, "ags_api/stu", "select_student_access_info", str(e), request_data,
+        service_exception_error_logging(None, None, "ags_api/stu", "select_student_access_info", str(e), request_data,
                                         info)
         return None, None, "اطلاعات دسترسی دانش‌آموز دریافت نشد."
