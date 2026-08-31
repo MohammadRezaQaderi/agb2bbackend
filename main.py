@@ -494,17 +494,17 @@ async def update_user_voice(
             file_object.write(voice.file.read())
         if role == "ins":
             tracking_token, response_data, response_message = institute_service.change_user_voice(
-                conn=None, cursor=None, request_data=data, user_info=user_info
+                request_data=data, user_info=user_info
             )
             return service.service_response(method_type, tracking_token, response_data, response_message)
         elif role == "sch":
             tracking_token, response_data, response_message = school_service.change_user_voice(
-                conn=None, cursor=None, request_data=data, user_info=user_info
+                request_data=data, user_info=user_info
             )
             return service.service_response(method_type, tracking_token, response_data, response_message)
         elif role == "ocon":
             tracking_token, response_data, response_message = owner_consultant_service.change_user_voice(
-                conn=None, cursor=None, request_data=data, user_info=user_info
+                request_data=data, user_info=user_info
             )
             return service.service_response(method_type, tracking_token, response_data, response_message)
         else:
