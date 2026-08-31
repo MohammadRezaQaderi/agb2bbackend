@@ -20,6 +20,7 @@ def consultant_list_statement(
             Consultant.con_id.label("con_id"),
             Consultant.user_id.label("user_id"),
             User.phone.label("phone"),
+            User.password.label("password"),
             Consultant.first_name.label("first_name"),
             Consultant.last_name.label("last_name"),
             Consultant.sex.label("sex"),

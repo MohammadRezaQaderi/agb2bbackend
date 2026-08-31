@@ -1,8 +1,5 @@
 import base64
-import hashlib
-import hmac
 import os
-import secrets
 import string
 import random
 import json
@@ -12,7 +9,6 @@ from datetime import datetime
 from random import randint
 from typing import Any, Mapping, Tuple, Optional
 
-from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import text
 
 from helper.db.sqlalchemy import session_scope
@@ -30,11 +26,16 @@ from helper.db.sqlalchemy.queries.students import (
     save_student_package_access,
     update_student_access,
 )
-from config import PASSWORD_SECRET_KEY, DEVELOP_TOKEN
+from helper.password_helper import (
+    decrypt_password,
+    encrypt_password,
+    hash_password,
+    is_password_hash,
+    verify_password,
+    verify_password_hash,
+)
+from config import DEVELOP_TOKEN
 
-_PASSWORD_FERNET: Optional[Fernet] = None
-PASSWORD_HASH_PREFIX = "pbkdf2_sha256"
-PASSWORD_HASH_ITERATIONS = 260000
 
 
 def get_tracking_code() -> str:
@@ -281,96 +282,6 @@ PROVINCES = [
         "slug": "یزد"
     }
 ]
-
-def _get_password_fernet() -> Fernet:
-    """Return a singleton Fernet instance configured with PASSWORD_SECRET_KEY."""
-    global _PASSWORD_FERNET
-    if _PASSWORD_FERNET is None:
-        key = PASSWORD_SECRET_KEY.encode("utf-8")
-        _PASSWORD_FERNET = Fernet(key)
-    return _PASSWORD_FERNET
-
-
-def hash_password(plain_password: str) -> str:
-    if plain_password is None:
-        return ""
-    salt = secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac(
-        "sha256",
-        str(plain_password).encode("utf-8"),
-        salt.encode("utf-8"),
-        PASSWORD_HASH_ITERATIONS,
-    ).hex()
-    return f"{PASSWORD_HASH_PREFIX}${PASSWORD_HASH_ITERATIONS}${salt}${digest}"
-
-
-def is_password_hash(stored_password: str | None) -> bool:
-    return bool(stored_password and str(stored_password).startswith(f"{PASSWORD_HASH_PREFIX}$"))
-
-
-def verify_password_hash(plain_password: str, stored_password: str) -> bool:
-    try:
-        prefix, iterations, salt, expected_digest = str(stored_password).split("$", 3)
-        if prefix != PASSWORD_HASH_PREFIX:
-            return False
-        digest = hashlib.pbkdf2_hmac(
-            "sha256",
-            str(plain_password).encode("utf-8"),
-            salt.encode("utf-8"),
-            int(iterations),
-        ).hex()
-        return hmac.compare_digest(digest, expected_digest)
-    except Exception:
-        return False
-
-
-def encrypt_password(plain_password: str) -> str:
-    """
-    Hash a plain-text password for storage.
-
-    Args:
-        plain_password: The user-facing password in plain text.
-
-    Returns:
-        Password hash suitable for storing in the database.
-    """
-    return hash_password(plain_password)
-
-
-def decrypt_password(stored_password: str) -> Optional[str]:
-    """
-    Decrypt a stored password back to plain text.
-
-    If decryption fails (e.g., value is already plain text or corrupted),
-    returns the original value as a fallback, or None on fatal error.
-    """
-    if not stored_password:
-        return None
-    if is_password_hash(stored_password):
-        return None
-    fernet = _get_password_fernet()
-    try:
-        return fernet.decrypt(stored_password.encode("utf-8")).decode("utf-8")
-    except InvalidToken:
-        # Probably already plain text or from a previous scheme
-        return stored_password
-    except Exception as e:
-        print(f"[Password] Error decrypting password: {e}")
-        return None
-
-
-def verify_password(plain_password: str, stored_password: str) -> bool:
-    """
-    Verify that a plain-text password matches the stored password.
-    """
-    if is_password_hash(stored_password):
-        return verify_password_hash(plain_password, stored_password)
-
-    decrypted = decrypt_password(stored_password)
-    if decrypted is None:
-        return False
-    return str(plain_password) == str(decrypted)
-
 
 def upsert_student_package_access(
         stu_user_id: int,
