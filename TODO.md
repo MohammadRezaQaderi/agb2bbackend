@@ -70,10 +70,9 @@ stable.
   - After cleanup, rerun the architecture migration so `ux_users_phone`,
     `ux_capacity_user_id`, and `ux_capacity_package_user_package` can be
     created when data is clean.
-- [ ] Stop committing after read queries in `helper/db/db_helper.py`.
-  - `search_table`, `search_allin_table`, and `search_fetchall` call
-    `conn.commit()` after SELECTs.
-  - Keep commits at service/transaction boundaries.
+- [x] Remove legacy runtime `helper/db/db_helper.py`.
+  - Runtime database access now goes through the SQLAlchemy layer.
+  - Low-level pyodbc usage remains only in schema/migration/report scripts.
 - [ ] Centralize transaction handling.
   - Many service functions call `commit()` / `rollback()` themselves.
   - Add a small transaction context helper so partial writes are easier to

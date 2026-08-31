@@ -11,9 +11,11 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from report.db_helper import get_db_connection, close_db_connection
 import pandas as pd
+from sqlalchemy import text
 from datetime import datetime, time, timedelta
+
+from helper.db.sqlalchemy.engine import get_engine
 
 REGISTRATIONS_SHEET_NAME = 'ثبت‌نامی‌ها'
 CAPACITY_LOGS_SHEET_NAME = 'تغییر ظرفیت‌ها'
@@ -53,16 +55,16 @@ def parse_to_datetime(value):
 
 def build_date_filter(column_name, from_date=None, to_date=None, to_date_is_exclusive=False):
     filters = []
-    params = []
+    params = {}
 
     if from_date:
-        filters.append(f"{column_name} >= ?")
-        params.append(from_date)
+        filters.append(f"{column_name} >= :from_date")
+        params["from_date"] = from_date
 
     if to_date:
         operator = "<" if to_date_is_exclusive else "<="
-        filters.append(f"{column_name} {operator} ?")
-        params.append(to_date)
+        filters.append(f"{column_name} {operator} :to_date")
+        params["to_date"] = to_date
 
     if not filters:
         return "", params
@@ -70,7 +72,7 @@ def build_date_filter(column_name, from_date=None, to_date=None, to_date_is_excl
     return " AND " + " AND ".join(filters), params
 
 
-def generate_capacity_report(conn, from_date=None, to_date=None, to_date_is_exclusive=False):
+def generate_capacity_report(from_date=None, to_date=None, to_date_is_exclusive=False):
     date_filter, params = build_date_filter("u.created_time", from_date, to_date, to_date_is_exclusive)
     query = """
     SELECT 
@@ -120,11 +122,12 @@ def generate_capacity_report(conn, from_date=None, to_date=None, to_date_is_excl
     ORDER BY [نقش], [نام];
     """.format(date_filter=date_filter)
 
-    df = pd.read_sql(query, conn, params=params)
+    with get_engine().connect() as db:
+        df = pd.read_sql_query(text(query), db, params=params)
     return df
 
 
-def generate_capacity_logs_report(conn, from_date=None, to_date=None, to_date_is_exclusive=False):
+def generate_capacity_logs_report(from_date=None, to_date=None, to_date_is_exclusive=False):
     date_filter, params = build_date_filter("cl.created_time", from_date, to_date, to_date_is_exclusive)
     query = """
     SELECT
@@ -160,7 +163,8 @@ def generate_capacity_logs_report(conn, from_date=None, to_date=None, to_date_is
     ORDER BY cl.created_time, [نقش], [نام];
     """.format(date_filter=date_filter)
 
-    df = pd.read_sql(query, conn, params=params)
+    with get_engine().connect() as db:
+        df = pd.read_sql_query(text(query), db, params=params)
     return df
 
 
@@ -217,13 +221,13 @@ def write_capacity_workbook(capacity_df, logs_df, output_file_path):
         adjust_worksheet(writer.sheets[CAPACITY_LOGS_SHEET_NAME])
 
 
-def export_capacity_report(conn, from_date=None, to_date=None, to_date_is_exclusive=False, output_file_path=None):
+def export_capacity_report(from_date=None, to_date=None, to_date_is_exclusive=False, output_file_path=None):
     print("در حال دریافت اطلاعات و تولید گزارش...")
     capacity_df = prepare_capacity_report(
-        generate_capacity_report(conn, from_date, to_date, to_date_is_exclusive)
+        generate_capacity_report(from_date, to_date, to_date_is_exclusive)
     )
     logs_df = prepare_capacity_logs_report(
-        generate_capacity_logs_report(conn, from_date, to_date, to_date_is_exclusive)
+        generate_capacity_logs_report(from_date, to_date, to_date_is_exclusive)
     )
 
     if not output_file_path:
@@ -257,18 +261,12 @@ if __name__ == "__main__":
         if from_date and to_date and from_date > to_date:
             raise ValueError("تاریخ from-date نباید بعد از to-date باشد.")
 
-        conn, cursor = get_db_connection()
-        if conn:
-            export_capacity_report(
-                conn,
-                from_date=from_date,
-                to_date=to_date,
-                to_date_is_exclusive=to_date_is_exclusive,
-                output_file_path=args.output,
-            )
-            close_db_connection(conn, cursor)
-        else:
-            print("خطا در اتصال به پایگاه داده")
+        export_capacity_report(
+            from_date=from_date,
+            to_date=to_date,
+            to_date_is_exclusive=to_date_is_exclusive,
+            output_file_path=args.output,
+        )
     except Exception as e:
         print(f"خطا در اجرای گزارش: {str(e)}")
         import traceback

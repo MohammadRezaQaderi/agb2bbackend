@@ -8,7 +8,7 @@ from helper.db.sqlalchemy.queries.admin import (
 import helper.func_helper as func_helper
 
 
-def change_capacity(conn, cursor, request_data):
+def change_capacity(request_data):
     """
     Update capacity with phone number of the user and log the changes.
     """
@@ -60,13 +60,12 @@ def change_capacity(conn, cursor, request_data):
         }, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/admin_request", "change_capacity", str(e), request_data, {}
+        func_helper.service_exception_error_logging("ag_api/admin_request", "change_capacity", str(e), request_data, {}
         )
         return None, None, f"خطا در به‌روزرسانی ظرفیت: {str(e)}"
 
 
-def get_user_info(conn, cursor, request_data):
+def get_user_info(request_data):
     """
     Get user user_info by phone number.
     
@@ -92,13 +91,12 @@ def get_user_info(conn, cursor, request_data):
         return token, user_info, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/admin_request", "get_user_info", str(e), request_data, {}
+        func_helper.service_exception_error_logging("ag_api/admin_request", "get_user_info", str(e), request_data, {}
         )
         return None, None, f"خطا در دریافت اطلاعات کاربر: {str(e)}"
 
 
-def check_student_quiz_answer(conn, cursor, request_data):
+def check_student_quiz_answer(request_data):
     """
     Check student quiz answer and student state.
     
@@ -157,7 +155,6 @@ def check_student_quiz_answer(conn, cursor, request_data):
         return token, result, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/admin_request", "check_student_quiz_answer", str(e), request_data, {}
+        func_helper.service_exception_error_logging("ag_api/admin_request", "check_student_quiz_answer", str(e), request_data, {}
         )
         return None, None, f"خطا در بررسی پاسخ‌های آزمون دانش‌آموز: {str(e)}"

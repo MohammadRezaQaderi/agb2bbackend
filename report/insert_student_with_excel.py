@@ -361,7 +361,7 @@ def process_student_row(
         province_id, province_found = process_province(province_name)
         student_report['processed_province_id'] = province_id
 
-        phone = func_helper.random_generate_phone(conn, cursor, 8)
+        phone = func_helper.random_generate_phone(8)
         password = func_helper.encrypt_password(func_helper.random_generate_password())
 
         print(f"Processing: {first_name} {last_name} - Phone: {phone}")
