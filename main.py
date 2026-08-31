@@ -163,7 +163,7 @@ async def student_delete_api(request: Request):
             return func_helper.not_auth_return(message=state_message)
 
         action_map = {
-            "ags_remove_token": service.remove_token,
+            "ags_sign_out": service.sign_out,
         }
         handler = action_map.get(action)
         if handler is None:
@@ -376,7 +376,7 @@ async def delete_api(request: Request):
             return func_helper.not_auth_return(message=state_message)
 
         action_map = {
-            "ag_remove_token": service.remove_token,
+            "ag_sign_out": service.sign_out,
         }
 
         handler = action_map.get(action)

@@ -44,9 +44,9 @@ def _role_handler(user_info, handlers):
     return handler() if handler else None
 
 
-def remove_token(request_data, user_info):
+def sign_out(request_data, user_info):
     method_type = "DELETE"
-    tracking_token, response_data, response_message = auth_service.remove_token(
+    tracking_token, response_data, response_message = auth_service.sign_out(
         request_data=request_data, user_info=user_info
     )
     return _service_response(method_type, tracking_token, response_data, response_message)

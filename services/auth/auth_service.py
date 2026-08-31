@@ -39,7 +39,7 @@ def _create_token(user_info):
         return None
 
 
-def remove_token(request_data, user_info):
+def sign_out(request_data, user_info):
     try:
         with session_scope() as session:
             deleted_count = delete_token_for_user(session=session, user_id=user_info["user_id"])
@@ -47,7 +47,7 @@ def remove_token(request_data, user_info):
             return None, None, "توکن حذف نشد یا موجود نیست."
         return func_helper.get_tracking_code(), {}, "توکن حذف شد."
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/auth", "remove_token", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging("ag_api/auth", "sign_out", str(e), request_data, user_info)
         return None, None, "مشکل در اتمام نشست"
 
 
@@ -69,7 +69,7 @@ def sign_in(request_data):
             with session_scope() as session:
                 verify_status = get_role_verify_status(session=session, user_id=res["user_id"], role=res["role"])
             if verify_status != 1:
-                remove_token(
+                sign_out(
                     request_data={"user_id": res["user_id"]},
                     user_info={"user_id": res["user_id"], "phone": phone},
                 )
@@ -79,7 +79,7 @@ def sign_in(request_data):
             with session_scope() as session:
                 verify_status = get_role_verify_status(session=session, user_id=res["user_id"], role=res["role"])
             if verify_status != 1:
-                remove_token(
+                sign_out(
                     request_data={"user_id": res["user_id"]},
                     user_info={"user_id": res["user_id"], "phone": phone},
                 )
@@ -89,7 +89,7 @@ def sign_in(request_data):
             with session_scope() as session:
                 verify_status = get_role_verify_status(session=session, user_id=res["user_id"], role=res["role"])
             if verify_status != 1:
-                remove_token(
+                sign_out(
                     request_data={"user_id": res["user_id"]},
                     user_info={"user_id": res["user_id"], "phone": phone},
                 )
