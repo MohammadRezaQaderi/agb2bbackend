@@ -537,8 +537,10 @@ def get_report_data(request_data, user_info, conn=None, cursor=None):
         if not check_student_access(student_user_id=student_id, user_info=user_info):
             return _error_response(method_type, "شما به این دانش‌آموز دسترسی ندارید.")
         
-        tracking_token, response_data, response_message = other_service.get_report_data(conn=conn, cursor=cursor, request_data=request_data,
-                                             user_info=user_info)
+        tracking_token, response_data, response_message = other_service.get_report_data(
+            request_data=request_data,
+            user_info=user_info,
+        )
         return _service_response(
             method_type, tracking_token, response_data, response_message, error_message="خطا در دریافت اطلاعات گزارش."
         )
@@ -703,7 +705,7 @@ def get_quiz_info(request_data, user_info, conn=None, cursor=None):
 def get_transactions(request_data, user_info, conn=None, cursor=None):
     method_type = "SELECT"
     if user_info["role"] in ["ocon", "ins", "sch"]:
-        tracking_token, response_data, response_message = other_service.get_transactions(conn, cursor, request_data, user_info)
+        tracking_token, response_data, response_message = other_service.get_transactions(request_data, user_info)
         return _service_response(method_type, tracking_token, response_data, response_message)
     return func_helper.not_method_access_return()
 
@@ -719,7 +721,8 @@ def apply_discount(request_data, user_info, conn=None, cursor=None):
         return error_response
 
     tracking_token, response_data, response_message = other_service.apply_discount(
-        conn=conn, cursor=cursor, request_data=request_data, user_info=user_info
+        request_data=request_data,
+        user_info=user_info,
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -734,21 +737,22 @@ def add_payment_order(request_data, user_info, conn=None, cursor=None):
     #     return error_response
     if user_info["role"] in ["ocon", "ins", "sch"]:
         tracking_token, response_data, response_message = other_service.order_payment(
-            conn=conn, cursor=cursor, request_data=request_data, user_info=user_info
+            request_data=request_data,
+            user_info=user_info,
         )
         return _service_response(method_type, tracking_token, response_data, response_message)
     return _error_response(method_type, DEFAULT_SERVICE_ERROR)
 
 def get_comments(conn=None, cursor=None):
     method_type = "SELECT"
-    tracking_token, response_data, response_message = other_service.get_comments(conn=conn, cursor=cursor)
+    tracking_token, response_data, response_message = other_service.get_comments()
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def add_comment(request_data, conn=None, cursor=None):
     method_type = "INSERT"
     tracking_token, response_data, response_message = other_service.add_comment(
-        conn=conn, cursor=cursor, request_data=request_data
+        request_data=request_data
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -764,7 +768,8 @@ def mark_notification_read(request_data, user_info, conn=None, cursor=None):
         return error_response
 
     tracking_token, response_data, response_message = other_service.mark_notification_read(
-        conn=conn, cursor=cursor, request_data=request_data, user_info=user_info
+        request_data=request_data,
+        user_info=user_info,
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
 
@@ -780,7 +785,7 @@ def admin_change_capacity(request_data, conn=None, cursor=None):
     if not is_valid:
         return error_response
     
-    tracking_token, response_data, response_message = admin_service.change_capacity(conn=conn, cursor=cursor, request_data=request_data)
+    tracking_token, response_data, response_message = admin_service.change_capacity(request_data=request_data)
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -794,7 +799,7 @@ def admin_get_user_info(request_data, conn=None, cursor=None):
     if not is_valid:
         return error_response
     
-    tracking_token, response_data, response_message = admin_service.get_user_info(conn=conn, cursor=cursor, request_data=request_data)
+    tracking_token, response_data, response_message = admin_service.get_user_info(request_data=request_data)
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
@@ -809,6 +814,6 @@ def admin_check_student_quiz_answer(request_data, conn=None, cursor=None):
         return error_response
     
     tracking_token, response_data, response_message = admin_service.check_student_quiz_answer(
-        conn=conn, cursor=cursor, request_data=request_data
+        request_data=request_data
     )
     return _service_response(method_type, tracking_token, response_data, response_message)

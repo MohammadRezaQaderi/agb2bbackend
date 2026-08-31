@@ -64,14 +64,14 @@ def normalize_persian_text(text):
     text = text.replace("\u0643", "\u06A9")
     return text
 
-def get_all_products(conn, cursor):
+def get_all_products():
     with session_scope() as session:
         products_info = list_all_products(session=session)
     token = func_helper.get_tracking_code()
     return token, products_info, ""
 
 
-def get_transactions(conn, cursor, request_data, user_info):
+def get_transactions(request_data, user_info):
     try:
         with session_scope() as session:
             transactions = list_user_transactions(session=session, user_id=user_info["user_id"])
@@ -83,7 +83,7 @@ def get_transactions(conn, cursor, request_data, user_info):
         return None, None, "مشکلی در دریافت لیست تراکنش‌ها رخ داده است."
 
 
-def apply_discount(conn, cursor, request_data, user_info):
+def apply_discount(request_data, user_info):
     try:
         with session_scope() as session:
             res = get_discount_by_code(session=session, code=request_data["discount_code"])
@@ -114,12 +114,12 @@ def apply_discount(conn, cursor, request_data, user_info):
     except Exception as e:
         print("error occurred in apply discounts", e)
         func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/other", "apply_discount", str(e), request_data, user_info
+            None, None, "ag_api/other", "apply_discount", str(e), request_data, user_info
         )
         return None, None, "در پردازش کد تخفیف مشکلی پیش آمده"
 
 
-def get_order_status(conn, cursor, data, user_info):
+def get_order_status(data, user_info):
     try:
         with session_scope() as session:
             res = get_payment_status(
@@ -148,7 +148,7 @@ def get_order_status(conn, cursor, data, user_info):
         return None, None, "مشکلی در دریافت وضعیت سفارش رخ داده است."
 
 
-def mellat_request_created(conn, cursor, data, user_info):
+def mellat_request_created(data, user_info):
     try:
         token = 'eyJhbGciOiJIUzI1NiJ9.eyJSb2xlIjoiQWRtaW4iLCJJc3N1ZXIiOiIwMUZhcmRha2hlaWxpc2FieiIsIlVzZXJuYW1lIjoiTXJxMjciLCJleHAiOjE3NTMwODc5NzcsImlhdCI6MTc1MzA4Nzk3N30.mlcxgBMXIjmw04DPeMkSL5Ijqlg-ifZXQnw_d889qvM'
         endpoint = "b2b"
@@ -248,7 +248,7 @@ def mellat_request_created(conn, cursor, data, user_info):
         return None, str(e), None
 
 
-def order_payment(conn, cursor, request_data, user_info):
+def order_payment(request_data, user_info):
     try:
         phone = user_info["phone"]
 
@@ -326,14 +326,14 @@ def order_payment(conn, cursor, request_data, user_info):
             "discount_id": discount_id,
         }
         return None, None, "متاسفانه فعلا درگاه پرداخت در دسترس نیست"
-        ref_id, message, url = mellat_request_created(conn, cursor, product_data, user_info)
+        ref_id, message, url = mellat_request_created(product_data, user_info)
         return func_helper.get_tracking_code(), {"ref_id": ref_id, "url": url}, message
     except Exception as e:
         print(e)
         return None, None, "خطا در دسترسی به پرداخت"
 
 
-def get_report_data(conn, cursor, request_data, user_info):
+def get_report_data(request_data, user_info):
     try:
         kind = request_data.get("report_type", "").upper()
         student_id = request_data.get("student_id")
@@ -453,7 +453,7 @@ def get_report_data(conn, cursor, request_data, user_info):
         return None, None, "خطا در دریافت اطلاعات گزارش."
 
 
-def get_comments(conn, cursor):
+def get_comments():
     try:
         with session_scope() as session:
             comment_rows = list_latest_comments(session=session, limit=100)
@@ -462,12 +462,12 @@ def get_comments(conn, cursor):
     except Exception as e:
         print("error occurred in get comments", e)
         func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/other", "get_comments", str(e), {}, {}
+            None, None, "ag_api/other", "get_comments", str(e), {}, {}
         )
         return None, None, "خطا در دریافت نظرات."
 
 
-def add_comment(conn, cursor, request_data):
+def add_comment(request_data):
     try:
         with session_scope() as session:
             user = get_comment_user_info_by_phone(session=session, phone=request_data["phone"])
@@ -487,10 +487,9 @@ def add_comment(conn, cursor, request_data):
             )
         return func_helper.get_tracking_code(), None, "نظر شما با موفقیت ثبت شد."
     except Exception as e:
-        func_helper.safe_rollback(conn)
         print("error occurred in add comment", e)
         func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/other", "add_comment", str(e), request_data, {}
+            None, None, "ag_api/other", "add_comment", str(e), request_data, {}
         )
         return None, None, "خطا در ثبت نظر."
 
@@ -508,7 +507,7 @@ def _notification_role_aliases(role):
     }.get(role, [role])
 
 
-def mark_notification_read(conn, cursor, request_data, user_info):
+def mark_notification_read(request_data, user_info):
     try:
         notification_id = int(request_data["notification_id"])
         user_id = int(user_info["user_id"])
@@ -526,9 +525,8 @@ def mark_notification_read(conn, cursor, request_data, user_info):
     except (TypeError, ValueError):
         return None, None, "شناسه اعلان معتبر نیست."
     except Exception as e:
-        func_helper.safe_rollback(conn)
         print("error occurred in mark notification read", e)
         func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/other", "mark_notification_read", str(e), request_data, user_info
+            None, None, "ag_api/other", "mark_notification_read", str(e), request_data, user_info
         )
         return None, None, "خطا در ثبت وضعیت اعلان."

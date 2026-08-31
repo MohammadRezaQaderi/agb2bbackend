@@ -416,17 +416,6 @@ def get_student_package_access_counts(
         return None
 
 
-def safe_rollback(conn: Any | None) -> None:
-    """Rollback a legacy DB connection when one is available."""
-    if conn is None:
-        return
-
-    try:
-        conn.rollback()
-    except Exception as e:
-        print(f"[DB] Rollback skipped: {e}")
-
-
 async def authorizer(request_data: Mapping[str, Any]):
     try:
         token = request_data.get("token")
