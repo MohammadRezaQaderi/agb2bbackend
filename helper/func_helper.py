@@ -26,6 +26,7 @@ from helper.db.sqlalchemy.queries.students import (
     save_student_package_access,
     update_student_access,
 )
+from helper.log_sanitizer import sanitize_log_data
 from helper.password_helper import (
     decrypt_password,
     encrypt_password,
@@ -426,11 +427,12 @@ def service_exception_error_logging(
         end_point: str,
         func_name: str,
         error_message: str,
-        data: Mapping[str, Any],
-        user_info: Mapping[str, Any],
+        data: Any,
+        user_info: Mapping[str, Any] | None,
 ) -> None:
     """Log service-level exceptions."""
     try:
+        user_info = user_info or {}
         with session_scope() as session:
             create_api_log(
                 session=session,
@@ -438,7 +440,7 @@ def service_exception_error_logging(
                 phone=user_info.get("phone"),
                 end_point=end_point,
                 func_name=func_name,
-                data=json.dumps(data, ensure_ascii=False),
+                data=json.dumps(sanitize_log_data(data), ensure_ascii=False),
                 error_p=str(error_message),
             )
     except Exception as e:
