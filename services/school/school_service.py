@@ -51,7 +51,7 @@ def get_info(user_id):
         }
         return token, info_response, ""
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "get_info", str(e), None,
+        func_helper.service_exception_error_logging("ag_api/sch", "get_info", str(e), None,
                                         {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 
@@ -88,7 +88,7 @@ def get_dashboard(request_data, user_info):
         return token, {"dashboard_info": sch_info, "notifications": notifications}, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "get_dashboard", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging("ag_api/sch", "get_dashboard", str(e), request_data, user_info)
         return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
@@ -100,7 +100,7 @@ def get_report(request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "get_report", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging("ag_api/sch", "get_report", str(e), request_data, user_info)
         return None, [], "مشکل در دریافت گزارش رخ داده است."
 
 
@@ -122,7 +122,7 @@ def get_management_report(request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "get_management_report", str(e),
+        func_helper.service_exception_error_logging("ag_api/sch", "get_management_report", str(e),
                                         request_data,
                                         user_info)
         return None, [], "مشکل در دریافت گزارش مدیریتی رخ داده است."
@@ -143,7 +143,7 @@ def change_consultant(request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات مشاور شما با موفقیت تغییر کرد."
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "change_consultant", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging("ag_api/sch", "change_consultant", str(e), request_data, user_info)
         return None, None, "مشکلی در ثبت نهایی اطلاعات مشاور رخ داده است لطفا با پیشیبانی در ارتباط باشید."
 
 
@@ -161,7 +161,7 @@ def get_consultants(request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, cons_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "get_consultants", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging("ag_api/sch", "get_consultants", str(e), request_data, user_info)
         return None, [], "اطلاعات مشاورین دریافت نشد."
 
 
@@ -183,7 +183,7 @@ def change_student(request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "change_student", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging("ag_api/sch", "change_student", str(e), request_data, user_info)
         return None, None, "مشکلی در تغییر اطلاعات دانش‌آموز رخ داده است."
 
 
@@ -201,7 +201,7 @@ def get_students(request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, stu_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "get_students", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging("ag_api/sch", "get_students", str(e), request_data, user_info)
         return None, [], "اطلاعات دانش‌آموزان دریافت نشد."
 
 
@@ -225,7 +225,7 @@ def change_user_info(request_data, user_info):
             response["pic"] = pic
         return token, response, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "change_user_info", str(e), request_data,
+        func_helper.service_exception_error_logging("ag_api/sch", "change_user_info", str(e), request_data,
                                         user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
@@ -242,7 +242,7 @@ def change_user_image(request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, {"name": request_data["name"], "pic": request_data["pic"]}, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "change_user_image", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging("ag_api/sch", "change_user_image", str(e), request_data, user_info)
 
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
@@ -261,7 +261,7 @@ def change_user_voice(request_data, user_info):
             )
         return token, None, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "change_user_voice", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging("ag_api/sch", "change_user_voice", str(e), request_data, user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
 
@@ -279,7 +279,7 @@ def change_setting(request_data, user_info):
         token = func_helper.get_tracking_code()
         return token, None, "پیش اطلاعات اولیه آزمون شما تغییر یافت."
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "change_setting", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging("ag_api/sch", "change_setting", str(e), request_data, user_info)
         return None, None, "پیش اطلاعات اولیه آزمون شما تغییر نیافت."
 
 
@@ -301,7 +301,7 @@ def verify_user(user_id):
         }
         return token, user_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/sch", "verify_user", str(e), None,
+        func_helper.service_exception_error_logging("ag_api/sch", "verify_user", str(e), None,
                                         {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 

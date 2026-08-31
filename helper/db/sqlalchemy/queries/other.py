@@ -16,8 +16,6 @@ from helper.db.sqlalchemy.models import (
     NotificationRead,
     OwnerConsultant,
     Payment,
-    PaymentLog,
-    Product,
     ResultState,
     School,
     SclScore,
@@ -25,37 +23,6 @@ from helper.db.sqlalchemy.models import (
     UsingDiscount,
     User,
 )
-
-
-PAYMENT_FIELDS = (
-    "payment_id",
-    "user_id",
-    "phone",
-    "state",
-    "status",
-    "price",
-    "discount_price",
-    "track_id",
-    "result",
-    "discount_id",
-    "message",
-    "product_data",
-    "token",
-)
-
-
-def list_all_products(session: Session) -> list[dict]:
-    statement = (
-        select(
-            Product.product_id.label("id"),
-            Product.name.label("name"),
-            Product.price.label("price"),
-            Product.status.label("status"),
-            Product.image.label("image"),
-        )
-        .order_by(Product.created_time.desc())
-    )
-    return [dict(row) for row in session.execute(statement).mappings().all()]
 
 
 def list_user_transactions(session: Session, user_id: int) -> list[dict]:
@@ -72,25 +39,6 @@ def list_user_transactions(session: Session, user_id: int) -> list[dict]:
         .order_by(Payment.created_time.desc())
     )
     return [dict(row) for row in session.execute(statement).mappings().all()]
-
-
-def get_payment_status(session: Session, user_id: int, payment_id: int) -> dict | None:
-    statement = (
-        select(
-            Payment.payment_id.label("id"),
-            Payment.state.label("state"),
-            Payment.status.label("status"),
-            Payment.price.label("price"),
-            Payment.product_data.label("product_data"),
-            Payment.result.label("result"),
-            Payment.edited_time.label("date"),
-        )
-        .where(Payment.user_id == user_id, Payment.payment_id == payment_id)
-        .order_by(Payment.created_time.desc())
-        .limit(1)
-    )
-    row = session.execute(statement).mappings().first()
-    return dict(row) if row else None
 
 
 def list_latest_comments(session: Session, limit: int = 100) -> list[dict]:
@@ -168,16 +116,6 @@ def record_discount_usage(
     elif counter_field == "used_apply":
         discount.used_apply = (discount.used_apply or 0) + 1
     discount.edited_time = datetime.now()
-    session.flush()
-
-
-def create_payment(session: Session, payment_data: dict[str, Any]) -> None:
-    session.add(Payment(**{field: payment_data.get(field) for field in PAYMENT_FIELDS}))
-    session.flush()
-
-
-def create_payment_log(session: Session, payment_data: dict[str, Any]) -> None:
-    session.add(PaymentLog(**{field: payment_data.get(field) for field in PAYMENT_FIELDS}))
     session.flush()
 
 

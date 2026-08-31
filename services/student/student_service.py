@@ -121,7 +121,7 @@ def select_student_info(user_id):
                            "pic": None, "owner_user_id": res.get("owner_user_id"),
                            "ins_id": res.get("owner_user_id")}, ""
     except Exception as e:
-        service_exception_error_logging(None, None, "ags_api/stu", "select_student_info", str(e), {},
+        service_exception_error_logging("ags_api/stu", "select_student_info", str(e), {},
                                         {"user_id": user_id})
         return None, None, "اطلاعات دانش‌آموز یافت نشد."
 
@@ -213,7 +213,7 @@ def select_stu_dashboard(request_data, info):
         token = str(uuid.uuid4())
         return token, dashboard_info, ""
     except Exception as e:
-        service_exception_error_logging(None, None, "ags_api/stu", "select_stu_dashboard", str(e), request_data, info)
+        service_exception_error_logging("ags_api/stu", "select_stu_dashboard", str(e), request_data, info)
         return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
@@ -230,7 +230,7 @@ def update_stu_user_profile(request_data, info):
         token = str(uuid.uuid4())
         return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        service_exception_error_logging(None, None, "ags_api/stu", "update_stu_user_profile", str(e), request_data,
+        service_exception_error_logging("ags_api/stu", "update_stu_user_profile", str(e), request_data,
                                         info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
@@ -243,7 +243,7 @@ def update_stu_password(request_data, info):
         token = str(uuid.uuid4())
         return token, None, "رمز عبور شما با موفقیت تغییر کرد."
     except Exception as e:
-        service_exception_error_logging(None, None, "ags_api/stu", "update_stu_password", str(e), request_data, info)
+        service_exception_error_logging("ags_api/stu", "update_stu_password", str(e), request_data, info)
         return None, None, "رمز عبور شما تغییر نیافت."
 
 
@@ -306,7 +306,7 @@ def select_stu_quiz_table_info(request_data, info):
         token = str(uuid.uuid4())
         return token, student_quiz_info, ""
     except Exception as e:
-        service_exception_error_logging(None, None, "ags_api/stu", "select_stu_quiz_table_info", str(e), request_data,
+        service_exception_error_logging("ags_api/stu", "select_stu_quiz_table_info", str(e), request_data,
                                         info)
         return None, None, "اطلاعات آزمون دریافت نشد."
 
@@ -388,7 +388,7 @@ def select_stu_quiz_info(request_data, info):
         # Any other quiz_id (skipping ahead or going back) is not allowed
         return None, None, "آزمون مورد نظر شما در دسترس شما نیست."
     except Exception as e:
-        service_exception_error_logging(None, None, "ags_api/stu", "select_stu_quiz_info", str(e), request_data, info)
+        service_exception_error_logging("ags_api/stu", "select_stu_quiz_info", str(e), request_data, info)
         return None, None, "آزمون مورد نظر شما در دسترس شما نیست."
 
 
@@ -534,7 +534,7 @@ def submit_quiz_answer(request_data, info):
 
         return token, None, message
     except Exception as e:
-        service_exception_error_logging(None, None, "ags_api/stu", "submit_quiz_answer", str(e), request_data, info)
+        service_exception_error_logging("ags_api/stu", "submit_quiz_answer", str(e), request_data, info)
         return None, None, ""
 
 
@@ -555,6 +555,6 @@ def select_student_access_info(request_data, info):
         comment = res_stu_access.get("comment") if res_stu_access else None
         return token, {"access": stu_access or _empty_access(), "comment": comment}, ""
     except Exception as e:
-        service_exception_error_logging(None, None, "ags_api/stu", "select_student_access_info", str(e), request_data,
+        service_exception_error_logging("ags_api/stu", "select_student_access_info", str(e), request_data,
                                         info)
         return None, None, "اطلاعات دسترسی دانش‌آموز دریافت نشد."

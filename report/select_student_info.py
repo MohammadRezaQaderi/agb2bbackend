@@ -11,11 +11,12 @@ from typing import List, Optional, Dict, Any
 from pathlib import Path
 
 import pandas as pd
+from sqlalchemy import text
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from report.db_helper import get_db_connection, close_db_connection
+from helper.db.sqlalchemy import session_scope
 from report.excel_helper import write_excel_file
 from config import REPORT_OUTPUT_DIR, REPORT_DEFAULT_INS_ID
 
@@ -69,36 +70,28 @@ def get_students_by_ins_id(
 
     select_clause = ", ".join(select_columns)
 
-    conn, cursor = get_db_connection()
-
     try:
         query = f"""
         SELECT {select_clause}
         FROM stu s
         INNER JOIN users u ON u.user_id = s.user_id
-        WHERE s.owner_user_id = ?
+        WHERE s.owner_user_id = :ins_id
         ORDER BY s.first_name, s.last_name
         """
 
-        cursor.execute(query, ins_id)
-        students = cursor.fetchall()
+        with session_scope() as session:
+            students = session.execute(text(query), {"ins_id": ins_id}).mappings().all()
 
         if not students:
             print(f"No students found for ins_id={ins_id}")
             return pd.DataFrame()
 
-        # Get column names from cursor description
-        column_names = [desc[0] for desc in cursor.description]
-
-        df = pd.DataFrame.from_records(students, columns=column_names)
+        df = pd.DataFrame.from_records([dict(row) for row in students])
         return df
 
     except Exception as e:
         print(f"✗ Error querying students: {e}")
         return None
-
-    finally:
-        close_db_connection(conn, cursor)
 
 
 def export_students_to_excel(

@@ -35,11 +35,11 @@ def _create_token(user_info):
                 if not token_exists(session=session, token=token):
                     return create_token(session=session, user_id=user_id, token=token)
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/auth", "_create_token", str(e), user_info, {})
+        func_helper.service_exception_error_logging("ag_api/auth", "_create_token", str(e), user_info, {})
         return None
 
 
-def remove_token(request_data, user_info):
+def sign_out(request_data, user_info):
     try:
         with session_scope() as session:
             deleted_count = delete_token_for_user(session=session, user_id=user_info["user_id"])
@@ -47,7 +47,7 @@ def remove_token(request_data, user_info):
             return None, None, "توکن حذف نشد یا موجود نیست."
         return func_helper.get_tracking_code(), {}, "توکن حذف شد."
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/auth", "remove_token", str(e), request_data, user_info)
+        func_helper.service_exception_error_logging("ag_api/auth", "sign_out", str(e), request_data, user_info)
         return None, None, "مشکل در اتمام نشست"
 
 
@@ -69,7 +69,7 @@ def sign_in(request_data):
             with session_scope() as session:
                 verify_status = get_role_verify_status(session=session, user_id=res["user_id"], role=res["role"])
             if verify_status != 1:
-                remove_token(
+                sign_out(
                     request_data={"user_id": res["user_id"]},
                     user_info={"user_id": res["user_id"], "phone": phone},
                 )
@@ -79,7 +79,7 @@ def sign_in(request_data):
             with session_scope() as session:
                 verify_status = get_role_verify_status(session=session, user_id=res["user_id"], role=res["role"])
             if verify_status != 1:
-                remove_token(
+                sign_out(
                     request_data={"user_id": res["user_id"]},
                     user_info={"user_id": res["user_id"], "phone": phone},
                 )
@@ -89,7 +89,7 @@ def sign_in(request_data):
             with session_scope() as session:
                 verify_status = get_role_verify_status(session=session, user_id=res["user_id"], role=res["role"])
             if verify_status != 1:
-                remove_token(
+                sign_out(
                     request_data={"user_id": res["user_id"]},
                     user_info={"user_id": res["user_id"], "phone": phone},
                 )
@@ -102,7 +102,7 @@ def sign_in(request_data):
             return None, None, "متاسفانه شما از این سامانه اجازه ورود ندارید."
         return token_user, user_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/auth", "sign_in", str(e), request_data, {})
+        func_helper.service_exception_error_logging("ag_api/auth", "sign_in", str(e), request_data, {})
         return None, None, "مشکلی در ورود شما رخ داده با پشتیبانی ارتباط بگیرید."
 
 
@@ -125,7 +125,7 @@ def sign_in_student(request_data):
         _, user_info, _ = student_service.select_student_info(user_id=res["user_id"])
         return token_user, user_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ags_api/auth", "sign_in_student", str(e), request_data, {})
+        func_helper.service_exception_error_logging("ags_api/auth", "sign_in_student", str(e), request_data, {})
         return None, None, "مشکلی در ورود شما رخ داده با پشتیبانی ارتباط بگیرید."
 
 
@@ -176,7 +176,7 @@ def sign_up(redis_db, request_data):
         return func_helper.get_tracking_code(), None, "ثبت نام شما با موفقیت انجام شد."
 
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/auth", "sign_up", str(e), request_data, {})
+        func_helper.service_exception_error_logging("ag_api/auth", "sign_up", str(e), request_data, {})
         return None, None, "مشکلی در ثبت نام شما رخ داده با پشتیبانی ارتباط بگیرید."
 
 
@@ -224,7 +224,7 @@ def send_otp(redis_db, request_data):
         token = func_helper.get_tracking_code()
         return token, {"phone": phone}, ""
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/auth", "send_otp", str(e), request_data, {})
+        func_helper.service_exception_error_logging("ag_api/auth", "send_otp", str(e), request_data, {})
         return None, None, "مشکلی در احراز هویت شما رخ داده با پشتیبانی ارتباط بگیرید."
 
 
@@ -280,5 +280,5 @@ def check_otp(redis_db, request_data):
             return token_user, user_info, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging(None, None, "ag_api/auth", "check_otp", str(e), request_data, {})
+        func_helper.service_exception_error_logging("ag_api/auth", "check_otp", str(e), request_data, {})
         return None, None, "مشکلی در احراز هویت شما رخ داده با پشتیبانی ارتباط بگیرید."

@@ -1,18 +1,14 @@
-import json, httpx
+import json
 from datetime import datetime
 
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.other import (
     create_comment,
-    create_payment,
-    create_payment_log,
     get_comment_user_info_by_phone,
     get_discount_by_code,
-    get_payment_status,
     get_result_state_for_user,
     get_scl_score_date,
     get_score_brain_categories,
-    list_all_products,
     list_latest_comments,
     list_user_transactions,
     mark_notification_read_if_allowed,
@@ -64,14 +60,7 @@ def normalize_persian_text(text):
     text = text.replace("\u0643", "\u06A9")
     return text
 
-def get_all_products(conn, cursor):
-    with session_scope() as session:
-        products_info = list_all_products(session=session)
-    token = func_helper.get_tracking_code()
-    return token, products_info, ""
-
-
-def get_transactions(conn, cursor, request_data, user_info):
+def get_transactions(request_data, user_info):
     try:
         with session_scope() as session:
             transactions = list_user_transactions(session=session, user_id=user_info["user_id"])
@@ -83,7 +72,7 @@ def get_transactions(conn, cursor, request_data, user_info):
         return None, None, "مشکلی در دریافت لیست تراکنش‌ها رخ داده است."
 
 
-def apply_discount(conn, cursor, request_data, user_info):
+def apply_discount(request_data, user_info):
     try:
         with session_scope() as session:
             res = get_discount_by_code(session=session, code=request_data["discount_code"])
@@ -113,145 +102,13 @@ def apply_discount(conn, cursor, request_data, user_info):
         return token, {"new_total": new_total}, ""
     except Exception as e:
         print("error occurred in apply discounts", e)
-        func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/other", "apply_discount", str(e), request_data, user_info
+        func_helper.service_exception_error_logging("ag_api/other", "apply_discount", str(e), request_data, user_info
         )
         return None, None, "در پردازش کد تخفیف مشکلی پیش آمده"
 
 
-def get_order_status(conn, cursor, data, user_info):
+def order_payment(request_data, user_info):
     try:
-        with session_scope() as session:
-            res = get_payment_status(
-                session=session,
-                user_id=user_info["user_id"],
-                payment_id=int(data["payment_id"]),
-            )
-        if res:
-            status = res["status"]
-            transactions_info = {
-                "id": res["id"],
-                "state": res["state"],
-                "status": res["status"],
-                "price": res["price"],
-                "product_data": json.loads(res["product_data"]),
-                "result": res["result"],
-                "date": res["date"]
-            }
-        else:
-            status = "UNDIFINE"
-            transactions_info = {}
-        token = func_helper.get_tracking_code()
-        return token, transactions_info, status
-    except Exception as e:
-        print(e)
-        return None, None, "مشکلی در دریافت وضعیت سفارش رخ داده است."
-
-
-def mellat_request_created(conn, cursor, data, user_info):
-    try:
-        token = 'eyJhbGciOiJIUzI1NiJ9.eyJSb2xlIjoiQWRtaW4iLCJJc3N1ZXIiOiIwMUZhcmRha2hlaWxpc2FieiIsIlVzZXJuYW1lIjoiTXJxMjciLCJleHAiOjE3NTMwODc5NzcsImlhdCI6MTc1MzA4Nzk3N30.mlcxgBMXIjmw04DPeMkSL5Ijqlg-ifZXQnw_d889qvM'
-        endpoint = "b2b"
-        result = {}
-        try:
-            data["user_id"] = user_info.get("user_id")
-            data["phone"] = user_info.get("phone")
-            with httpx.Client() as client:
-                request_data = {
-                    "token": token,
-                    "endpoint": endpoint,
-                    "gateway": "mellat",
-                    "data": data
-                }
-
-                response = client.post(
-                    "https://baazmoon.com/get_ref_info",
-                    json=request_data,
-                    timeout=30.0
-                )
-
-                if response.status_code == 200:
-                    result = response.json()
-                else:
-                    raise Exception(f"HTTP error: {response.status_code}")
-        except Exception as e:
-            print(f"Remote call failed, using local implementation: {e}")
-        if result.get("authenticate") and result.get("is_successful"):
-            ref_id = result["data"]["ref_id"]
-            url = result["data"]["url"]
-            message = result["message"]
-
-            with session_scope() as session:
-                create_payment(
-                    session=session,
-                    payment_data={
-                        "payment_id": data["payment_id"],
-                        "user_id": user_info["user_id"],
-                        "phone": user_info["phone"],
-                        "state": "SendPaymentGateway",
-                        "status": "PEND",
-                        "price": data["price"],
-                        "discount_price": data["discount_price"],
-                        "track_id": ref_id,
-                        "result": "انتقال به درگاه پرداخت",
-                        "discount_id": data["discount_id"],
-                        "message": message,
-                        "product_data": json.dumps(data, ensure_ascii=False),
-                        "token": ref_id,
-                    },
-                )
-            return ref_id, message, url
-
-        else:
-            message = result.get("message", "Unknown error from payment gateway")
-            with session_scope() as session:
-                create_payment_log(
-                    session=session,
-                    payment_data={
-                        "payment_id": data["payment_id"],
-                        "user_id": user_info["user_id"],
-                        "phone": user_info["phone"],
-                        "state": "NOTREFID",
-                        "status": "Error",
-                        "price": data["price"],
-                        "discount_price": data["discount_price"],
-                        "track_id": None,
-                        "result": "",
-                        "discount_id": data["discount_id"],
-                        "message": message,
-                        "product_data": json.dumps(data, ensure_ascii=False),
-                        "token": None,
-                    },
-                )
-            return None, message, None
-
-    except Exception as e:
-        with session_scope() as session:
-            create_payment_log(
-                session=session,
-                payment_data={
-                    "payment_id": data["payment_id"],
-                    "user_id": user_info["user_id"],
-                    "phone": user_info["phone"],
-                    "state": "MellatGatewayException",
-                    "status": "Bug",
-                    "price": data["price"],
-                    "discount_price": data["discount_price"],
-                    "track_id": None,
-                    "result": "مشکل در درگاه بانک ملت",
-                    "discount_id": data["discount_id"],
-                    "message": str(e),
-                    "product_data": json.dumps(data, ensure_ascii=False),
-                    "token": None,
-                },
-            )
-        return None, str(e), None
-
-
-def order_payment(conn, cursor, request_data, user_info):
-    try:
-        phone = user_info["phone"]
-
         # Expected request_data example:
         # {
         #     "AG": 10,
@@ -261,19 +118,6 @@ def order_payment(conn, cursor, request_data, user_info):
         #     "token": "314665f9-80a3-4929-95f1-41a19e665f06"
         # }
 
-        # Determine basic product name based on selected packages.
-        ag_count = int(request_data.get("AG", 0) or 0)
-        scl_count = int(request_data.get("SCL", 0) or 0)
-        if ag_count == 0 and scl_count > 0:
-            product_name = "بسته‌ی اختلال"
-        elif ag_count > 0 and scl_count == 0:
-            product_name = "بسته‌ی هدایت"
-        elif ag_count > 0 and scl_count > 0:
-            product_name = "بسته‌ی هدایت و اختلال"
-        else:
-            product_name = "بدون محصول"
-
-        discount_id = None
         discount_percentage = None
         if request_data.get("discount_code"):
             with session_scope() as session:
@@ -301,39 +145,15 @@ def order_payment(conn, cursor, request_data, user_info):
                             counter_field="used_apply",
                         )
 
-        # Calculate price based on selected packages and discounts.
-        price, discount_price, ag_count, scl_count = func_helper.get_price_payment(
-            request_data, discount_percentage=discount_percentage
-        )
-
-        payment_id = func_helper.get_payment_id()
-
-        # Store product details in a generic structure so future products can be added easily.
-        product_data = {
-            "price": price,
-            "discount_price": discount_price,
-            "product_name": product_name,
-            "packages": {
-                "AG": ag_count,
-                "SCL": scl_count,
-            },
-            # Backward-compatible count fields for the payment table mapper.
-            "AG": ag_count,
-            "SCL": scl_count,
-            "payment_id": payment_id,
-            "card_phone": phone,
-            "gateway": "mellat",
-            "discount_id": discount_id,
-        }
+        # Keep the existing package/discount validation path while the gateway is disabled.
+        func_helper.get_price_payment(request_data, discount_percentage=discount_percentage)
         return None, None, "متاسفانه فعلا درگاه پرداخت در دسترس نیست"
-        ref_id, message, url = mellat_request_created(conn, cursor, product_data, user_info)
-        return func_helper.get_tracking_code(), {"ref_id": ref_id, "url": url}, message
     except Exception as e:
         print(e)
         return None, None, "خطا در دسترسی به پرداخت"
 
 
-def get_report_data(conn, cursor, request_data, user_info):
+def get_report_data(request_data, user_info):
     try:
         kind = request_data.get("report_type", "").upper()
         student_id = request_data.get("student_id")
@@ -453,7 +273,7 @@ def get_report_data(conn, cursor, request_data, user_info):
         return None, None, "خطا در دریافت اطلاعات گزارش."
 
 
-def get_comments(conn, cursor):
+def get_comments():
     try:
         with session_scope() as session:
             comment_rows = list_latest_comments(session=session, limit=100)
@@ -461,13 +281,12 @@ def get_comments(conn, cursor):
         return func_helper.get_tracking_code(), comments, ""
     except Exception as e:
         print("error occurred in get comments", e)
-        func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/other", "get_comments", str(e), {}, {}
+        func_helper.service_exception_error_logging("ag_api/other", "get_comments", str(e), {}, {}
         )
         return None, None, "خطا در دریافت نظرات."
 
 
-def add_comment(conn, cursor, request_data):
+def add_comment(request_data):
     try:
         with session_scope() as session:
             user = get_comment_user_info_by_phone(session=session, phone=request_data["phone"])
@@ -487,10 +306,8 @@ def add_comment(conn, cursor, request_data):
             )
         return func_helper.get_tracking_code(), None, "نظر شما با موفقیت ثبت شد."
     except Exception as e:
-        func_helper.safe_rollback(conn)
         print("error occurred in add comment", e)
-        func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/other", "add_comment", str(e), request_data, {}
+        func_helper.service_exception_error_logging("ag_api/other", "add_comment", str(e), request_data, {}
         )
         return None, None, "خطا در ثبت نظر."
 
@@ -508,7 +325,7 @@ def _notification_role_aliases(role):
     }.get(role, [role])
 
 
-def mark_notification_read(conn, cursor, request_data, user_info):
+def mark_notification_read(request_data, user_info):
     try:
         notification_id = int(request_data["notification_id"])
         user_id = int(user_info["user_id"])
@@ -526,9 +343,7 @@ def mark_notification_read(conn, cursor, request_data, user_info):
     except (TypeError, ValueError):
         return None, None, "شناسه اعلان معتبر نیست."
     except Exception as e:
-        func_helper.safe_rollback(conn)
         print("error occurred in mark notification read", e)
-        func_helper.service_exception_error_logging(
-            conn, cursor, "ag_api/other", "mark_notification_read", str(e), request_data, user_info
+        func_helper.service_exception_error_logging("ag_api/other", "mark_notification_read", str(e), request_data, user_info
         )
         return None, None, "خطا در ثبت وضعیت اعلان."

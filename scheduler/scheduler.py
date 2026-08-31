@@ -2,7 +2,6 @@ import os
 import time
 import redis
 import json
-import pyodbc
 import logging
 import sys
 import io
@@ -44,7 +43,6 @@ from config import (
     REDIS_PORT,
     REDIS_PASSWORD,
     REDIS_DB,
-    DB_CONN_STRING,
 )
 
 master_file = None
@@ -205,13 +203,6 @@ class AGReportScheduler:
             db=REDIS_DB,
             decode_responses=True
         )
-
-        try:
-            self.db_conn = pyodbc.connect(DB_CONN_STRING)
-            self.db_cursor = self.db_conn.cursor()
-        except pyodbc.Error as e:
-            logging.error(f"Database connection failed: {str(e)}")
-            raise
 
     def _log_error(self, user_id: str, kind: str, error: str) -> None:
         """Log errors to database with user context."""
@@ -1515,9 +1506,6 @@ class AGReportScheduler:
         except Exception as e:
             logging.error(f"AG Report scheduler crashed: {str(e)}")
             raise
-        finally:
-            self.db_conn.close()
-            logging.info("Database connection closed")
 
 
 if __name__ == "__main__":
