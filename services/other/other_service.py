@@ -102,8 +102,7 @@ def apply_discount(request_data, user_info):
         return token, {"new_total": new_total}, ""
     except Exception as e:
         print("error occurred in apply discounts", e)
-        func_helper.service_exception_error_logging(
-            None, None, "ag_api/other", "apply_discount", str(e), request_data, user_info
+        func_helper.service_exception_error_logging("ag_api/other", "apply_discount", str(e), request_data, user_info
         )
         return None, None, "در پردازش کد تخفیف مشکلی پیش آمده"
 
@@ -282,8 +281,7 @@ def get_comments():
         return func_helper.get_tracking_code(), comments, ""
     except Exception as e:
         print("error occurred in get comments", e)
-        func_helper.service_exception_error_logging(
-            None, None, "ag_api/other", "get_comments", str(e), {}, {}
+        func_helper.service_exception_error_logging("ag_api/other", "get_comments", str(e), {}, {}
         )
         return None, None, "خطا در دریافت نظرات."
 
@@ -309,8 +307,7 @@ def add_comment(request_data):
         return func_helper.get_tracking_code(), None, "نظر شما با موفقیت ثبت شد."
     except Exception as e:
         print("error occurred in add comment", e)
-        func_helper.service_exception_error_logging(
-            None, None, "ag_api/other", "add_comment", str(e), request_data, {}
+        func_helper.service_exception_error_logging("ag_api/other", "add_comment", str(e), request_data, {}
         )
         return None, None, "خطا در ثبت نظر."
 
@@ -347,7 +344,6 @@ def mark_notification_read(request_data, user_info):
         return None, None, "شناسه اعلان معتبر نیست."
     except Exception as e:
         print("error occurred in mark notification read", e)
-        func_helper.service_exception_error_logging(
-            None, None, "ag_api/other", "mark_notification_read", str(e), request_data, user_info
+        func_helper.service_exception_error_logging("ag_api/other", "mark_notification_read", str(e), request_data, user_info
         )
         return None, None, "خطا در ثبت وضعیت اعلان."

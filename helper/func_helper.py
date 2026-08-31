@@ -434,7 +434,7 @@ async def authorizer(request_data: Mapping[str, Any]):
 
         return True, "", {"user_id": res["user_id"], "phone": res["phone"], "role": res["role"]}
     except Exception as e:
-        service_exception_error_logging(None, None, "ag_api/check", "check", str(e), request_data, {})
+        service_exception_error_logging("ag_api/check", "check", str(e), request_data, {})
         return False, "اطلاعات دریافتی شما دچار مشکل شده لطفا یکبار خروج کرده و سپس ورود شوید.", None
 
 
@@ -512,15 +512,13 @@ async def exception_error_logging(
 
 
 def service_exception_error_logging(
-        conn: Any,
-        cursor: Any,
         end_point: str,
         func_name: str,
         error_message: str,
         data: Mapping[str, Any],
         user_info: Mapping[str, Any],
 ) -> None:
-    """Log service-level exceptions using an existing connection."""
+    """Log service-level exceptions."""
     try:
         with session_scope() as session:
             create_api_log(
@@ -681,8 +679,7 @@ def update_user_and_role_password(
         token = get_tracking_code()
         return token
     except Exception as e:
-        service_exception_error_logging(
-            None, None, "ag_api/password", f"update_{role_table}_password",
+        service_exception_error_logging("ag_api/password", f"update_{role_table}_password",
             str(e), request_data, user_info
         )
         return None
@@ -841,8 +838,7 @@ def update_student_access_and_capacity(
         return token, None, "دسترسی دانش‌آموز با موفقیت به‌روزرسانی شد."
 
     except Exception as e:
-        service_exception_error_logging(
-            None, None, end_point,
+        service_exception_error_logging(end_point,
             f"update_student_access_and_capacity_{role_type}",
             str(e), request_data, user_info
         )

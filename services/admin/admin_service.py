@@ -60,8 +60,7 @@ def change_capacity(request_data):
         }, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging(
-            None, None, "ag_api/admin_request", "change_capacity", str(e), request_data, {}
+        func_helper.service_exception_error_logging("ag_api/admin_request", "change_capacity", str(e), request_data, {}
         )
         return None, None, f"خطا در به‌روزرسانی ظرفیت: {str(e)}"
 
@@ -92,8 +91,7 @@ def get_user_info(request_data):
         return token, user_info, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging(
-            None, None, "ag_api/admin_request", "get_user_info", str(e), request_data, {}
+        func_helper.service_exception_error_logging("ag_api/admin_request", "get_user_info", str(e), request_data, {}
         )
         return None, None, f"خطا در دریافت اطلاعات کاربر: {str(e)}"
 
@@ -157,7 +155,6 @@ def check_student_quiz_answer(request_data):
         return token, result, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging(
-            None, None, "ag_api/admin_request", "check_student_quiz_answer", str(e), request_data, {}
+        func_helper.service_exception_error_logging("ag_api/admin_request", "check_student_quiz_answer", str(e), request_data, {}
         )
         return None, None, f"خطا در بررسی پاسخ‌های آزمون دانش‌آموز: {str(e)}"

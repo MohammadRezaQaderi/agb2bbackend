@@ -451,8 +451,7 @@ def add_consultant(request_data, user_info):
             "مشاور شما با موفقیت ثبت شد.",
         )
     except Exception as e:
-        func_helper.service_exception_error_logging(
-            None, None, "ag_api/service", "add_consultant", str(e), request_data, user_info
+        func_helper.service_exception_error_logging("ag_api/service", "add_consultant", str(e), request_data, user_info
         )
         return _error_response(
             method_type,
@@ -574,8 +573,7 @@ def add_student(request_data, user_info):
             "دانش‌آموز شما با موفقیت ثبت شد.",
         )
     except Exception as e:
-        func_helper.service_exception_error_logging(
-            None, None, "ag_api/service", "add_student", str(e), request_data, user_info
+        func_helper.service_exception_error_logging("ag_api/service", "add_student", str(e), request_data, user_info
         )
         return _error_response(method_type, "مشکلی در افزودن دانش‌آموز رخ داده است.")
 

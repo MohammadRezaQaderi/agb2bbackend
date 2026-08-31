@@ -1,7 +1,7 @@
 # SQLAlchemy Layer
 
-This package is the gradual replacement path for ad-hoc SQL strings and the
-legacy `helper.db.db_helper` functions.
+This package is the application database layer and replacement path for
+ad-hoc SQL strings.
 
 ## Layout
 
@@ -19,5 +19,6 @@ legacy `helper.db.db_helper` functions.
 - Keep table names unchanged while schema cleanup is still settling.
 - Move read-heavy endpoints first: lists, dashboards, reports, admin lookups.
 - Keep business logic in services; query modules should only build/fetch data.
-- Move write paths only after transaction ownership is centralized.
-- Do not delete the legacy pyodbc helpers until all callers are migrated.
+- Keep write paths inside `session_scope()` so related inserts/updates commit
+  or rollback together.
+- Keep low-level pyodbc usage limited to schema/migration/report scripts.
