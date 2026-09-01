@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import case, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from helper.db.sqlalchemy.models import (
@@ -117,13 +117,13 @@ def list_notifications_for_user(session: Session, user_id: int, role_terms: list
             Notification.priority.label("priority"),
             Notification.full_text.label("fullText"),
             Notification.persian_date.label("persian_date"),
-            read_exists.label("is_read"),
+            case((read_exists, 1), else_=0).label("is_read"),
         )
         .where(or_(Notification.user_id == user_id, Notification.roles.like("%all%"), *role_conditions))
         .order_by(Notification.created_time.desc())
     )
 
     return [
-        {**dict(row), "is_read": 1 if row["is_read"] else 0}
+        {**dict(row), "is_read": int(row["is_read"] or 0)}
         for row in session.execute(statement).mappings().all()
     ]

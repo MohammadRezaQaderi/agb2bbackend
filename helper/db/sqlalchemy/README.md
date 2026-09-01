@@ -21,4 +21,6 @@ ad-hoc SQL strings.
 - Keep business logic in services; query modules should only build/fetch data.
 - Keep write paths inside `session_scope()` so related inserts/updates commit
   or rollback together.
+- Do not catch and swallow DB exceptions inside `session_scope()` blocks; let the
+  context manager rollback, then convert the error at the service boundary.
 - Keep low-level pyodbc usage limited to schema/migration/report scripts.

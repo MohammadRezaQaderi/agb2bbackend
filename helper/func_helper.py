@@ -1,4 +1,3 @@
-import base64
 import os
 import string
 import random
@@ -35,6 +34,7 @@ from helper.password_helper import (
     verify_password,
     verify_password_hash,
 )
+from helper import file_helper
 from config import DEVELOP_TOKEN
 
 
@@ -47,30 +47,13 @@ def save_base64_image(pic_value: str | None, last_pic: str | None, storage_dir: 
     if not pic_value:
         return None
 
-    if not pic_value.startswith("data:image") and "," not in pic_value:
+    if not pic_value.startswith("data:image"):
         return pic_value
 
-    if "," in pic_value:
-        header, encoded_data = pic_value.split(",", 1)
-        ext = header.split(";")[0].split("/")[-1] if "/" in header else "jpg"
-    else:
-        encoded_data = pic_value
-        ext = "jpg"
-
-    if ext == "jpeg":
-        ext = "jpg"
-
-    os.makedirs(storage_dir, exist_ok=True)
-    new_file_name = f"{get_tracking_code()}.{ext}"
-    file_path = os.path.join(storage_dir, new_file_name)
-
-    with open(file_path, "wb") as fh:
-        fh.write(base64.b64decode(encoded_data))
-
-    if last_pic:
-        last_path = os.path.join(storage_dir, os.path.basename(last_pic))
-        if os.path.exists(last_path):
-            os.remove(last_path)
+    image_bytes, extension = file_helper.decode_base64_image(pic_value)
+    new_file_name = f"{get_tracking_code()}{extension}"
+    file_helper.write_storage_file(storage_dir, new_file_name, image_bytes)
+    file_helper.remove_storage_file(storage_dir, last_pic)
 
     return new_file_name
 
@@ -474,12 +457,17 @@ def check_security_code(code: str | int, check: str | int) -> bool:
         return False
 
 
-def random_generate_phone(n: int) -> str:
-    """Generate a unique random phone number with prefix '009' and n-digit suffix."""
+def random_phone_candidate(n: int) -> str:
+    """Generate a random phone candidate with prefix '009' and n-digit suffix."""
     range_start = 10 ** (n - 1)
     range_end = (10 ** n) - 1
+    return '009' + str(randint(range_start, range_end))
+
+
+def random_generate_phone(n: int) -> str:
+    """Generate a unique random phone number with prefix '009' and n-digit suffix."""
     while True:
-        phone = '009' + str(randint(range_start, range_end))
+        phone = random_phone_candidate(n)
         with session_scope() as session:
             exists = user_phone_exists(session=session, phone=phone)
         if not exists:
