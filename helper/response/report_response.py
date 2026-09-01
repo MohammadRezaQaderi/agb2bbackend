@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from helper.response.password_response import build_display_password
+
 
 def _safe_access(raw_access: Any) -> dict[str, Any]:
     try:
@@ -25,7 +27,7 @@ def build_student_report_response(
             "phone": stu.get("phone"),
             "first_name": stu.get("first_name"),
             "last_name": stu.get("last_name"),
-            "password": None,
+            "password": build_display_password(stu.get("password")),
             "sex": stu.get("sex"),
             "city": stu.get("city"),
             "access": _safe_access(stu.get("access")),

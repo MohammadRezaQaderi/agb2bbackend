@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from helper.response.password_response import build_display_password
+
 
 def build_consultant_list_response(consultants: list[dict[str, Any]]) -> list[dict[str, Any]]:
     responses = []
@@ -18,7 +20,7 @@ def build_consultant_list_response(consultants: list[dict[str, Any]]) -> list[di
                 "last_name": consultant.get("last_name"),
                 "sex": consultant.get("sex"),
                 "full_name": f"{first_name} {last_name}".strip(),
-                "password": None,
+                "password": build_display_password(consultant.get("password")),
             }
         )
     return responses

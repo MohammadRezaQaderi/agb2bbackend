@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from report.db_helper import get_db_connection, close_db_connection
 from report.excel_helper import read_excel_file, write_excel_file, validate_excel_columns
+from helper.response.password_response import build_display_password
 from config import REPORT_OUTPUT_DIR
 
 
@@ -108,7 +109,7 @@ def find_student(
         Tuple of (user_id, stu_id, current_con_id, phone, password) if found, None otherwise.
     """
     cursor.execute("""
-        SELECT s.user_id, s.stu_id, s.consultant_user_id AS con_id, u.phone, CAST(NULL AS NVARCHAR(255)) AS password
+        SELECT s.user_id, s.stu_id, s.consultant_user_id AS con_id, u.phone, u.password AS password
         FROM stu s
         INNER JOIN users u ON u.user_id = s.user_id
         WHERE s.user_id BETWEEN ? AND ? 
@@ -216,7 +217,7 @@ def process_student_update(
                 'status': 'Success',
                 'user_id': user_id,
                 'phone': phone,
-                'password': password,
+                'password': build_display_password(password),
                 'con_id': con_id,
                 'previous_con_id': current_con_id,
             })
