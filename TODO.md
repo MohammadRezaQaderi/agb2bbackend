@@ -26,11 +26,13 @@ stable.
 - [x] Redact sensitive request fields before writing service error logs.
   - `password`, `re_password`, OTP/security codes, and tokens are masked before
     storing `api_logs.data`.
-- [ ] Harden file upload endpoints in `main.py`.
+- [x] Harden file upload endpoints in `main.py`.
   - Validate file extension and content type.
   - Avoid `filename.split(".")[1]`; use `pathlib.Path(...).suffix`.
   - Enforce file size limits.
   - Prevent deleting arbitrary previous files via `last_pic` / `last_voice`.
+  - Static file responses now resolve paths inside their configured storage
+    directory before serving.
 
 ## P1 - Project Structure And Maintainability
 
