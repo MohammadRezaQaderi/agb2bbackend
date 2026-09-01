@@ -44,6 +44,14 @@ def _role_handler(user_info, handlers):
     return handler() if handler else None
 
 
+def _generate_available_student_phone(session, attempts=20):
+    for _ in range(attempts):
+        phone = func_helper.random_phone_candidate(8)
+        if not user_phone_exists(session=session, phone=phone):
+            return phone
+    raise ValueError("Could not generate a unique student phone.")
+
+
 def sign_out(request_data, user_info):
     method_type = "DELETE"
     tracking_token, response_data, response_message = auth_service.sign_out(
@@ -442,7 +450,6 @@ def add_consultant(request_data, user_info):
                 request_data=request_data,
                 owner_user_id=user_info["user_id"],
             )
-            request_data["password"] = password
 
         return _service_response(
             method_type,
@@ -553,9 +560,9 @@ def add_student(request_data, user_info):
         return _error_response(method_type, ACCESS_DENIED_MESSAGE)
 
     try:
-        phone = func_helper.random_generate_phone(8)
         password = func_helper.random_generate_password()
         with session_scope() as session:
+            phone = _generate_available_student_phone(session=session)
             create_student_account(
                 session=session,
                 phone=phone,
@@ -563,8 +570,6 @@ def add_student(request_data, user_info):
                 request_data=request_data,
                 user_info=user_info,
             )
-            request_data["phone"] = phone
-            request_data["password"] = password
 
         return _service_response(
             method_type,

@@ -457,12 +457,17 @@ def check_security_code(code: str | int, check: str | int) -> bool:
         return False
 
 
-def random_generate_phone(n: int) -> str:
-    """Generate a unique random phone number with prefix '009' and n-digit suffix."""
+def random_phone_candidate(n: int) -> str:
+    """Generate a random phone candidate with prefix '009' and n-digit suffix."""
     range_start = 10 ** (n - 1)
     range_end = (10 ** n) - 1
+    return '009' + str(randint(range_start, range_end))
+
+
+def random_generate_phone(n: int) -> str:
+    """Generate a unique random phone number with prefix '009' and n-digit suffix."""
     while True:
-        phone = '009' + str(randint(range_start, range_end))
+        phone = random_phone_candidate(n)
         with session_scope() as session:
             exists = user_phone_exists(session=session, phone=phone)
         if not exists:
