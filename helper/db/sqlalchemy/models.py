@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Unicode, UnicodeText
+from sqlalchemy import DateTime, Float, ForeignKey, Identity, Integer, String, Text, Unicode, UnicodeText
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from helper.db.sqlalchemy.base import Base, TimestampMixin
@@ -32,7 +32,7 @@ class User(Base, TimestampMixin):
 class Institute(Base, TimestampMixin):
     __tablename__ = "ins"
 
-    ins_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ins_id: Mapped[int | None] = mapped_column(Integer, Identity(), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
     name: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
     logo: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -44,7 +44,7 @@ class Institute(Base, TimestampMixin):
 class School(Base, TimestampMixin):
     __tablename__ = "sch"
 
-    sch_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sch_id: Mapped[int | None] = mapped_column(Integer, Identity(), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
     name: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
     logo: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -56,7 +56,7 @@ class School(Base, TimestampMixin):
 class OwnerConsultant(Base, TimestampMixin):
     __tablename__ = "ocon"
 
-    ocon_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ocon_id: Mapped[int | None] = mapped_column(Integer, Identity(), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
     first_name: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
     last_name: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
@@ -70,7 +70,7 @@ class OwnerConsultant(Base, TimestampMixin):
 class Consultant(Base, TimestampMixin):
     __tablename__ = "con"
 
-    con_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    con_id: Mapped[int | None] = mapped_column(Integer, Identity(), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
     first_name: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
     last_name: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
@@ -88,7 +88,7 @@ class Consultant(Base, TimestampMixin):
 class Student(Base, TimestampMixin):
     __tablename__ = "stu"
 
-    stu_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stu_id: Mapped[int | None] = mapped_column(Integer, Identity(), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
     first_name: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
     last_name: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
@@ -376,7 +376,7 @@ class SclScore(Base, TimestampMixin):
 class ResultState(Base, TimestampMixin):
     __tablename__ = "result_state"
 
-    result_state_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    result_state_id: Mapped[int | None] = mapped_column(Integer, Identity(), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), primary_key=True)
     t_state: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
     r_state: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
