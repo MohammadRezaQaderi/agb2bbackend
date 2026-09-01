@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request, Form, UploadFile, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
 import helper.api_metrics as api_metrics
+import helper.file_helper as file_helper
 import helper.func_helper as func_helper
 import helper.static_data.get_data as static_data
 from helper.db.sqlalchemy import session_scope
@@ -28,6 +29,18 @@ from config import (
 
 app = FastAPI()
 app.middleware("http")(api_metrics.prometheus_http_middleware)
+
+
+def _storage_file_response(storage_dir: str, filename: str, download_name: str | None = None) -> FileResponse:
+    try:
+        file_path = file_helper.safe_storage_path(storage_dir, filename)
+        clean_name = file_helper.normalize_storage_filename(filename)
+    except file_helper.FileValidationError:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if os.path.isfile(file_path):
+        return FileResponse(file_path, filename=download_name or clean_name)
+    raise HTTPException(status_code=404, detail="File not found")
 
 
 @app.get("/ag_api/metrics")
@@ -479,19 +492,16 @@ async def update_user_voice(
         )
         if not state:
             return func_helper.not_auth_return(message=state_message)
-        generate_random_name = func_helper.get_tracking_code()
-        new_file_name = generate_random_name + "." + voice.filename.split(".")[1]
-        voice.filename = new_file_name
-        file_path = os.path.join(VOICES_DIR, voice.filename)
-        last_path = os.path.join(VOICES_DIR, last_voice)
-        if os.path.exists(last_path):
-            os.remove(last_path)
-        else:
-            print("The file does not exist")
+
+        file_helper.validate_content_type(voice.content_type, file_helper.VOICE_CONTENT_TYPES)
+        extension = file_helper.get_extension(voice.filename, file_helper.VOICE_EXTENSIONS)
+        voice_content = file_helper.read_limited_file(voice.file, file_helper.MAX_VOICE_BYTES)
+        new_file_name = f"{func_helper.get_tracking_code()}{extension}"
+        file_helper.write_storage_file(VOICES_DIR, new_file_name, voice_content)
+        file_helper.remove_storage_file(VOICES_DIR, last_voice)
+
         data = {"phone": phone, "setting_id": setting_id, "description": description, "quiz_id": quiz_id,
-                "user_id": int(user_id), "voice": voice.filename}
-        with open(file_path, "wb") as file_object:
-            file_object.write(voice.file.read())
+                "user_id": int(user_id), "voice": new_file_name}
         if role == "ins":
             tracking_token, response_data, response_message = institute_service.change_user_voice(
                 request_data=data, user_info=user_info
@@ -510,6 +520,8 @@ async def update_user_voice(
         else:
             return {"status": 200, "tracking_code": None, "method_type": method_type,
                     "error": "شما به این سرویس دسترسی ندارید."}
+    except file_helper.FileValidationError:
+        return service.service_response(method_type, None, error_message="فایل صوتی معتبر نیست.")
     except Exception as e:
         return await func_helper.exception_error_logging("ag_api", "update_user_voice", str(e), method_type)
 
@@ -517,11 +529,7 @@ async def update_user_voice(
 @app.get("/ags_api/get_ins_pic/{filename}")
 @app.get("/ag_api/get_ins_pic/{filename}")
 async def get_ins_pic(filename: str):
-    file_path = os.path.join(INS_PIC_DIR, filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, filename=filename)
-    else:
-        raise HTTPException(status_code=404, detail="File not found")
+    return _storage_file_response(INS_PIC_DIR, filename)
 
 
 def _report_error(status_code: int, message: str) -> JSONResponse:
@@ -565,11 +573,14 @@ async def _get_report_pdf(
         if status == "queued":
             return _report_error(324, "کارنامه در صف تولید است.")
 
-        folder_check = os.path.join(REPORTS_DIR, phone)
-        file_path = os.path.join(folder_check, report_filename)
-        if os.path.exists(file_path):
+        try:
+            folder_check = os.path.join(REPORTS_DIR, file_helper.normalize_storage_filename(phone))
+            file_path = file_helper.safe_storage_path(folder_check, report_filename)
+        except file_helper.FileValidationError:
+            return _report_error(404, "File not found")
+        if os.path.isfile(file_path):
             return FileResponse(file_path, filename=report_filename)
-        if os.path.exists(folder_check):
+        if os.path.isdir(folder_check):
             return _report_error(322, "کارنامه‌ها درحال آماده سازی می‌باشد.")
         return _report_error(404, "File not found")
     except Exception as e:
@@ -610,71 +621,43 @@ async def get_scl_third_pdf(phone: str, kind: str):
 @app.get("/ags_api/get_default/{reportname}")
 @app.get("/ag_api/get_default/{reportname}")
 async def get_first_default_pdf(reportname: str):
-    file_path = os.path.join(DEFAULT_REPORT_PATH, reportname)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, filename="Report.pdf")
-    else:
-        raise HTTPException(status_code=404, detail="File not found")
+    return _storage_file_response(DEFAULT_REPORT_PATH, reportname, download_name="Report.pdf")
 
 
 @app.get("/ags_api/get_pic/{filename}")
 @app.get("/ag_api/get_pic/{filename}")
 async def get_pic(filename: str):
-    file_path = os.path.join(PICS_INFO_DIR, filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, filename=filename)
-    else:
-        raise HTTPException(status_code=404, detail="File not found")
+    return _storage_file_response(PICS_INFO_DIR, filename)
 
 
 @app.get("/ags_api/get_pic_scl/{filename}")
 @app.get("/ag_api/get_pic_scl/{filename}")
 async def get_pic_scl(filename: str):
-    file_path = os.path.join(PICS_WORD_SCL_DIR, filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, filename=filename)
-    else:
-        raise HTTPException(status_code=404, detail="File not found")
+    return _storage_file_response(PICS_WORD_SCL_DIR, filename)
 
 
 @app.get("/ags_api/get_pic_info/report/{filename}")
 @app.get("/ag_api/get_pic_info/report/{filename}")
 async def get_pic_info_report(filename: str):
-    file_path = os.path.join(PICS_REPORT_DIR, filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, filename=filename)
-    else:
-        raise HTTPException(status_code=404, detail="File not found")
+    return _storage_file_response(PICS_REPORT_DIR, filename)
 
 
 @app.get("/ags_api/get_pic_info/quiz/{filename}")
 @app.get("/ag_api/get_pic_info/quiz/{filename}")
 async def get_pic_info(filename: str):
-    file_path = os.path.join(PICS_QUIZ_DIR, filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, filename=filename)
-    else:
-        raise HTTPException(status_code=404, detail="File not found")
+    return _storage_file_response(PICS_QUIZ_DIR, filename)
 
 
 @app.get("/ags_api/get_quiz_pic/{filename}")
 @app.get("/ag_api/get_quiz_pic/{filename}")
 async def get_quiz_pic(filename: str):
-    file_path = os.path.join(QUIZ_PIC_DIR, filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, filename=filename)
-    else:
-        raise HTTPException(status_code=404, detail="File not found")
+    return _storage_file_response(QUIZ_PIC_DIR, filename)
 
 
 @app.get("/ags_api/get_voice/{filename}")
 @app.get("/ag_api/get_voice/{filename}")
 async def get_voice(filename: str):
-    file_path = os.path.join(VOICES_DIR, filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, filename=filename)
-    else:
-        raise HTTPException(status_code=404, detail="File not found")
+    return _storage_file_response(VOICES_DIR, filename)
 
 @app.get("/ags_api/majors")
 @app.get("/ag_api/majors")
@@ -720,8 +703,4 @@ async def get_field(field_id: int):
 @app.get("/ags_api/get_pic_info/field/{filename}")
 @app.get("/ag_api/get_pic_info/field/{filename}")
 async def get_pic_info_field(filename: str):
-    file_path = os.path.join(PICS_FIELD_DIR, filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, filename=filename)
-    else:
-        raise HTTPException(status_code=404, detail="File not found")
+    return _storage_file_response(PICS_FIELD_DIR, filename)

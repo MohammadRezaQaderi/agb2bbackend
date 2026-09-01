@@ -26,11 +26,13 @@ stable.
 - [x] Redact sensitive request fields before writing service error logs.
   - `password`, `re_password`, OTP/security codes, and tokens are masked before
     storing `api_logs.data`.
-- [ ] Harden file upload endpoints in `main.py`.
+- [x] Harden file upload endpoints in `main.py`.
   - Validate file extension and content type.
   - Avoid `filename.split(".")[1]`; use `pathlib.Path(...).suffix`.
   - Enforce file size limits.
   - Prevent deleting arbitrary previous files via `last_pic` / `last_voice`.
+  - Static file responses now resolve paths inside their configured storage
+    directory before serving.
 
 ## P1 - Project Structure And Maintainability
 
@@ -76,10 +78,13 @@ stable.
 - [x] Remove legacy runtime `helper/db/db_helper.py`.
   - Runtime database access now goes through the SQLAlchemy layer.
   - Low-level pyodbc usage remains only in schema/migration/report scripts.
-- [ ] Centralize transaction handling.
-  - Many service functions call `commit()` / `rollback()` themselves.
-  - Add a small transaction context helper so partial writes are easier to
-    reason about.
+- [x] Centralize transaction handling.
+  - Runtime writes use SQLAlchemy `session_scope()` so related inserts/updates
+    commit or rollback together.
+  - Manual `commit()` / `rollback()` remains only in migration/schema/report
+    scripts.
+  - Account/student creation avoids mutating request payloads with generated
+    credentials during DB transactions.
 - [ ] Review dynamic SQL helper inputs.
   - Values are parameterized, but table names, field names, and conditions are
     built with f-strings.
