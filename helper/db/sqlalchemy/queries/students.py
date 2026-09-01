@@ -41,6 +41,7 @@ def student_list_statement(
             Student.stu_id.label("stu_id"),
             Student.user_id.label("user_id"),
             User.phone.label("phone"),
+            User.password.label("password"),
             Student.first_name.label("first_name"),
             Student.last_name.label("last_name"),
             Student.sex.label("sex"),

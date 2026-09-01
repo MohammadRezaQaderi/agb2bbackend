@@ -362,7 +362,8 @@ def process_student_row(
         student_report['processed_province_id'] = province_id
 
         phone = func_helper.random_generate_phone(8)
-        password = func_helper.encrypt_password(func_helper.random_generate_password())
+        plain_password = func_helper.random_generate_password()
+        encrypted_password = func_helper.encrypt_password(plain_password)
 
         print(f"Processing: {first_name} {last_name} - Phone: {phone}")
 
@@ -377,7 +378,7 @@ def process_student_row(
                 province_id=province_id,
                 birth_date=birth_date,
                 phone=phone,
-                password=password,
+                password=encrypted_password,
                 ins_id=ins_id,
                 con_id=con_id,
                 adder_id=ins_id,
@@ -388,7 +389,7 @@ def process_student_row(
                 'status': 'Success',
                 'user_id': user_id if not dry_run else 0,
                 'phone': phone,
-                'password': password,
+                'password': plain_password,
             })
             print(f"✓ Successfully processed: {first_name} {last_name}")
         else:

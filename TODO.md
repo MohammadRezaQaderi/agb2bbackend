@@ -23,6 +23,9 @@ stable.
     passwords in responses/reports.
   - Decide whether the product really needs reversible passwords; otherwise
     migrate to one-way hashing.
+- [x] Redact sensitive request fields before writing service error logs.
+  - `password`, `re_password`, OTP/security codes, and tokens are masked before
+    storing `api_logs.data`.
 - [ ] Harden file upload endpoints in `main.py`.
   - Validate file extension and content type.
   - Avoid `filename.split(".")[1]`; use `pathlib.Path(...).suffix`.

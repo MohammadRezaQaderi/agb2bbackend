@@ -17,6 +17,7 @@ from sqlalchemy import text
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from helper.db.sqlalchemy import session_scope
+from helper.response.password_response import build_display_password
 from report.excel_helper import write_excel_file
 from config import REPORT_OUTPUT_DIR, REPORT_DEFAULT_INS_ID
 
@@ -26,7 +27,7 @@ COLUMN_MAPPING: Dict[str, str] = {
     'first_name': 's.first_name',
     'last_name': 's.last_name',
     'phone': 'u.phone',
-    'password': 'CAST(NULL AS NVARCHAR(255)) as password',
+    'password': 'u.password AS password',
     'gender': """
         CASE 
             WHEN s.sex = 1 THEN 'پسر'
@@ -87,6 +88,8 @@ def get_students_by_ins_id(
             return pd.DataFrame()
 
         df = pd.DataFrame.from_records([dict(row) for row in students])
+        if "password" in df.columns:
+            df["password"] = df["password"].apply(build_display_password)
         return df
 
     except Exception as e:

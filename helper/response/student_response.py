@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from helper.response.password_response import build_display_password
+
 
 def build_student_list_response(
     students: list[dict[str, Any]],
@@ -32,7 +34,7 @@ def build_student_list_response(
                 "last_name": stu.get("last_name"),
                 "con_name": con_name,
                 "con_id": stu.get("con_id") or default_con_id,
-                "password": None,
+                "password": build_display_password(stu.get("password")),
                 "sex": stu.get("sex"),
                 "city": stu.get("city"),
                 "full_name": f"{first_name} {last_name}".strip(),
