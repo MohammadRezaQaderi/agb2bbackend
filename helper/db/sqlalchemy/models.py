@@ -307,7 +307,7 @@ class NotificationRead(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     notification_id: Mapped[int] = mapped_column(ForeignKey("notifications.id"), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), nullable=False)
-    created_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_time: Mapped[datetime | None] = mapped_column(DateTime, default=datetime.now, nullable=True)
 
 
 class QuizAttempt(Base, TimestampMixin):
