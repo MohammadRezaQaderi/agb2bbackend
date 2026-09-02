@@ -1,11 +1,100 @@
+import hashlib
+import json
+import logging
+
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.admin import (
     add_capacity_to_user,
+    count_admins,
+    create_admin,
+    create_admin_log,
+    get_active_admin_by_token_hash,
     get_admin_user_info_by_phone,
     get_student_quiz_answer_info_by_phone,
     get_user_role_by_phone,
 )
+from helper.log_sanitizer import sanitize_log_data
 import helper.func_helper as func_helper
+from config import DEVELOP_TOKEN
+
+
+logger = logging.getLogger(__name__)
+
+
+def _admin_token_hash(token: str) -> str:
+    return hashlib.sha256(str(token).encode("utf-8")).hexdigest()
+
+
+def authenticate_admin_token(token: str | None) -> dict | None:
+    if not token:
+        return None
+
+    token_hash = _admin_token_hash(token)
+    try:
+        with session_scope() as session:
+            if count_admins(session=session) == 0 and DEVELOP_TOKEN:
+                create_admin(
+                    session=session,
+                    admin_name="develop_admin",
+                    token_hash=_admin_token_hash(DEVELOP_TOKEN),
+                    created_by="config_seed",
+                )
+            admin = get_active_admin_by_token_hash(session=session, token_hash=token_hash)
+        return admin
+    except Exception:
+        logger.exception("Admin authentication failed")
+        return None
+
+
+def _json_value(value):
+    if value is None:
+        return None
+    return json.dumps(value, ensure_ascii=False, default=str)
+
+
+def _response_message(response: dict) -> str:
+    if response.get("error"):
+        return str(response.get("error"))
+    response_body = response.get("response")
+    if isinstance(response_body, dict):
+        return str(response_body.get("message") or "")
+    return ""
+
+
+def _target_user_id_from_response(response: dict) -> int | None:
+    response_body = response.get("response")
+    if not isinstance(response_body, dict):
+        return None
+    data = response_body.get("data")
+    if not isinstance(data, dict):
+        return None
+    value = data.get("user_id") or data.get("student_id")
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def log_admin_action(admin_context: dict | None, action_type: str, request_data: dict, response: dict) -> None:
+    if not admin_context:
+        return
+
+    try:
+        with session_scope() as session:
+            create_admin_log(
+                session=session,
+                admin_id=admin_context.get("id"),
+                admin_name=admin_context.get("admin_name"),
+                action_type=action_type,
+                target_phone=request_data.get("phone") if isinstance(request_data, dict) else None,
+                target_user_id=_target_user_id_from_response(response),
+                request_data=_json_value(sanitize_log_data(request_data)),
+                response_status=str(response.get("status") or ""),
+                response_message=_response_message(response),
+                tracking_code=response.get("tracking_code"),
+            )
+    except Exception:
+        logger.exception("Admin audit logging failed")
 
 
 def change_capacity(request_data):

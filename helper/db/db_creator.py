@@ -407,6 +407,34 @@ TABLE_DEFINITIONS = {
             edited_time DATETIME DEFAULT GETDATE()
         )
     """,
+    "admins": """
+        CREATE TABLE admins (
+            id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+            admin_name NVARCHAR(100) NOT NULL,
+            token_hash VARCHAR(64) NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'active',
+            created_by NVARCHAR(100) NULL,
+            created_time DATETIME DEFAULT GETDATE(),
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT ux_admins_token_hash UNIQUE (token_hash)
+        )
+    """,
+    "admin_logs": """
+        CREATE TABLE admin_logs (
+            id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+            admin_id INT NULL,
+            admin_name NVARCHAR(100) NULL,
+            action_type VARCHAR(100) NOT NULL,
+            target_user_id INT NULL,
+            target_phone NVARCHAR(12) NULL,
+            request_data NVARCHAR(MAX) NULL,
+            response_status VARCHAR(20) NULL,
+            response_message NVARCHAR(500) NULL,
+            tracking_code VARCHAR(100) NULL,
+            created_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT fk_admin_logs_admin FOREIGN KEY (admin_id) REFERENCES admins(id)
+        )
+    """,
     "capacity_logs": """
         CREATE TABLE capacity_logs (
             id INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
@@ -429,7 +457,7 @@ DEFAULT_TABLES: Sequence[str] = (
     'quiz_attempt', 'quiz_question_answer', 'scores', 'scl_scores', 'result_state', 'hedayat_fields', 'notifications',
     'notification_reads', 'payment',
     'payment_log', 'discounts', 'using_discount', 'tokens', 'comments', 'otp_logs', 'redis_logs', 'quiz_missing_answers',
-    'api_logs'
+    'api_logs', 'admins', 'admin_logs'
 )
 
 

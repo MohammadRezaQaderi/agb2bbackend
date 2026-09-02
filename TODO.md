@@ -15,9 +15,13 @@ stable.
   - Add `.env.example` with placeholder values and make production fail fast
     when required env vars are missing.
   - Rotate any credentials that have already been committed or shared.
-- [ ] Rework `DEVELOP_TOKEN` usage in `/ag_api/admin_request`.
+- [x] Rework `DEVELOP_TOKEN` usage in `/ag_api/admin_request`.
   - The admin endpoint currently trusts one static token from config.
   - Replace with a real admin auth path or a scoped internal service token.
+  - Admin auth now checks `admins.token_hash` and stores admin audit events in
+    `admin_logs`.
+  - `AG_DEVELOP_TOKEN` is only used as a one-time bootstrap seed when `admins`
+    is empty; remove that after config/secret cleanup is finalized.
 - [ ] Review password storage behavior.
   - Passwords are decryptable via Fernet and some APIs return decrypted
     passwords in responses/reports.

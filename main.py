@@ -11,6 +11,7 @@ from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.report_downloads import get_report_download_status
 from helper.redis_helper import close_redis_connection, redis_connection
 import services.institute.institute_service as institute_service
+import services.admin.admin_service as admin_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
 import services.service as service
@@ -433,7 +434,8 @@ async def admin_api(request: Request):
         data = await request.json()
 
         token = data.get("token")
-        if not func_helper.authorize_admin(token=token):
+        admin_context = admin_service.authenticate_admin_token(token=token)
+        if admin_context is None:
             return func_helper.not_auth_return(message="شما به این سرویس دسترسی ندارید.", method_type=method_type)
 
         action = data.get("action_type")
@@ -454,7 +456,7 @@ async def admin_api(request: Request):
         if handler is None:
             return func_helper.not_method_access_return()
 
-        return handler(request_data=request_data)
+        return handler(request_data=request_data, admin_context=admin_context, action_type=action)
 
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api/admin_request", "admin_api", str(e), method_type)
