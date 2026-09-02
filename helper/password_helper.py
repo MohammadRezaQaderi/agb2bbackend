@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import secrets
 from typing import Optional
 
@@ -13,6 +14,7 @@ PASSWORD_HASH_PREFIX = "pbkdf2_sha256"
 PASSWORD_HASH_ITERATIONS = 260000
 
 _PASSWORD_FERNET: Optional[Fernet] = None
+logger = logging.getLogger(__name__)
 
 
 def _get_password_fernet() -> Fernet:
@@ -71,8 +73,8 @@ def decrypt_password(stored_password: str) -> Optional[str]:
         return _get_password_fernet().decrypt(stored_password.encode("utf-8")).decode("utf-8")
     except InvalidToken:
         return stored_password
-    except Exception as e:
-        print(f"[Password] Error decrypting password: {e}")
+    except Exception:
+        logger.exception("Error decrypting password")
         return None
 
 

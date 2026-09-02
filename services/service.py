@@ -1,3 +1,5 @@
+import logging
+
 import helper.func_helper as func_helper
 import helper.quiz.quiz_data_extractor as quiz_data_extractor
 from helper.db.sqlalchemy import session_scope
@@ -17,6 +19,7 @@ import services.student.student_service as student_service
 
 DEFAULT_SERVICE_ERROR = "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
 ACCESS_DENIED_MESSAGE = "شما به این سرویس دسترسی ندارید."
+logger = logging.getLogger(__name__)
 
 
 def _error_response(method_type, message=DEFAULT_SERVICE_ERROR):
@@ -522,8 +525,8 @@ def check_student_access(student_user_id, user_info):
             return res["consultant_user_id"] == user_id
         
         return False
-    except Exception as e:
-        print(f"Error checking student access: {e}")
+    except Exception:
+        logger.exception("Error checking student access")
         return False
 
 

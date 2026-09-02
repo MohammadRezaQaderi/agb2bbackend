@@ -1,10 +1,14 @@
 import json
+import logging
 from typing import Any, Optional
 from kavenegar import KavenegarAPI, APIException, HTTPException
 
 from config import KAVENEGAR_API_KEY, KAVENEGAR_OTP_TEMPLATE
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.otp import create_otp_log
+
+
+logger = logging.getLogger(__name__)
 
 
 def send_otp_message(code: str | int, phone: str, type: str) -> Optional[dict[str, Any]]:
@@ -35,15 +39,15 @@ def send_otp_message(code: str | int, phone: str, type: str) -> Optional[dict[st
                     provider_resp=json.dumps(response, ensure_ascii=False),
                     type_otp=type,
                 )
-        except Exception as e:
-            print(f"[Logging Error] otp_logs failed: {e}")
+        except Exception:
+            logger.exception("otp_logs failed")
         return response
-    except APIException as e:
-        print(f"[Kavenegar API Error] {e}")
+    except APIException:
+        logger.exception("Kavenegar API error")
         return None
-    except HTTPException as e:
-        print(f"[Kavenegar HTTP Error] {e}")
+    except HTTPException:
+        logger.exception("Kavenegar HTTP error")
         return None
-    except Exception as e:
-        print(f"[Kavenegar Unexpected Error] {e}")
+    except Exception:
+        logger.exception("Kavenegar unexpected error")
         return None
