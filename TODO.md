@@ -118,16 +118,23 @@ stable.
 
 ## P2 - Logging And Observability
 
-- [ ] Replace `print()` in application paths with structured logging.
+- [x] Replace `print()` in application paths with structured logging.
   - Keep CLI/report scripts user-friendly, but app code should use Python
     logging with request context/tracking code.
-- [ ] Review Prometheus label cardinality.
+  - Runtime services/helpers now use module loggers; remaining prints are in
+    CLI, migration, report, or office-generation paths.
+- [x] Review Prometheus label cardinality.
   - HTTP metrics label raw request paths; dynamic paths with phone numbers or
     filenames can create high-cardinality metrics.
   - Prefer route templates where possible.
-- [ ] Improve `/ag_api/health`.
+  - Middleware now uses FastAPI route templates and a fixed unmatched-route
+    label instead of raw unknown paths.
+- [x] Improve `/ag_api/health`.
   - Separate liveness from readiness.
   - Add optional Redis check.
+  - `/health` remains readiness-compatible for deployment, `/ready` mirrors it,
+    and `/live` returns process liveness without DB/Redis dependencies.
+  - Redis readiness is enabled only when `AG_HEALTH_CHECK_REDIS=1`.
   - Avoid exposing detailed DB errors to public callers.
 
 ## P2 - Repository Hygiene
