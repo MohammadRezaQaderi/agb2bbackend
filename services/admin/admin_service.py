@@ -5,8 +5,6 @@ import logging
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.admin import (
     add_capacity_to_user,
-    count_admins,
-    create_admin,
     create_admin_log,
     get_active_admin_by_token_hash,
     get_admin_user_info_by_phone,
@@ -15,7 +13,6 @@ from helper.db.sqlalchemy.queries.admin import (
 )
 from helper.log_sanitizer import sanitize_log_data
 import helper.func_helper as func_helper
-from config import DEVELOP_TOKEN
 
 
 logger = logging.getLogger(__name__)
@@ -32,13 +29,6 @@ def authenticate_admin_token(token: str | None) -> dict | None:
     token_hash = _admin_token_hash(token)
     try:
         with session_scope() as session:
-            if count_admins(session=session) == 0 and DEVELOP_TOKEN:
-                create_admin(
-                    session=session,
-                    admin_name="develop_admin",
-                    token_hash=_admin_token_hash(DEVELOP_TOKEN),
-                    created_by="config_seed",
-                )
             admin = get_active_admin_by_token_hash(session=session, token_hash=token_hash)
         return admin
     except Exception:

@@ -1,87 +1,32 @@
 import os
 
-from fastapi import FastAPI, Request, Form, UploadFile, HTTPException
+from fastapi import FastAPI, Request, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 import helper.api_metrics as api_metrics
 import helper.file_helper as file_helper
 import helper.func_helper as func_helper
-import helper.static_data.get_data as static_data
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.report_downloads import get_report_download_status
 from helper.redis_helper import close_redis_connection, redis_connection
+from routers.files import router as files_router
+from routers.health import router as health_router
+from routers.static_data import router as static_data_router
 import services.institute.institute_service as institute_service
 import services.admin.admin_service as admin_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
 import services.service as service
 from config import (
-    INS_PIC_DIR,
     VOICES_DIR,
     REPORTS_DIR,
-    PICS_INFO_DIR,
-    PICS_REPORT_DIR,
-    PICS_QUIZ_DIR,
-    PICS_FIELD_DIR,
-    QUIZ_PIC_DIR,
-    DEFAULT_REPORT_PATH,
-    PICS_WORD_SCL_DIR,
 )
 
 app = FastAPI()
 app.middleware("http")(api_metrics.prometheus_http_middleware)
-
-
-def _storage_file_response(storage_dir: str, filename: str, download_name: str | None = None) -> FileResponse:
-    try:
-        file_path = file_helper.safe_storage_path(storage_dir, filename)
-        clean_name = file_helper.normalize_storage_filename(filename)
-    except file_helper.FileValidationError:
-        raise HTTPException(status_code=404, detail="File not found")
-
-    if os.path.isfile(file_path):
-        return FileResponse(file_path, filename=download_name or clean_name)
-    raise HTTPException(status_code=404, detail="File not found")
-
-
-@app.get("/ag_api/metrics")
-async def metrics():
-    return api_metrics.metrics_response()
-
-
-@app.get("/ag_api/health")
-async def health_check():
-    return await func_helper.health_payload("ag_api")
-
-
-@app.get("/ag_api/ready")
-async def ready_check():
-    return await func_helper.readiness_payload("ag_api")
-
-
-@app.get("/ag_api/live")
-async def live_check():
-    return await func_helper.liveness_payload("ag_api")
-
-
-@app.get("/ags_api/metrics")
-async def student_metrics():
-    return api_metrics.metrics_response()
-
-
-@app.get("/ags_api/health")
-async def student_health_check():
-    return await func_helper.health_payload("ags_api")
-
-
-@app.get("/ags_api/ready")
-async def student_ready_check():
-    return await func_helper.readiness_payload("ags_api")
-
-
-@app.get("/ags_api/live")
-async def student_live_check():
-    return await func_helper.liveness_payload("ags_api")
+app.include_router(files_router)
+app.include_router(health_router)
+app.include_router(static_data_router)
 
 
 @app.post("/ags_api/signin")
@@ -548,12 +493,6 @@ async def update_user_voice(
         return await func_helper.exception_error_logging("ag_api", "update_user_voice", str(e), method_type)
 
 
-@app.get("/ags_api/get_ins_pic/{filename}")
-@app.get("/ag_api/get_ins_pic/{filename}")
-async def get_ins_pic(filename: str):
-    return _storage_file_response(INS_PIC_DIR, filename)
-
-
 def _report_error(status_code: int, message: str) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
@@ -638,91 +577,3 @@ async def get_scl_second_pdf(phone: str, kind: str):
 @app.get("/ag_api/get_scl_third_pdf/{phone}/{kind}")
 async def get_scl_third_pdf(phone: str, kind: str):
     return await _get_report_pdf(phone, kind, "SCL", 4, "Report5.pdf", "ag_api/get_report4", "get_report4")
-
-
-@app.get("/ags_api/get_default/{reportname}")
-@app.get("/ag_api/get_default/{reportname}")
-async def get_first_default_pdf(reportname: str):
-    return _storage_file_response(DEFAULT_REPORT_PATH, reportname, download_name="Report.pdf")
-
-
-@app.get("/ags_api/get_pic/{filename}")
-@app.get("/ag_api/get_pic/{filename}")
-async def get_pic(filename: str):
-    return _storage_file_response(PICS_INFO_DIR, filename)
-
-
-@app.get("/ags_api/get_pic_scl/{filename}")
-@app.get("/ag_api/get_pic_scl/{filename}")
-async def get_pic_scl(filename: str):
-    return _storage_file_response(PICS_WORD_SCL_DIR, filename)
-
-
-@app.get("/ags_api/get_pic_info/report/{filename}")
-@app.get("/ag_api/get_pic_info/report/{filename}")
-async def get_pic_info_report(filename: str):
-    return _storage_file_response(PICS_REPORT_DIR, filename)
-
-
-@app.get("/ags_api/get_pic_info/quiz/{filename}")
-@app.get("/ag_api/get_pic_info/quiz/{filename}")
-async def get_pic_info(filename: str):
-    return _storage_file_response(PICS_QUIZ_DIR, filename)
-
-
-@app.get("/ags_api/get_quiz_pic/{filename}")
-@app.get("/ag_api/get_quiz_pic/{filename}")
-async def get_quiz_pic(filename: str):
-    return _storage_file_response(QUIZ_PIC_DIR, filename)
-
-
-@app.get("/ags_api/get_voice/{filename}")
-@app.get("/ag_api/get_voice/{filename}")
-async def get_voice(filename: str):
-    return _storage_file_response(VOICES_DIR, filename)
-
-@app.get("/ags_api/majors")
-@app.get("/ag_api/majors")
-async def get_majors():
-    return {"majors": static_data.MAJORS}
-
-
-@app.get("/ags_api/majors/{major_id}/categories")
-@app.get("/ag_api/majors/{major_id}/categories")
-async def get_major_categories(major_id: int):
-    major_item = next((item for item in static_data.MAJORS if item["id"] == major_id), None)
-    if not major_item:
-        raise HTTPException(status_code=404, detail="Major not found")
-
-    categories = [item for item in static_data.CATEGORY if item.get("number") == major_item["id"]]
-    return {"major": major_item, "categories": categories}
-
-
-@app.get("/ags_api/fields/{field_id}")
-@app.get("/ag_api/fields/{field_id}")
-async def get_field(field_id: int):
-    field_item = next((item for item in static_data.FIELDS if item["id"] == field_id), None)
-    if not field_item:
-        raise HTTPException(status_code=404, detail="Field not found")
-
-    category_items = [item for item in static_data.CATEGORY if item.get("id") == field_id]
-    field_item_with_categories = field_item.copy()
-
-    if category_items:
-        field_item_with_categories["categories"] = category_items
-        first_category = category_items[0]
-        for key in ["a1", "a2", "a3", "a4", "a5", "a6"]:
-            if key in first_category:
-                field_item_with_categories[key] = first_category[key]
-    else:
-        for key in ["a1", "a2", "a3", "a4", "a5", "a6"]:
-            field_item_with_categories[key] = None
-
-    return {"field": field_item_with_categories}
-
-
-
-@app.get("/ags_api/get_pic_info/field/{filename}")
-@app.get("/ag_api/get_pic_info/field/{filename}")
-async def get_pic_info_field(filename: str):
-    return _storage_file_response(PICS_FIELD_DIR, filename)

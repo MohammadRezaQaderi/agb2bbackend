@@ -36,7 +36,7 @@ from helper.password_helper import (
     verify_password_hash,
 )
 from helper import file_helper
-from config import DEVELOP_TOKEN, REDIS_DB, REDIS_HOST, REDIS_PASSWORD, REDIS_PORT
+from config import REDIS_DB, REDIS_HOST, REDIS_PASSWORD, REDIS_PORT
 
 
 logger = logging.getLogger(__name__)
@@ -59,10 +59,6 @@ def save_base64_image(pic_value: str | None, last_pic: str | None, storage_dir: 
     file_helper.remove_storage_file(storage_dir, last_pic)
 
     return new_file_name
-
-
-def authorize_admin(token: str | None) -> bool:
-    return bool(token and token == DEVELOP_TOKEN)
 
 
 async def health_payload(service_name: str):

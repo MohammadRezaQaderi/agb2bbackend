@@ -78,12 +78,6 @@ BRAIN_EXCEL_PATH = Path(
     _env("AG_BRAIN_EXCEL_PATH", str(Path(BASE_PATH) / "FileAG" / "Brain.xlsx"))
 )
 
-# Optional one-time bootstrap token for the first admin row.
-DEVELOP_TOKEN = _env(
-    "AG_DEVELOP_TOKEN",
-    "",
-)
-
 #! Security-sensitive configuration
 
 # Kavenegar SMS API configuration
