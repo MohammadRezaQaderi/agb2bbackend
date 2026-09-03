@@ -67,6 +67,10 @@ stable.
 - [ ] Move business constants out of `helper/func_helper.py`.
   - `PROVINCES`, `PACKAGES_DATA`, quiz titles, password helpers, DB helpers,
     and validation helpers are all in one large file.
+  - Package/province/quiz-title constants moved to `helper/constants.py` and
+    re-exported from `helper/func_helper.py` for compatibility.
+  - Pure validators moved to `helper/validators.py` and re-exported from
+    `helper/func_helper.py` for compatibility.
   - Suggested modules: `constants.py`, `security.py`, `validators.py`,
     `connections.py`.
 - [ ] Continue splitting `services/service.py`.

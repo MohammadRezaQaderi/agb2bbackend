@@ -4,13 +4,19 @@ import random
 import json
 import logging
 import uuid
-import re
 from datetime import datetime
 from random import randint
 from typing import Any, Mapping, Tuple, Optional
 
 from sqlalchemy import text
 
+from helper.constants import (
+    AG_QUIZ_NAME_TITLE,
+    PACKAGES_DATA,
+    PROVINCES,
+    SCL_QUIZ_NAME_TITLE,
+    get_kind_name,
+)
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.auth import (
     get_user_identity_by_token,
@@ -35,6 +41,7 @@ from helper.password_helper import (
     verify_password,
     verify_password_hash,
 )
+from helper.validators import check_security_code, is_valid_mobile, password_format_check
 from helper import file_helper
 from config import REDIS_DB, REDIS_HOST, REDIS_PASSWORD, REDIS_PORT
 
@@ -129,190 +136,6 @@ def _redis_health_status() -> str:
                 redis_db.close()
             except Exception:
                 logger.exception("Error closing Redis health-check connection")
-
-AG_QUIZ_NAME_TITLE = [
-    "کتل", "گاردنر", "نئو", "کلیفتون", "هالند",
-    "تعهد‌", "پرسشنامه"
-]
-
-SCL_QUIZ_NAME_TITLE = [
-    "زندگی شخصی", "زندگی روانشناختی", "زندگی تحصیلی", "زندگی اجتماعی"
-]
-
-PACKAGES_DATA = {
-    "AG": {
-        10: 1600000,
-        20: 2900000,
-        50: 5800000,
-        100: 9600000,
-        101: 99999999
-    },
-    "SCL": {
-        10: 1600000,
-        20: 2900000,
-        50: 5800000,
-        100: 9600000,
-        101: 99999999
-    }
-}
-
-PROVINCES = [
-    {
-        "id": 1,
-        "name": "آذربایجان شرقی",
-        "slug": "آذربایجان-شرقی"
-    },
-    {
-        "id": 2,
-        "name": "آذربایجان غربی",
-        "slug": "آذربایجان-غربی"
-    },
-    {
-        "id": 3,
-        "name": "اردبیل",
-        "slug": "اردبیل"
-    },
-    {
-        "id": 4,
-        "name": "اصفهان",
-        "slug": "اصفهان"
-    },
-    {
-        "id": 5,
-        "name": "البرز",
-        "slug": "البرز"
-    },
-    {
-        "id": 6,
-        "name": "ایلام",
-        "slug": "ایلام"
-    },
-    {
-        "id": 7,
-        "name": "بوشهر",
-        "slug": "بوشهر"
-    },
-    {
-        "id": 8,
-        "name": "تهران",
-        "slug": "تهران"
-    },
-    {
-        "id": 9,
-        "name": "چهارمحال و بختیاری",
-        "slug": "چهارمحال-بختیاری"
-    },
-    {
-        "id": 10,
-        "name": "خراسان جنوبی",
-        "slug": "خراسان-جنوبی"
-    },
-    {
-        "id": 11,
-        "name": "خراسان رضوی",
-        "slug": "خراسان-رضوی"
-    },
-    {
-        "id": 12,
-        "name": "خراسان شمالی",
-        "slug": "خراسان-شمالی"
-    },
-    {
-        "id": 13,
-        "name": "خوزستان",
-        "slug": "خوزستان"
-    },
-    {
-        "id": 14,
-        "name": "زنجان",
-        "slug": "زنجان"
-    },
-    {
-        "id": 15,
-        "name": "سمنان",
-        "slug": "سمنان"
-    },
-    {
-        "id": 16,
-        "name": "سیستان و بلوچستان",
-        "slug": "سیستان-بلوچستان"
-    },
-    {
-        "id": 17,
-        "name": "فارس",
-        "slug": "فارس"
-    },
-    {
-        "id": 18,
-        "name": "قزوین",
-        "slug": "قزوین"
-    },
-    {
-        "id": 19,
-        "name": "قم",
-        "slug": "قم"
-    },
-    {
-        "id": 20,
-        "name": "کردستان",
-        "slug": "کردستان"
-    },
-    {
-        "id": 21,
-        "name": "کرمان",
-        "slug": "کرمان"
-    },
-    {
-        "id": 22,
-        "name": "کرمانشاه",
-        "slug": "کرمانشاه"
-    },
-    {
-        "id": 23,
-        "name": "کهگیلویه و بویراحمد",
-        "slug": "کهگیلویه-بویراحمد"
-    },
-    {
-        "id": 24,
-        "name": "گلستان",
-        "slug": "گلستان"
-    },
-    {
-        "id": 25,
-        "name": "لرستان",
-        "slug": "لرستان"
-    },
-    {
-        "id": 26,
-        "name": "گیلان",
-        "slug": "گیلان"
-    },
-    {
-        "id": 27,
-        "name": "مازندران",
-        "slug": "مازندران"
-    },
-    {
-        "id": 28,
-        "name": "مرکزی",
-        "slug": "مرکزی"
-    },
-    {
-        "id": 29,
-        "name": "هرمزگان",
-        "slug": "هرمزگان"
-    },
-    {
-        "id": 30,
-        "name": "همدان",
-        "slug": "همدان"
-    },
-    {
-        "id": 31,
-        "name": "یزد",
-        "slug": "یزد"
-    }
-]
 
 def upsert_student_package_access(
         stu_user_id: int,
@@ -477,33 +300,6 @@ def service_exception_error_logging(
         logger.exception("service_exception_error_logging failed")
 
 
-def is_valid_mobile(phone: str) -> bool:
-    if not phone:
-        return False
-
-    phone = phone.strip()
-
-    if phone.startswith("+98"):
-        phone = "0" + phone[3:]
-    elif phone.startswith("98"):
-        phone = "0" + phone[2:]
-
-    pattern = r"^09\d{9}$"
-    return bool(re.match(pattern, phone))
-
-
-def check_security_code(code: str | int, check: str | int) -> bool:
-    """Verify if the provided security code matches the expected value (case-insensitive)."""
-    if str(code) == str(check):
-        return True
-    if str(code) == str(check).lower():
-        return True
-    if str(code) == str(check).upper():
-        return True
-    else:
-        return False
-
-
 def random_phone_candidate(n: int) -> str:
     """Generate a random phone candidate with prefix '009' and n-digit suffix."""
     range_start = 10 ** (n - 1)
@@ -531,23 +327,6 @@ def random_generate_otp_code(n: int) -> int:
     range_start = 10 ** (n - 1)
     range_end = (10 ** n) - 1
     return randint(range_start, range_end)
-
-
-def password_format_check(password: str) -> Tuple[bool, str]:
-    """Validate password format: must be between 6 and 20 characters."""
-    val = True
-    message = ''
-    if len(password) < 6:
-        message = 'طول  رمز شما بایستی حداقل 6 کاراکتر باشد.'
-        val = False
-
-    if len(password) > 20:
-        message = 'طول رمز شما بایستی حداکثر 20 کاراکتر باشد.'
-        val = False
-    if val:
-        return val, ''
-    else:
-        return val, message
 
 
 def get_payment_id() -> int:
@@ -802,11 +581,3 @@ def get_quiz_name(kind, quiz_id) -> str | None:
         return SCL_QUIZ_NAME_TITLE[quiz_id - 1]
     else:
         return None
-
-
-def get_kind_name(kind: str) -> str:
-    if kind.upper() == "SCL":
-        return "SCL دوپامین"
-    if kind.upper() == "AG":
-        return "AG استعدادسنجی"
-    return kind
