@@ -1,4 +1,4 @@
-import helper.func_helper as func_helper
+from helper.request_validation import validate_request_data_fields
 import services.auth.auth_service as auth_service
 from services.gateway_helpers import service_response
 
@@ -13,7 +13,7 @@ def sign_out(request_data, user_info):
 
 def sign_in(request_data):
     method_type = "SIGNIN"
-    is_valid, error_response = func_helper.validate_request_data_fields(
+    is_valid, error_response = validate_request_data_fields(
         request_data=request_data,
         required_fields=["phone", "password"],
         method_type=method_type,
@@ -27,7 +27,7 @@ def sign_in(request_data):
 
 def student_sign_in(request_data):
     method_type = "SIGNIN"
-    is_valid, error_response = func_helper.validate_request_data_fields(
+    is_valid, error_response = validate_request_data_fields(
         request_data=request_data,
         required_fields=["phone", "password"],
         method_type=method_type,
@@ -41,7 +41,7 @@ def student_sign_in(request_data):
 
 def sign_up(redis_db, request_data):
     method_type = "INSERT"
-    is_valid, error_response = func_helper.validate_request_data_fields(
+    is_valid, error_response = validate_request_data_fields(
         request_data=request_data,
         required_fields=["phone", "password", "re_password", "role"],
         method_type=method_type,
@@ -57,7 +57,7 @@ def sign_up(redis_db, request_data):
 
 def send_otp(redis_db, request_data):
     method_type = "SELECT"
-    is_valid, error_response = func_helper.validate_request_data_fields(
+    is_valid, error_response = validate_request_data_fields(
         request_data=request_data,
         required_fields=["phone", "type", "code", "check"],
         method_type=method_type,
@@ -73,7 +73,7 @@ def send_otp(redis_db, request_data):
 
 def check_otp(redis_db, request_data):
     method_type = "SELECT"
-    is_valid, error_response = func_helper.validate_request_data_fields(
+    is_valid, error_response = validate_request_data_fields(
         request_data=request_data,
         required_fields=["phone", "code", "type"],
         method_type=method_type,

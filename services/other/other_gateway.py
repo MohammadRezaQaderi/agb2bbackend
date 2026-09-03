@@ -1,8 +1,9 @@
 import logging
 
-import helper.func_helper as func_helper
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.students import get_student_access_for_relation
+from helper.request_validation import validate_request_data_fields
+from helper.service_errors import not_method_access_return
 import services.other.other_service as other_service
 from services.gateway_helpers import DEFAULT_SERVICE_ERROR, error_response, service_response
 
@@ -39,7 +40,7 @@ def check_student_access(student_user_id, user_info):
 
 def get_report_data(request_data, user_info):
     method_type = "SELECT"
-    is_valid, validation_error = func_helper.validate_request_data_fields(
+    is_valid, validation_error = validate_request_data_fields(
         request_data=request_data,
         required_fields=["student_id", "report_type"],
         method_type=method_type,
@@ -48,7 +49,7 @@ def get_report_data(request_data, user_info):
         return validation_error
 
     if user_info["role"] not in ["ins", "sch", "con", "ocon"]:
-        return func_helper.not_method_access_return()
+        return not_method_access_return()
 
     student_id = request_data.get("student_id")
     if not check_student_access(student_user_id=student_id, user_info=user_info):
@@ -72,12 +73,12 @@ def get_transactions(request_data, user_info):
     if user_info["role"] in ["ocon", "ins", "sch"]:
         tracking_token, response_data, response_message = other_service.get_transactions(request_data, user_info)
         return service_response(method_type, tracking_token, response_data, response_message)
-    return func_helper.not_method_access_return()
+    return not_method_access_return()
 
 
 def apply_discount(request_data, user_info):
     method_type = "SELECT"
-    is_valid, validation_error = func_helper.validate_request_data_fields(
+    is_valid, validation_error = validate_request_data_fields(
         request_data=request_data,
         required_fields=["discount_code", "total_value"],
         method_type=method_type,
@@ -121,7 +122,7 @@ def add_comment(request_data):
 
 def mark_notification_read(request_data, user_info):
     method_type = "INSERT"
-    is_valid, validation_error = func_helper.validate_request_data_fields(
+    is_valid, validation_error = validate_request_data_fields(
         request_data=request_data,
         required_fields=["notification_id"],
         method_type=method_type,

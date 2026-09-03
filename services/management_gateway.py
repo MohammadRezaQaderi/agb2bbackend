@@ -1,4 +1,7 @@
-import helper.func_helper as func_helper
+from helper.account_passwords import update_user_and_role_password
+from helper.request_validation import validate_request_data_fields
+from helper.service_errors import not_method_access_return
+from helper.validators import password_format_check
 import services.consultant.consultant_service as consultant_service
 import services.institute.institute_service as institute_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
@@ -15,7 +18,7 @@ def change_user_info(request_data, user_info):
         "ocon": lambda: owner_consultant_service.change_user_info(request_data=request_data, user_info=user_info),
     })
     if result is None:
-        return func_helper.not_method_access_return()
+        return not_method_access_return()
 
     tracking_token, response_data, response_message = result
     return service_response(method_type, tracking_token, response_data, response_message)
@@ -23,7 +26,7 @@ def change_user_info(request_data, user_info):
 
 def change_password(request_data, user_info):
     method_type = "UPDATE"
-    is_valid, validation_error = func_helper.validate_request_data_fields(
+    is_valid, validation_error = validate_request_data_fields(
         request_data=request_data,
         required_fields=["password", "re_password"],
         method_type=method_type,
@@ -33,7 +36,7 @@ def change_password(request_data, user_info):
 
     password = request_data["password"]
     re_password = request_data["re_password"]
-    val, message = func_helper.password_format_check(password=password)
+    val, message = password_format_check(password=password)
     if password != re_password:
         return error_response(method_type, "رمز عبور و تکرار رمز عبور باهم تطابق ندارد.")
     if not val:
@@ -47,9 +50,9 @@ def change_password(request_data, user_info):
     }
     role_table = role_table_map.get(user_info.get("role"))
     if not role_table:
-        return func_helper.not_method_access_return()
+        return not_method_access_return()
 
-    tracking_token = func_helper.update_user_and_role_password(
+    tracking_token = update_user_and_role_password(
         request_data=request_data,
         user_info=user_info,
         role_table=role_table,
@@ -68,7 +71,7 @@ def change_setting(request_data, user_info):
         "ocon": lambda: owner_consultant_service.change_setting(request_data=request_data, user_info=user_info),
     })
     if result is None:
-        return func_helper.not_method_access_return()
+        return not_method_access_return()
 
     tracking_token, response_data, response_message = result
     return service_response(method_type, tracking_token, response_data, response_message)
@@ -76,7 +79,7 @@ def change_setting(request_data, user_info):
 
 def change_student_access(request_data, user_info):
     method_type = "UPDATE"
-    is_valid, validation_error = func_helper.validate_request_data_fields(
+    is_valid, validation_error = validate_request_data_fields(
         request_data=request_data,
         required_fields=["stu_id", "limit", "permission", "kind"],
         method_type=method_type,
@@ -92,7 +95,7 @@ def change_student_access(request_data, user_info):
         "ocon": lambda: owner_consultant_service.change_student_access(request_data=request_data, user_info=user_info),
     })
     if result is None:
-        return func_helper.not_method_access_return()
+        return not_method_access_return()
 
     tracking_token, response_data, response_message = result
     return service_response(method_type, tracking_token, response_data, response_message)
@@ -111,7 +114,7 @@ def get_dashboard(request_data, user_info):
         "con": lambda: consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
     })
     if result is None:
-        return func_helper.not_method_access_return()
+        return not_method_access_return()
 
     tracking_token, response_data, response_message = result
     return service_response(method_type, tracking_token, response_data, response_message)
@@ -158,7 +161,7 @@ def get_students(request_data, user_info):
         "ocon": lambda: owner_consultant_service.get_students(request_data=request_data, user_info=user_info),
     })
     if result is None:
-        return func_helper.not_method_access_return()
+        return not_method_access_return()
 
     tracking_token, response_data, response_message = result
     return service_response(method_type, tracking_token, response_data, response_message)
@@ -169,7 +172,7 @@ def change_student(request_data, user_info):
     required_fields = ["first_name", "last_name", "sex", "city", "birth_date", "student_id"]
     if user_info["role"] in ["ins", "sch"]:
         required_fields.append("con_id")
-    is_valid, validation_error = func_helper.validate_request_data_fields(
+    is_valid, validation_error = validate_request_data_fields(
         request_data=request_data,
         required_fields=required_fields,
         method_type=method_type,
@@ -184,7 +187,7 @@ def change_student(request_data, user_info):
         "con": lambda: consultant_service.change_student(request_data=request_data, user_info=user_info),
     })
     if result is None:
-        return func_helper.not_method_access_return()
+        return not_method_access_return()
 
     tracking_token, response_data, response_message = result
     return service_response(method_type, tracking_token, response_data, response_message)
@@ -212,7 +215,7 @@ def get_report(request_data, user_info):
         "con": lambda: consultant_service.get_report(request_data=request_data, user_info=user_info),
     })
     if result is None:
-        return func_helper.not_method_access_return()
+        return not_method_access_return()
 
     tracking_token, response_data, response_message = result
     return service_response(method_type, tracking_token, response_data, response_message)
@@ -230,7 +233,7 @@ def get_management_report(request_data, user_info):
         "con": lambda: consultant_service.get_management_report(request_data=request_data, user_info=user_info),
     })
     if result is None:
-        return func_helper.not_method_access_return()
+        return not_method_access_return()
 
     tracking_token, response_data, response_message = result
     return service_response(method_type, tracking_token, response_data, response_message)

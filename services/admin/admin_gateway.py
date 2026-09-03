@@ -1,4 +1,4 @@
-import helper.func_helper as func_helper
+from helper.request_validation import validate_request_data_fields
 import services.admin.admin_service as admin_service
 from services.gateway_helpers import service_response
 
@@ -15,7 +15,7 @@ def _log_admin_response(admin_context, action_type, request_data, response):
 
 def admin_change_capacity(request_data, admin_context=None, action_type="ag_change_capacity"):
     method_type = "UPDATE"
-    is_valid, error_response = func_helper.validate_request_data_fields(
+    is_valid, error_response = validate_request_data_fields(
         request_data=request_data,
         required_fields=["phone", "kind", "count"],
         method_type=method_type,
@@ -30,7 +30,7 @@ def admin_change_capacity(request_data, admin_context=None, action_type="ag_chan
 
 def admin_get_user_info(request_data, admin_context=None, action_type="ag_get_user_info"):
     method_type = "SELECT"
-    is_valid, error_response = func_helper.validate_request_data_fields(
+    is_valid, error_response = validate_request_data_fields(
         request_data=request_data,
         required_fields=["phone"],
         method_type=method_type,
@@ -45,7 +45,7 @@ def admin_get_user_info(request_data, admin_context=None, action_type="ag_get_us
 
 def admin_check_student_quiz_answer(request_data, admin_context=None, action_type="ag_check_student_quiz_answer"):
     method_type = "SELECT"
-    is_valid, error_response = func_helper.validate_request_data_fields(
+    is_valid, error_response = validate_request_data_fields(
         request_data=request_data,
         required_fields=["phone"],
         method_type=method_type,
