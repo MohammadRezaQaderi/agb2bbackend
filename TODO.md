@@ -71,8 +71,12 @@ stable.
     `connections.py`.
 - [ ] Continue splitting `services/service.py`.
   - Auth, student, and admin gateway wrappers have moved to dedicated modules.
-  - Management, payment/comment, quiz, and shared access/report-data wrappers
-    still live in `services/service.py`.
+  - Management role dispatch moved to `services/management_gateway.py`.
+  - Payment/comment/notification/report-data wrappers moved to
+    `services/other/other_gateway.py`.
+  - Quiz wrappers moved to `services/quiz/quiz_gateway.py`.
+  - `services/service.py` remains as the compatibility gateway for student and
+    consultant account creation plus re-exported action handlers.
 
 ## P1 - Database And Transactions
 
