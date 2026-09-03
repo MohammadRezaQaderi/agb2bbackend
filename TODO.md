@@ -8,13 +8,14 @@ stable.
 
 ## P0 - Security And Production Safety
 
-- [ ] Remove real secret fallbacks from `config.py`.
-  - Current hardcoded defaults include `AG_DEVELOP_TOKEN`,
-    `AG_KAVENEGAR_API_KEY`, `AG_PASSWORD_SECRET_KEY`, `AG_DB_UID`, and
-    `AG_DB_PWD`.
-  - Add `.env.example` with placeholder values and make production fail fast
-    when required env vars are missing.
-  - Rotate any credentials that have already been committed or shared.
+- [x] Remove real secret fallbacks from `config.py`.
+  - Secret defaults for `AG_DEVELOP_TOKEN`, `AG_KAVENEGAR_API_KEY`,
+    `AG_PASSWORD_SECRET_KEY`, `AG_DB_UID`, and `AG_DB_PWD` were removed.
+  - `.env.example` now documents the required runtime values.
+  - Production fails fast when required env vars are missing.
+  - `AG_DEVELOP_TOKEN` remains optional because admins can be created through
+    `helper/db/create_admin.py`.
+- [ ] Rotate any credentials that have already been committed or shared.
 - [x] Rework `DEVELOP_TOKEN` usage in `/ag_api/admin_request`.
   - The admin endpoint currently trusts one static token from config.
   - Replace with a real admin auth path or a scoped internal service token.

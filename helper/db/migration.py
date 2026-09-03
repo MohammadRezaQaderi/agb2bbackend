@@ -5,14 +5,23 @@ from cryptography.fernet import Fernet, InvalidToken
 from typing import Optional, Sequence
 
 try:
-    from config import DB_DRIVER, DB_SERVER, DB_DATABASE, DB_UID, DB_PWD, DB_TRUST_CERT
+    from config import (
+        DB_DRIVER,
+        DB_SERVER,
+        DB_DATABASE,
+        DB_UID,
+        DB_PWD,
+        DB_TRUST_CERT,
+        PASSWORD_SECRET_KEY,
+    )
 except ImportError:
     DB_DRIVER = "ODBC Driver 17 for SQL Server"
     DB_SERVER = "localhost,1433"
     DB_DATABASE = "AGB2B_COPY"
-    DB_UID = "mgh27"
-    DB_PWD = "m2711gH9985"
+    DB_UID = os.getenv("AG_DB_UID", "")
+    DB_PWD = os.getenv("AG_DB_PWD", "")
     DB_TRUST_CERT = "yes"
+    PASSWORD_SECRET_KEY = os.getenv("AG_PASSWORD_SECRET_KEY", "")
 
 TABLE_DEFINITIONS = {
     "users": """
@@ -360,10 +369,6 @@ DEFAULT_TABLES: Sequence[str] = (
     'payment_log', 'discounts', 'using_discount', 'tokens', 'redis_logs', 'quiz_missing_answers', 'api_logs'
 )
 
-PASSWORD_SECRET_KEY = os.getenv(
-    "AG_PASSWORD_SECRET_KEY",
-    "8q2F8J7x1a6F1C5B8L3q6N2v9R4s7W0yF1z3X6C8q2M=",  # default dev key, override in prod
-)
 _PASSWORD_FERNET: Optional[Fernet] = None
 
 
@@ -371,6 +376,8 @@ def _get_password_fernet() -> Fernet:
     """Return a singleton Fernet instance configured with PASSWORD_SECRET_KEY."""
     global _PASSWORD_FERNET
     if _PASSWORD_FERNET is None:
+        if not PASSWORD_SECRET_KEY:
+            raise RuntimeError("AG_PASSWORD_SECRET_KEY must be set before password encryption/decryption")
         key = PASSWORD_SECRET_KEY.encode("utf-8")
         _PASSWORD_FERNET = Fernet(key)
     return _PASSWORD_FERNET

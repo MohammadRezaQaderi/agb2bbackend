@@ -23,6 +23,9 @@ def send_otp_message(code: str | int, phone: str, type: str) -> Optional[dict[st
         Response dictionary from Kavenegar API on success, None on failure.
     """
     try:
+        if not KAVENEGAR_API_KEY:
+            logger.error("AG_KAVENEGAR_API_KEY is not configured")
+            return None
         api = KavenegarAPI(KAVENEGAR_API_KEY)
         params = {
             'receptor': phone,

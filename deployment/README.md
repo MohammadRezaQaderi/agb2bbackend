@@ -9,6 +9,8 @@ The same FastAPI app serves both prefixes:
 
 ## Setup
 
+Copy `.env.example` to your environment manager and set the real values before starting production. When `AG_ENV=production`, the app fails fast if these required values are missing: `AG_KAVENEGAR_API_KEY`, `AG_PASSWORD_SECRET_KEY`, `AG_DB_UID`, and `AG_DB_PWD`. `AG_DEVELOP_TOKEN` is optional and should only be used as a temporary first-admin bootstrap token.
+
 ```cmd
 cd deployment
 setup.bat

@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 def _get_password_fernet() -> Fernet:
     global _PASSWORD_FERNET
     if _PASSWORD_FERNET is None:
+        if not PASSWORD_SECRET_KEY:
+            raise RuntimeError("AG_PASSWORD_SECRET_KEY must be set before password encryption/decryption")
         _PASSWORD_FERNET = Fernet(PASSWORD_SECRET_KEY.encode("utf-8"))
     return _PASSWORD_FERNET
 
