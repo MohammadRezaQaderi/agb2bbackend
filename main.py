@@ -5,9 +5,9 @@ from fastapi.responses import FileResponse, JSONResponse
 
 import helper.api_metrics as api_metrics
 import helper.file_helper as file_helper
-import helper.func_helper as func_helper
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.report_downloads import get_report_download_status
+from helper.service_errors import exception_error_logging
 from routers.actions import router as actions_router
 from routers.files import router as files_router
 from routers.health import router as health_router
@@ -78,7 +78,7 @@ async def _get_report_pdf(
             return _report_error(322, "کارنامه‌ها درحال آماده سازی می‌باشد.")
         return _report_error(404, "File not found")
     except Exception as e:
-        await func_helper.exception_error_logging(log_endpoint, log_func_name, str(e), "GET")
+        await exception_error_logging(log_endpoint, log_func_name, str(e), "GET")
         return _report_error(404, "File not found")
 
 

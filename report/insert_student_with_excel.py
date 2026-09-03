@@ -13,7 +13,9 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import helper.func_helper as func_helper
+from helper.constants import PROVINCES
+from helper.password_helper import encrypt_password
+from helper.random_generators import random_generate_password, random_generate_phone
 from report.db_helper import get_db_connection, close_db_connection
 from report.excel_helper import read_excel_file, write_excel_file, validate_excel_columns
 from config import REPORT_OUTPUT_DIR, REPORT_DEFAULT_INS_ID, REPORT_DEFAULT_CON_ID
@@ -193,7 +195,7 @@ def process_province(province_name: str) -> Tuple[int, bool]:
         Tuple of (province_id, found_in_list).
     """
     province_name = province_name.strip()
-    province = next((p for p in func_helper.PROVINCES if p["name"] == province_name), None)
+    province = next((p for p in PROVINCES if p["name"] == province_name), None)
 
     if province:
         return province["id"], True
@@ -289,7 +291,7 @@ def insert_student_to_db(
         User ID if successful, None otherwise.
     """
     try:
-        province = next((p for p in func_helper.PROVINCES if p["id"] == province_id), None)
+        province = next((p for p in PROVINCES if p["id"] == province_id), None)
         city_str = f"{province_id},{province['name']}" if province else f"{province_id},تهران"
 
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -361,9 +363,9 @@ def process_student_row(
         province_id, province_found = process_province(province_name)
         student_report['processed_province_id'] = province_id
 
-        phone = func_helper.random_generate_phone(8)
-        plain_password = func_helper.random_generate_password()
-        encrypted_password = func_helper.encrypt_password(plain_password)
+        phone = random_generate_phone(8)
+        plain_password = random_generate_password()
+        encrypted_password = encrypt_password(plain_password)
 
         print(f"Processing: {first_name} {last_name} - Phone: {phone}")
 

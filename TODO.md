@@ -87,6 +87,8 @@ stable.
   - Auth, student, and admin gateway wrappers have moved to dedicated modules.
   - Gateway modules now import focused helper modules directly instead of
     `helper/func_helper.py`.
+  - Service modules, report scripts, `main.py`, and migration scripts now
+    import focused helper modules directly instead of `helper/func_helper.py`.
   - Management role dispatch moved to `services/management_gateway.py`.
   - Payment/comment/notification/report-data wrappers moved to
     `services/other/other_gateway.py`.

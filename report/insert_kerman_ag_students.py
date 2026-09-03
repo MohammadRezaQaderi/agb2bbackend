@@ -20,7 +20,8 @@ from typing import Any, Iterable
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import helper.func_helper as func_helper
+from helper.password_helper import encrypt_password
+from helper.random_generators import random_generate_password
 from report.db_helper import close_db_connection, get_db_connection
 
 
@@ -207,8 +208,8 @@ def find_existing_student(cursor, student: Student, ins_id: int, con_id: int):
 
 def insert_student(cursor, student: Student, args) -> dict[str, Any]:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    plain_password = func_helper.random_generate_password()
-    encrypted_password = func_helper.encrypt_password(plain_password)
+    plain_password = random_generate_password()
+    encrypted_password = encrypt_password(plain_password)
     phone = generate_unique_phone(cursor)
     access_json = json.dumps(DEFAULT_ACCESS, ensure_ascii=False)
 

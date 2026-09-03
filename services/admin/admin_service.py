@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 
+from helper.constants import PACKAGES_DATA, get_kind_name
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.admin import (
     add_capacity_to_user,
@@ -12,7 +13,8 @@ from helper.db.sqlalchemy.queries.admin import (
     get_user_role_by_phone,
 )
 from helper.log_sanitizer import sanitize_log_data
-import helper.func_helper as func_helper
+from helper.service_errors import service_exception_error_logging
+from helper.tracking import get_tracking_code
 
 
 logger = logging.getLogger(__name__)
@@ -103,8 +105,8 @@ def change_capacity(request_data):
             return None, None, "نوع بسته الزامی است."
 
         kind = kind.upper()
-        if kind not in func_helper.PACKAGES_DATA:
-            valid_packages = "، ".join(f"{package} ({func_helper.get_kind_name(package)})" for package in func_helper.PACKAGES_DATA.keys())
+        if kind not in PACKAGES_DATA:
+            valid_packages = "، ".join(f"{package} ({get_kind_name(package)})" for package in PACKAGES_DATA.keys())
             return None, None, f"نوع بسته معتبر نیست. بسته‌های معتبر: {valid_packages}"
 
         if not isinstance(count, int):
@@ -113,7 +115,7 @@ def change_capacity(request_data):
         if count <= 0:
             return None, None, "تعداد باید یک عدد صحیح مثبت باشد."
 
-        package_names = list(func_helper.PACKAGES_DATA.keys())
+        package_names = list(PACKAGES_DATA.keys())
         capacity_result = {package_name: 0 for package_name in package_names}
         with session_scope() as session:
             user_res = get_user_role_by_phone(session=session, phone=phone)
@@ -132,14 +134,14 @@ def change_capacity(request_data):
             if pkg_name in capacity_result:
                 capacity_result[pkg_name] = allowed
 
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, {
             "phone": phone,
             "capacity": capacity_result
         }, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/admin_request", "change_capacity", str(e), request_data, {}
+        service_exception_error_logging("ag_api/admin_request", "change_capacity", str(e), request_data, {}
         )
         return None, None, f"خطا در به‌روزرسانی ظرفیت: {str(e)}"
 
@@ -166,11 +168,11 @@ def get_user_info(request_data):
         if not user_info:
             return None, None, "کاربری با این شماره تلفن یافت نشد."
 
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, user_info, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/admin_request", "get_user_info", str(e), request_data, {}
+        service_exception_error_logging("ag_api/admin_request", "get_user_info", str(e), request_data, {}
         )
         return None, None, f"خطا در دریافت اطلاعات کاربر: {str(e)}"
 
@@ -230,10 +232,10 @@ def check_student_quiz_answer(request_data):
             "access": access_data
         }
 
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, result, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/admin_request", "check_student_quiz_answer", str(e), request_data, {}
+        service_exception_error_logging("ag_api/admin_request", "check_student_quiz_answer", str(e), request_data, {}
         )
         return None, None, f"خطا در بررسی پاسخ‌های آزمون دانش‌آموز: {str(e)}"

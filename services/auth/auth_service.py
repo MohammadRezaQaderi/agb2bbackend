@@ -1,8 +1,8 @@
 import json
 
 from config import REDIS_CACHE_OTP
-import helper.func_helper as func_helper
 import helper.otp.otp_helper as otp_helper
+from helper.constants import PACKAGES_DATA
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.accounts import create_signup_account
 from helper.db.sqlalchemy.queries.auth import (
@@ -15,6 +15,11 @@ from helper.db.sqlalchemy.queries.auth import (
     token_exists,
     user_phone_exists,
 )
+from helper.password_helper import encrypt_password, verify_password
+from helper.random_generators import random_generate_otp_code
+from helper.service_errors import service_exception_error_logging
+from helper.tracking import get_tracking_code
+from helper.validators import check_security_code, is_valid_mobile, password_format_check
 import services.consultant.consultant_service as consultant_service
 import services.institute.institute_service as institute_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
@@ -31,11 +36,11 @@ def _create_token(user_info):
                 return existing_token
 
             while True:
-                token = func_helper.get_tracking_code()
+                token = get_tracking_code()
                 if not token_exists(session=session, token=token):
                     return create_token(session=session, user_id=user_id, token=token)
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/auth", "_create_token", str(e), user_info, {})
+        service_exception_error_logging("ag_api/auth", "_create_token", str(e), user_info, {})
         return None
 
 
@@ -45,9 +50,9 @@ def sign_out(request_data, user_info):
             deleted_count = delete_token_for_user(session=session, user_id=user_info["user_id"])
         if deleted_count == 0:
             return None, None, "توکن حذف نشد یا موجود نیست."
-        return func_helper.get_tracking_code(), {}, "توکن حذف شد."
+        return get_tracking_code(), {}, "توکن حذف شد."
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/auth", "sign_out", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/auth", "sign_out", str(e), request_data, user_info)
         return None, None, "مشکل در اتمام نشست"
 
 
@@ -60,7 +65,7 @@ def sign_in(request_data):
         if res is None:
             return None, None, " کاربری با این شماره تلفن موجود نمی‌باشد."
         db_password = res["password"]
-        if func_helper.verify_password(plain_password=password, stored_password=db_password):
+        if verify_password(plain_password=password, stored_password=db_password):
             user_info = [res["user_id"], phone, res["role"]]
             token_user = _create_token(user_info=user_info)
         else:
@@ -102,7 +107,7 @@ def sign_in(request_data):
             return None, None, "متاسفانه شما از این سامانه اجازه ورود ندارید."
         return token_user, user_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/auth", "sign_in", str(e), request_data, {})
+        service_exception_error_logging("ag_api/auth", "sign_in", str(e), request_data, {})
         return None, None, "مشکلی در ورود شما رخ داده با پشتیبانی ارتباط بگیرید."
 
 
@@ -115,7 +120,7 @@ def sign_in_student(request_data):
         if res is None:
             return None, None, " کاربری با این شماره تلفن موجود نمی‌باشد."
 
-        if not func_helper.verify_password(plain_password=password, stored_password=res["password"]):
+        if not verify_password(plain_password=password, stored_password=res["password"]):
             return None, None, "رمز عبور شما درست نمی‌باشد."
 
         if res["role"] != "stu":
@@ -125,7 +130,7 @@ def sign_in_student(request_data):
         _, user_info, _ = student_service.select_student_info(user_id=res["user_id"])
         return token_user, user_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ags_api/auth", "sign_in_student", str(e), request_data, {})
+        service_exception_error_logging("ags_api/auth", "sign_in_student", str(e), request_data, {})
         return None, None, "مشکلی در ورود شما رخ داده با پشتیبانی ارتباط بگیرید."
 
 
@@ -136,13 +141,13 @@ def sign_up(redis_db, request_data):
         re_password = request_data["re_password"]
         role = request_data["role"]
 
-        if not func_helper.is_valid_mobile(phone=phone):
+        if not is_valid_mobile(phone=phone):
             return None, None, "شماره تلفن شما معتبر نیست."
 
         if password != re_password:
             return None, None, "رمز عبور و تکرار رمز عبور باهم تطابق ندارد."
 
-        val, message = func_helper.password_format_check(password=password)
+        val, message = password_format_check(password=password)
         if not val:
             return None, None, message
 
@@ -158,25 +163,25 @@ def sign_up(redis_db, request_data):
             create_signup_account(
                 session=session,
                 phone=phone,
-                encrypted_password=func_helper.encrypt_password(password),
+                encrypted_password=encrypt_password(password),
                 role=role,
                 request_data=request_data,
-                package_names=list(func_helper.PACKAGES_DATA.keys()),
+                package_names=list(PACKAGES_DATA.keys()),
             )
 
         cache = redis_db.cache(REDIS_CACHE_OTP)
         cache_record = cache.get(phone)
         if cache_record is not None:
             cache.delete(phone)
-        code = func_helper.random_generate_otp_code(5)
+        code = random_generate_otp_code(5)
         # todo here checkout the try/except handle for otp
         res_otp = otp_helper.send_otp_message(code=code, phone=phone, type="VERIFY")
         cache.set(phone, json.dumps({"code": code}), 60 * 60 * 24 * 100)
 
-        return func_helper.get_tracking_code(), None, "ثبت نام شما با موفقیت انجام شد."
+        return get_tracking_code(), None, "ثبت نام شما با موفقیت انجام شد."
 
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/auth", "sign_up", str(e), request_data, {})
+        service_exception_error_logging("ag_api/auth", "sign_up", str(e), request_data, {})
         return None, None, "مشکلی در ثبت نام شما رخ داده با پشتیبانی ارتباط بگیرید."
 
 
@@ -185,10 +190,10 @@ def send_otp(redis_db, request_data):
         phone = request_data["phone"]
         type_otp = request_data["type"]
 
-        if not func_helper.is_valid_mobile(phone=phone):
+        if not is_valid_mobile(phone=phone):
             return None, None, "شماره تلفن شما معتبر نیست."
 
-        if not func_helper.check_security_code(code=request_data["code"], check=request_data["check"]):
+        if not check_security_code(code=request_data["code"], check=request_data["check"]):
             return None, None, "کد امنیتی وارد شده اشتباه است."
 
         with session_scope() as session:
@@ -218,13 +223,13 @@ def send_otp(redis_db, request_data):
         cache_record = cache.get(phone)
         if cache_record is not None:
             cache.delete(phone)
-        code = func_helper.random_generate_otp_code(5)
+        code = random_generate_otp_code(5)
         res_otp = otp_helper.send_otp_message(code=code, phone=phone, type=type_otp.upper())
         cache.set(res["phone"], json.dumps({"code": code}), 60 * 60 * 24 * 100)
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, {"phone": phone}, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/auth", "send_otp", str(e), request_data, {})
+        service_exception_error_logging("ag_api/auth", "send_otp", str(e), request_data, {})
         return None, None, "مشکلی در احراز هویت شما رخ داده با پشتیبانی ارتباط بگیرید."
 
 
@@ -280,5 +285,5 @@ def check_otp(redis_db, request_data):
             return token_user, user_info, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/auth", "check_otp", str(e), request_data, {})
+        service_exception_error_logging("ag_api/auth", "check_otp", str(e), request_data, {})
         return None, None, "مشکلی در احراز هویت شما رخ داده با پشتیبانی ارتباط بگیرید."

@@ -1,3 +1,4 @@
+from helper.constants import PACKAGES_DATA
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.filters import StudentFilters
 from helper.db.sqlalchemy.queries.consultants import (
@@ -16,13 +17,15 @@ from helper.db.sqlalchemy.queries.dashboard import (
 )
 from helper.db.sqlalchemy.queries.reports import list_quiz_attempts_for_users
 from helper.db.sqlalchemy.queries.students import list_students_for_consultant
-import helper.func_helper as func_helper
+from helper.quiz_metadata import get_quiz_name
 from helper.response import (
     build_dashboard_info_response,
     build_student_list_response,
     build_student_management_report_response,
     build_student_report_response,
 )
+from helper.service_errors import service_exception_error_logging
+from helper.tracking import get_tracking_code
 
 
 def get_info(user_id):
@@ -38,14 +41,14 @@ def get_info(user_id):
         else:
             owner_name = res.get("school_name")
             owner_logo = res.get("school_logo")
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         response_info = {"phone": res.get("phone"), "user_id": user_id, "id": res.get("con_id"),
                          "first_name": res.get("first_name"), "last_name": res.get("last_name"), "role": 'con',
                          "name": owner_name, "pic": owner_logo,
                          "owner_user_id": res.get("owner_user_id"), "ins_id": res.get("owner_user_id")}
         return token, response_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/con", "get_info", str(e), {},
+        service_exception_error_logging("ag_api/con", "get_info", str(e), {},
                                         {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 
@@ -77,14 +80,14 @@ def get_dashboard(request_data, user_info):
             student_count=student_count,
             package_counts=package_counts,
             quiz_attempts=quiz_attempts,
-            packages_data=func_helper.PACKAGES_DATA,
+            packages_data=PACKAGES_DATA,
         )
 
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, {"dashboard_info": cons_info, "notifications": notifications}, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/con", "get_dashboard", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/con", "get_dashboard", str(e), request_data, user_info)
         return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
@@ -93,10 +96,10 @@ def get_report(request_data, user_info):
         with session_scope() as session:
             students = list_students_for_consultant(session=session, consultant_user_id=user_info["user_id"])
         report_info = build_student_report_response(students)
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/con", "get_report", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/con", "get_report", str(e), request_data, user_info)
         return None, [], "مشکل در دریافت گزارش رخ داده است."
 
 
@@ -111,13 +114,13 @@ def get_management_report(request_data, user_info):
         report_info = build_student_management_report_response(
             students,
             quiz_attempts,
-            packages_data=func_helper.PACKAGES_DATA,
-            get_quiz_name=func_helper.get_quiz_name,
+            packages_data=PACKAGES_DATA,
+            get_quiz_name=get_quiz_name,
         )
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/con", "get_management_report", str(e),
+        service_exception_error_logging("ag_api/con", "get_management_report", str(e),
                                         request_data, user_info)
         return None, None, "مشکل در دریافت گزارش مدیریتی رخ داده است."
 
@@ -133,10 +136,10 @@ def get_students(request_data, user_info):
                 filters=filters,
             )
         stu_info = build_student_list_response(students, default_con_id=user_info["user_id"])
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, stu_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/con", "get_students", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/con", "get_students", str(e), request_data, user_info)
         return None, [], "اطلاعات دانش‌آموزان دریافت نشد."
 
 
@@ -154,10 +157,10 @@ def change_student(request_data, user_info):
                 city=request_data["city"],
                 birth_date=request_data["birth_date"],
             )
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/con", "change_student", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/con", "change_student", str(e), request_data, user_info)
         return None, None, "مشکلی در تغییر اطلاعات دانش‌آموز رخ داده است."
 
 
@@ -170,10 +173,10 @@ def change_comment(request_data, user_info):
                 editor_id=request_data["user_id"],
                 comment=request_data["consultant_comment"],
             )
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/con", "change_comment", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/con", "change_comment", str(e), request_data, user_info)
         return None, None, "مشکلی در تغییر توضیحات دانش‌آموز رخ داده است."
 
 
@@ -186,9 +189,9 @@ def change_user_info(request_data, user_info):
                 first_name=request_data["first_name"],
                 last_name=request_data["last_name"],
             )
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/con", "change_user_info", str(e), request_data,
+        service_exception_error_logging("ag_api/con", "change_user_info", str(e), request_data,
                                         user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
