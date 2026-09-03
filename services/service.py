@@ -7,33 +7,43 @@ from helper.db.sqlalchemy.queries.accounts import create_consultant_account, cre
 from helper.db.sqlalchemy.queries.auth import user_phone_exists
 from helper.db.sqlalchemy.queries.settings import get_setting_for_user_quiz
 from helper.db.sqlalchemy.queries.students import get_student_access_for_relation
-import services.admin.admin_service as admin_service
-import services.auth.auth_service as auth_service
+from services.admin.admin_gateway import (
+    admin_change_capacity,
+    admin_check_student_quiz_answer,
+    admin_get_user_info,
+)
+from services.auth.auth_gateway import (
+    check_otp,
+    send_otp,
+    sign_in,
+    sign_out,
+    sign_up,
+    student_sign_in,
+)
 import services.consultant.consultant_service as consultant_service
 import services.institute.institute_service as institute_service
 import services.other.other_service as other_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
-import services.student.student_service as student_service
+from services.student.student_gateway import (
+    student_change_password,
+    student_change_quiz_answer,
+    student_change_user_info,
+    student_get_access_product,
+    student_get_dashboard,
+    student_get_quiz_info,
+    student_get_quiz_table_info,
+)
+from services.gateway_helpers import (
+    ACCESS_DENIED_MESSAGE,
+    DEFAULT_SERVICE_ERROR,
+    error_response as _error_response,
+    role_handler as _role_handler,
+    service_response as _service_response,
+)
 
 
-DEFAULT_SERVICE_ERROR = "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
-ACCESS_DENIED_MESSAGE = "شما به این سرویس دسترسی ندارید."
 logger = logging.getLogger(__name__)
-
-
-def _error_response(method_type, message=DEFAULT_SERVICE_ERROR):
-    return {"status": 200, "tracking_code": None, "method_type": method_type, "error": message}
-
-
-def _service_response(method_type, tracking_token, response_data=None, response_message="", error_message=None,
-                      **extra_response):
-    if tracking_token:
-        response = {"data": response_data, "message": response_message}
-        response.update(extra_response)
-        return {"status": 200, "tracking_code": tracking_token, "method_type": method_type,
-                "response": response}
-    return _error_response(method_type=method_type, message=error_message or response_message or DEFAULT_SERVICE_ERROR)
 
 
 def service_response(method_type, tracking_token, response_data=None, response_message="", error_message=None,
@@ -42,101 +52,12 @@ def service_response(method_type, tracking_token, response_data=None, response_m
                              **extra_response)
 
 
-def _role_handler(user_info, handlers):
-    handler = handlers.get(user_info.get("role"))
-    return handler() if handler else None
-
-
 def _generate_available_student_phone(session, attempts=20):
     for _ in range(attempts):
         phone = func_helper.random_phone_candidate(8)
         if not user_phone_exists(session=session, phone=phone):
             return phone
     raise ValueError("Could not generate a unique student phone.")
-
-
-def sign_out(request_data, user_info):
-    method_type = "DELETE"
-    tracking_token, response_data, response_message = auth_service.sign_out(
-        request_data=request_data, user_info=user_info
-    )
-    return _service_response(method_type, tracking_token, response_data, response_message)
-
-
-def sign_in(request_data):
-    method_type = "SIGNIN"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["phone", "password"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return error_response
-
-    tracking_token, response_data, response_message = auth_service.sign_in(request_data=request_data)
-    return _service_response(method_type, tracking_token, response_data, response_message)
-
-
-def student_sign_in(request_data):
-    method_type = "SIGNIN"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["phone", "password"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return error_response
-
-    tracking_token, response_data, response_message = auth_service.sign_in_student(request_data=request_data)
-    return _service_response(method_type, tracking_token, response_data, response_message)
-
-
-def sign_up(redis_db, request_data):
-    method_type = "INSERT"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["phone", "password", "re_password", "role"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return error_response
-
-    tracking_token, response_data, response_message = auth_service.sign_up(
-        redis_db=redis_db, request_data=request_data
-    )
-    return _service_response(method_type, tracking_token, response_data, response_message)
-
-
-def send_otp(redis_db, request_data):
-    method_type = "SELECT"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["phone", "type", "code", "check"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return error_response
-
-    tracking_token, response_data, response_message = auth_service.send_otp(
-        redis_db=redis_db, request_data=request_data
-    )
-    return _service_response(method_type, tracking_token, response_data, response_message)
-
-
-def check_otp(redis_db, request_data):
-    method_type = "SELECT"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["phone", "code", "type"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return error_response
-
-    tracking_token, response_data, response_message = auth_service.check_otp(
-        redis_db=redis_db, request_data=request_data
-    )
-    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def change_user_info(request_data, user_info):
@@ -195,61 +116,6 @@ def change_password(request_data, user_info):
     return _service_response(method_type, tracking_token, response_data, response_message)
 
 
-def student_change_user_info(request_data, user_info):
-    method_type = "UPDATE"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["first_name", "last_name"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return error_response
-    if user_info["role"] != "stu":
-        return func_helper.not_method_access_return()
-
-    tracking_token, response_data, response_message = student_service.update_stu_user_profile(
-        request_data=request_data, info=user_info
-    )
-    return _service_response(method_type, tracking_token, response_data, response_message)
-
-
-def student_change_password(request_data, user_info):
-    method_type = "UPDATE"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["password", "re_password"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return error_response
-
-    if request_data["password"] != request_data["re_password"]:
-        return _error_response(method_type, "رمز عبور و تکرار رمز عبور باهم تطابق ندارد.")
-
-    val, message = func_helper.password_format_check(password=request_data["password"])
-    if not val:
-        return _error_response(method_type, message)
-
-    if user_info["role"] != "stu":
-        return func_helper.not_method_access_return()
-
-    tracking_token, response_data, response_message = student_service.update_stu_password(
-        request_data=request_data, info=user_info
-    )
-    return _service_response(method_type, tracking_token, response_data, response_message)
-
-
-def student_get_dashboard(request_data, user_info):
-    method_type = "SELECT"
-    if user_info["role"] != "stu":
-        return func_helper.not_method_access_return()
-
-    tracking_token, response_data, response_message = student_service.select_stu_dashboard(
-        request_data=request_data, info=user_info
-    )
-    return _service_response(method_type, tracking_token, response_data, response_message)
-
-
 def student_get_quiz_setting(request_data, user_info):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
@@ -260,73 +126,6 @@ def student_get_quiz_setting(request_data, user_info):
     if not is_valid:
         return error_response
     return get_quiz_setting(request_data=request_data, user_info=user_info)
-
-
-def student_get_quiz_table_info(request_data, user_info):
-    method_type = "SELECT"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["kind"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return error_response
-    if user_info["role"] != "stu":
-        return func_helper.not_method_access_return()
-
-    tracking_token, response_data, response_message = student_service.select_stu_quiz_table_info(
-        request_data=request_data, info=user_info
-    )
-    return _service_response(method_type, tracking_token, response_data, response_message)
-
-
-def student_get_quiz_info(request_data, user_info):
-    method_type = "SELECT"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["quiz_id", "quiz_kind"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return error_response
-    if user_info["role"] != "stu":
-        return func_helper.not_method_access_return()
-
-    tracking_token, response_data, response_message = student_service.select_stu_quiz_info(
-        request_data=request_data, info=user_info
-    )
-    if not response_data:
-        return _error_response(method_type, response_message or "آزمون مورد نظر شما در دسترس شما نیست.")
-    return _service_response(method_type, tracking_token, response_data, response_message)
-
-
-def student_change_quiz_answer(request_data, user_info):
-    method_type = "UPDATE"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["quiz_id", "question_Number", "question_Answer", "last_question_id", "user_id"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return error_response
-    if user_info["role"] != "stu":
-        return func_helper.not_method_access_return()
-
-    tracking_token, response_data, response_message = student_service.submit_quiz_answer(
-        request_data=request_data, info=user_info
-    )
-    return _service_response(method_type, tracking_token, response_data, response_message)
-
-
-def student_get_access_product(request_data, user_info):
-    method_type = "SELECT"
-    if user_info["role"] != "stu":
-        return func_helper.not_method_access_return()
-
-    tracking_token, response_data, response_message = student_service.select_student_access_info(
-        request_data=request_data, info=user_info
-    )
-    return _service_response(method_type, tracking_token, response_data, response_message)
 
 
 def change_setting(request_data, user_info):
@@ -778,61 +577,3 @@ def mark_notification_read(request_data, user_info):
         user_info=user_info,
     )
     return _service_response(method_type, tracking_token, response_data, response_message)
-
-
-# Admin functions
-def _log_admin_response(admin_context, action_type, request_data, response):
-    admin_service.log_admin_action(
-        admin_context=admin_context,
-        action_type=action_type,
-        request_data=request_data,
-        response=response,
-    )
-    return response
-
-
-def admin_change_capacity(request_data, admin_context=None, action_type="ag_change_capacity"):
-    method_type = "UPDATE"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["phone", "kind", "count"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return _log_admin_response(admin_context, action_type, request_data, error_response)
-    
-    tracking_token, response_data, response_message = admin_service.change_capacity(request_data=request_data)
-    response = _service_response(method_type, tracking_token, response_data, response_message)
-    return _log_admin_response(admin_context, action_type, request_data, response)
-
-
-def admin_get_user_info(request_data, admin_context=None, action_type="ag_get_user_info"):
-    method_type = "SELECT"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["phone"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return _log_admin_response(admin_context, action_type, request_data, error_response)
-    
-    tracking_token, response_data, response_message = admin_service.get_user_info(request_data=request_data)
-    response = _service_response(method_type, tracking_token, response_data, response_message)
-    return _log_admin_response(admin_context, action_type, request_data, response)
-
-
-def admin_check_student_quiz_answer(request_data, admin_context=None, action_type="ag_check_student_quiz_answer"):
-    method_type = "SELECT"
-    is_valid, error_response = func_helper.validate_request_data_fields(
-        request_data=request_data,
-        required_fields=["phone"],
-        method_type=method_type,
-    )
-    if not is_valid:
-        return _log_admin_response(admin_context, action_type, request_data, error_response)
-    
-    tracking_token, response_data, response_message = admin_service.check_student_quiz_answer(
-        request_data=request_data
-    )
-    response = _service_response(method_type, tracking_token, response_data, response_message)
-    return _log_admin_response(admin_context, action_type, request_data, response)

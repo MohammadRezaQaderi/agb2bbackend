@@ -62,11 +62,17 @@ stable.
   - Some business errors return HTTP 200 with `status` in JSON.
   - Other paths use custom HTTP status codes like `321`-`324`.
   - Define one response contract before adding new features.
+  - Gateway response helpers are now centralized in `services/gateway_helpers.py`;
+    older gateway functions still need gradual cleanup around HTTP semantics.
 - [ ] Move business constants out of `helper/func_helper.py`.
   - `PROVINCES`, `PACKAGES_DATA`, quiz titles, password helpers, DB helpers,
     and validation helpers are all in one large file.
   - Suggested modules: `constants.py`, `security.py`, `validators.py`,
     `connections.py`.
+- [ ] Continue splitting `services/service.py`.
+  - Auth, student, and admin gateway wrappers have moved to dedicated modules.
+  - Management, payment/comment, quiz, and shared access/report-data wrappers
+    still live in `services/service.py`.
 
 ## P1 - Database And Transactions
 
