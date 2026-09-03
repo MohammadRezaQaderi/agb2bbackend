@@ -13,7 +13,9 @@ stable.
     `AG_DB_UID`, and `AG_DB_PWD` were removed.
   - `.env.example` now documents the required runtime values.
   - Production fails fast when required env vars are missing.
-- [ ] Rotate any credentials that have already been committed or shared.
+- [x] Rotate any credentials that have already been committed or shared.
+  - Handled operationally outside the codebase. Runtime code no longer ships
+    committed secret fallbacks.
 - [x] Rework `DEVELOP_TOKEN` usage in `/ag_api/admin_request`.
   - The admin endpoint currently trusts one static token from config.
   - Replace with a real admin auth path or a scoped internal service token.
@@ -21,11 +23,12 @@ stable.
     `admin_logs`.
   - Admin tokens are created/rotated with `helper/db/create_admin.py`; there is
     no config-token bootstrap path left in runtime.
-- [ ] Review password storage behavior.
+- [x] Review password storage behavior.
   - Passwords are decryptable via Fernet and some APIs return decrypted
     passwords in responses/reports.
-  - Decide whether the product really needs reversible passwords; otherwise
-    migrate to one-way hashing.
+  - Decision: keep the current reversible-password behavior for now. Do not
+    migrate to one-way hashes until the product flow is redesigned around that
+    change.
 - [x] Redact sensitive request fields before writing service error logs.
   - `password`, `re_password`, OTP/security codes, and tokens are masked before
     storing `api_logs.data`.
