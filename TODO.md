@@ -58,6 +58,8 @@ stable.
     permission checks, quiz completion checks, queue checks, and file lookup.
   - Create one helper/service such as `get_student_report_file(kind,
     report_number, expected_quiz_count)`.
+  - Deferred for now; report/export flows are not part of the current cleanup
+    pass.
 - [ ] Standardize API response shapes and HTTP status usage.
   - Some business errors return HTTP 200 with `status` in JSON.
   - Other paths use custom HTTP status codes like `321`-`324`.
@@ -67,22 +69,19 @@ stable.
 - [x] Move business constants out of `helper/func_helper.py`.
   - `PROVINCES`, `PACKAGES_DATA`, quiz titles, password helpers, DB helpers,
     and validation helpers are all in one large file.
-  - Package/province/quiz-title constants moved to `helper/constants.py` and
-    re-exported from `helper/func_helper.py` for compatibility.
-  - Pure validators moved to `helper/validators.py` and re-exported from
-    `helper/func_helper.py` for compatibility.
+  - Package/province/quiz-title constants moved to `helper/constants.py`.
+  - Pure validators moved to `helper/validators.py`.
   - Health payloads moved to `helper/health.py`; health routes now import the
     health helper directly.
-  - Legacy error/return helpers moved to `helper/service_errors.py` and
-    re-exported from `helper/func_helper.py` for compatibility.
+  - Legacy error/return helpers moved to `helper/service_errors.py`.
   - Auth context lookup moved to `helper/auth_context.py` and router helpers now
     import auth/error helpers directly.
-  - Tracking token generation moved to `helper/tracking.py` and re-exported
-    from `helper/func_helper.py` for compatibility.
+  - Tracking token generation moved to `helper/tracking.py`.
   - Image storage, random generators, payment helpers, quiz metadata, account
     password updates, request validation, and student access helpers moved to
     focused helper modules.
-  - `helper/func_helper.py` is now a compatibility re-export facade.
+  - `helper/func_helper.py` was removed after all callers moved to focused
+    helper modules.
 - [x] Continue splitting `services/service.py`.
   - Auth, student, and admin gateway wrappers have moved to dedicated modules.
   - Gateway modules now import focused helper modules directly instead of
