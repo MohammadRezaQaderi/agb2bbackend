@@ -469,6 +469,56 @@ def ensure_notification_reads(conn: Any, cursor: Any, dry_run: bool) -> None:
     run_sql(conn, cursor, sql, dry_run, "create notification_reads")
 
 
+def ensure_admin_tables(conn: Any, cursor: Any, dry_run: bool) -> None:
+    if not table_exists(cursor, "admins"):
+        run_sql(
+            conn,
+            cursor,
+            """
+            CREATE TABLE [admins] (
+                [id] INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+                [admin_name] NVARCHAR(100) NOT NULL,
+                [token_hash] VARCHAR(64) NOT NULL,
+                [status] VARCHAR(20) NOT NULL DEFAULT 'active',
+                [created_by] NVARCHAR(100) NULL,
+                [created_time] DATETIME DEFAULT GETDATE(),
+                [edited_time] DATETIME DEFAULT GETDATE(),
+                CONSTRAINT [ux_admins_token_hash] UNIQUE ([token_hash])
+            )
+            """,
+            dry_run,
+            "create admins",
+        )
+    else:
+        print("SKIP: admins already exists")
+
+    if not table_exists(cursor, "admin_logs"):
+        run_sql(
+            conn,
+            cursor,
+            """
+            CREATE TABLE [admin_logs] (
+                [id] INT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+                [admin_id] INT NULL,
+                [admin_name] NVARCHAR(100) NULL,
+                [action_type] VARCHAR(100) NOT NULL,
+                [target_user_id] INT NULL,
+                [target_phone] NVARCHAR(12) NULL,
+                [request_data] NVARCHAR(MAX) NULL,
+                [response_status] VARCHAR(20) NULL,
+                [response_message] NVARCHAR(500) NULL,
+                [tracking_code] VARCHAR(100) NULL,
+                [created_time] DATETIME DEFAULT GETDATE(),
+                CONSTRAINT [fk_admin_logs_admin] FOREIGN KEY ([admin_id]) REFERENCES [admins]([id])
+            )
+            """,
+            dry_run,
+            "create admin_logs",
+        )
+    else:
+        print("SKIP: admin_logs already exists")
+
+
 def ensure_quiz_attempt_tables(conn: Any, cursor: Any, dry_run: bool) -> None:
     if not table_exists(cursor, "quiz_attempt"):
         run_sql(
@@ -736,6 +786,7 @@ def run_migration(
 
         ensure_student_package_access(conn, cursor, dry_run)
         ensure_notification_reads(conn, cursor, dry_run)
+        ensure_admin_tables(conn, cursor, dry_run)
         ensure_quiz_attempt_tables(conn, cursor, dry_run)
         backfill_student_package_access(conn, cursor, dry_run)
         alter_text_columns(conn, cursor, dry_run)

@@ -59,6 +59,7 @@ SKIPPED_HTTP_PATHS = {
     "/redoc",
     "/openapi.json",
 }
+UNMATCHED_ROUTE_LABEL = "__unmatched__"
 
 
 def is_multiprocess_metrics_enabled() -> bool:
@@ -74,7 +75,7 @@ def request_path_template(request: Request) -> str:
         if match == Match.FULL:
             return str(getattr(route, "path", request.url.path))
 
-    return request.url.path
+    return UNMATCHED_ROUTE_LABEL
 
 
 async def get_action_type(request: Request | None) -> str:

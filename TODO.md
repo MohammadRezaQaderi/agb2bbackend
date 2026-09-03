@@ -8,16 +8,19 @@ stable.
 
 ## P0 - Security And Production Safety
 
-- [ ] Remove real secret fallbacks from `config.py`.
-  - Current hardcoded defaults include `AG_DEVELOP_TOKEN`,
-    `AG_KAVENEGAR_API_KEY`, `AG_PASSWORD_SECRET_KEY`, `AG_DB_UID`, and
-    `AG_DB_PWD`.
-  - Add `.env.example` with placeholder values and make production fail fast
-    when required env vars are missing.
-  - Rotate any credentials that have already been committed or shared.
-- [ ] Rework `DEVELOP_TOKEN` usage in `/ag_api/admin_request`.
+- [x] Remove real secret fallbacks from `config.py`.
+  - Secret defaults for `AG_KAVENEGAR_API_KEY`, `AG_PASSWORD_SECRET_KEY`,
+    `AG_DB_UID`, and `AG_DB_PWD` were removed.
+  - `.env.example` now documents the required runtime values.
+  - Production fails fast when required env vars are missing.
+- [ ] Rotate any credentials that have already been committed or shared.
+- [x] Rework `DEVELOP_TOKEN` usage in `/ag_api/admin_request`.
   - The admin endpoint currently trusts one static token from config.
   - Replace with a real admin auth path or a scoped internal service token.
+  - Admin auth now checks `admins.token_hash` and stores admin audit events in
+    `admin_logs`.
+  - Admin tokens are created/rotated with `helper/db/create_admin.py`; there is
+    no config-token bootstrap path left in runtime.
 - [ ] Review password storage behavior.
   - Passwords are decryptable via Fernet and some APIs return decrypted
     passwords in responses/reports.
@@ -41,6 +44,11 @@ stable.
     uploads, static file serving, and report download logic.
   - Suggested routers: `auth`, `actions`, `admin`, `files`, `reports`,
     `health`.
+  - `routers/health.py`, `routers/static_data.py`, and `routers/files.py`
+    have been extracted.
+  - `routers/actions.py` and `routers/uploads.py` have been extracted.
+  - Report downloads remain in `main.py` intentionally until report cleanup is
+    resumed.
 - [x] Replace `from services.service import *` with explicit imports.
   - This makes endpoint dependencies searchable and safer during refactors.
 - [ ] Extract duplicate report-download logic.
@@ -112,22 +120,29 @@ stable.
 - [ ] Add a lightweight CI command.
   - Example stages: install dependencies, run lint, run tests, import-check the
     app.
-- [ ] Add `.env.example` and update deployment docs to use the same env names
+- [x] Add `.env.example` and update deployment docs to use the same env names
   as `config.py`.
-  - Deployment docs mention `KS_DB_*`, while code expects `AG_DB_*`.
+  - Deployment docs now point to `.env.example` and use `AG_DB_*` names.
 
 ## P2 - Logging And Observability
 
-- [ ] Replace `print()` in application paths with structured logging.
+- [x] Replace `print()` in application paths with structured logging.
   - Keep CLI/report scripts user-friendly, but app code should use Python
     logging with request context/tracking code.
-- [ ] Review Prometheus label cardinality.
+  - Runtime services/helpers now use module loggers; remaining prints are in
+    CLI, migration, report, or office-generation paths.
+- [x] Review Prometheus label cardinality.
   - HTTP metrics label raw request paths; dynamic paths with phone numbers or
     filenames can create high-cardinality metrics.
   - Prefer route templates where possible.
-- [ ] Improve `/ag_api/health`.
+  - Middleware now uses FastAPI route templates and a fixed unmatched-route
+    label instead of raw unknown paths.
+- [x] Improve `/ag_api/health`.
   - Separate liveness from readiness.
   - Add optional Redis check.
+  - `/health` remains readiness-compatible for deployment, `/ready` mirrors it,
+    and `/live` returns process liveness without DB/Redis dependencies.
+  - Redis readiness is enabled only when `AG_HEALTH_CHECK_REDIS=1`.
   - Avoid exposing detailed DB errors to public callers.
 
 ## P2 - Repository Hygiene
