@@ -287,6 +287,32 @@ class ApiLog(Base, TimestampMixin):
     error_p: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
 
+class Admin(Base, TimestampMixin):
+    __tablename__ = "admins"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    admin_name: Mapped[str] = mapped_column(Unicode(100), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    created_by: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+
+
+class AdminLog(Base):
+    __tablename__ = "admin_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    admin_id: Mapped[int | None] = mapped_column(ForeignKey("admins.id"), nullable=True)
+    admin_name: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    action_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    target_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target_phone: Mapped[str | None] = mapped_column(Unicode(12), nullable=True)
+    request_data: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    response_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    response_message: Mapped[str | None] = mapped_column(Unicode(500), nullable=True)
+    tracking_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_time: Mapped[datetime | None] = mapped_column(DateTime, default=datetime.now, nullable=True)
+
+
 class Notification(Base, TimestampMixin):
     __tablename__ = "notifications"
 
@@ -307,7 +333,7 @@ class NotificationRead(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     notification_id: Mapped[int] = mapped_column(ForeignKey("notifications.id"), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), nullable=False)
-    created_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_time: Mapped[datetime | None] = mapped_column(DateTime, default=datetime.now, nullable=True)
 
 
 class QuizAttempt(Base, TimestampMixin):
@@ -397,6 +423,8 @@ class HedayatField(Base, TimestampMixin):
 
 
 __all__ = [
+    "Admin",
+    "AdminLog",
     "ApiLog",
     "Capacity",
     "CapacityLog",

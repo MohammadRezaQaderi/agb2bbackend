@@ -2,6 +2,7 @@ import os
 import string
 import random
 import json
+import logging
 import uuid
 import re
 from datetime import datetime
@@ -35,8 +36,10 @@ from helper.password_helper import (
     verify_password_hash,
 )
 from helper import file_helper
-from config import DEVELOP_TOKEN
+from config import REDIS_DB, REDIS_HOST, REDIS_PASSWORD, REDIS_PORT
 
+
+logger = logging.getLogger(__name__)
 
 
 def get_tracking_code() -> str:
@@ -58,30 +61,74 @@ def save_base64_image(pic_value: str | None, last_pic: str | None, storage_dir: 
     return new_file_name
 
 
-def authorize_admin(token: str | None) -> bool:
-    return bool(token and token == DEVELOP_TOKEN)
-
-
 async def health_payload(service_name: str):
+    return await readiness_payload(service_name)
+
+
+async def liveness_payload(service_name: str):
     instance_name = os.getenv("INSTANCE_NAME", "unknown")
     port = os.getenv("PORT", "unknown")
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "service": service_name,
+        "instance": instance_name,
+        "port": port,
+        "version": "1.0.0"
+    }
 
+
+async def readiness_payload(service_name: str):
+    instance_name = os.getenv("INSTANCE_NAME", "unknown")
+    port = os.getenv("PORT", "unknown")
     try:
         with session_scope() as session:
             session.execute(text("SELECT 1"))
         db_status = "connected"
-    except Exception as e:
-        db_status = f"error: {str(e)}"
+    except Exception:
+        logger.exception("Database readiness check failed")
+        db_status = "error"
 
+    checks = {"database": db_status}
+    include_redis = os.getenv("AG_HEALTH_CHECK_REDIS", "").lower() in {"1", "true", "yes"}
+    if include_redis:
+        checks["redis"] = _redis_health_status()
+
+    healthy = all(value == "connected" for value in checks.values())
     return {
-        "status": "healthy" if db_status == "connected" else "degraded",
+        "status": "healthy" if healthy else "degraded",
         "timestamp": datetime.now().isoformat(),
         "service": service_name,
         "instance": instance_name,
         "port": port,
         "database": db_status,
+        "checks": checks,
         "version": "1.0.0"
     }
+
+
+def _redis_health_status() -> str:
+    from walrus import Database
+
+    redis_db = None
+    try:
+        redis_db = Database(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=REDIS_DB,
+            password=REDIS_PASSWORD if REDIS_PASSWORD else None,
+        )
+        redis_db.ping()
+        return "connected"
+    except Exception:
+        logger.exception("Redis readiness check failed")
+        return "error"
+    finally:
+        if redis_db is not None:
+            try:
+                redis_db.close()
+            except Exception:
+                logger.exception("Error closing Redis health-check connection")
 
 AG_QUIZ_NAME_TITLE = [
     "کتل", "گاردنر", "نئو", "کلیفتون", "هالند",
@@ -286,10 +333,10 @@ def upsert_student_package_access(
                 permission=permission,
                 limit=limit,
             )
-    except Exception as e:
+    except Exception:
         # The new table is additive. Keep the old JSON path working if a deployment
         # temporarily runs before the schema migration.
-        print(f"[student_package_access] sync skipped: {e}")
+        logger.exception("student_package_access sync skipped")
 
 
 def get_student_package_access_counts(
@@ -306,8 +353,8 @@ def get_student_package_access_counts(
                 relation_column=relation_column,
                 user_id=user_id,
             )
-    except Exception as e:
-        print(f"[student_package_access] count fallback: {e}")
+    except Exception:
+        logger.exception("student_package_access count fallback")
         return None
 
 
@@ -376,8 +423,8 @@ async def key_error_logging(
                 data=None,
                 error_p=f"{error_message} با اطلاعات شما ارسال نشده است.",
             )
-    except Exception as e:
-        print(f"[Logging Error] key_error_logging failed: {e}")
+    except Exception:
+        logger.exception("key_error_logging failed")
 
     return key_error_message_return(error_message, method_type)
 
@@ -400,8 +447,8 @@ async def exception_error_logging(
                 data=None,
                 error_p=str(error_message),
             )
-    except Exception as e:
-        print(f"[Logging Error] exception_error_logging failed: {e}")
+    except Exception:
+        logger.exception("exception_error_logging failed")
 
     return exception_error_message_return(error_message, method_type)
 
@@ -426,8 +473,8 @@ def service_exception_error_logging(
                 data=json.dumps(sanitize_log_data(data), ensure_ascii=False),
                 error_p=str(error_message),
             )
-    except Exception as e:
-        print(f"[Logging Error] service_exception_error_logging failed: {e}")
+    except Exception:
+        logger.exception("service_exception_error_logging failed")
 
 
 def is_valid_mobile(phone: str) -> bool:

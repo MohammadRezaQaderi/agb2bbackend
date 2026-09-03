@@ -1,3 +1,4 @@
+import logging
 import time
 from typing import Any, Dict, List, Tuple
 
@@ -10,6 +11,8 @@ from helper.quiz.scl_answer_info import (
     quiz_labels as scl_quiz_labels,
     quiz_questions_answer_schema as scl_quiz_questions_answer_schema,
 )
+
+logger = logging.getLogger(__name__)
 
 iq_scores_ages = {
     13: {3: [50, -1], 4: [56, -1], 5: [56, -1], 6: [62, -1], 7: [65, -1], 8: [65, -1], 9: [68, -1], 10: [68, -1],
@@ -228,7 +231,7 @@ def ag_score_computation(user_id, user_age=9):
     else:
         labels['CATEL_Brain'] = ''
     end = time.time()
-    print("time to compute the score of the user : ", end - start)
+    logger.info("time to compute the score of the user: %s", end - start)
     return labels, c, w, n
 
 
@@ -274,5 +277,5 @@ def score_computation_scl(user_answers):
             )
 
     end = time.time()
-    print("time to compute the SCL score of the user : ", end - start)
+    logger.info("time to compute the SCL score of the user: %s", end - start)
     return labels, missing_questions

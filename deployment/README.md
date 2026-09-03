@@ -9,6 +9,14 @@ The same FastAPI app serves both prefixes:
 
 ## Setup
 
+Copy `.env.example` to your environment manager and set the real values before starting production. When `AG_ENV=production`, the app fails fast if these required values are missing: `AG_KAVENEGAR_API_KEY`, `AG_PASSWORD_SECRET_KEY`, `AG_DB_UID`, and `AG_DB_PWD`.
+
+Create or rotate admin API tokens through the database-backed helper:
+
+```cmd
+venv\Scripts\python.exe helper\db\create_admin.py --name admin_1 --token "YOUR_ADMIN_TOKEN"
+```
+
 ```cmd
 cd deployment
 setup.bat

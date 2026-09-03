@@ -117,7 +117,7 @@ echo ========================================
 echo.
 echo Next steps:
 echo 1. Edit 'deployment\instances.json'
-echo 2. Edit 'config.py' (or .env)
+echo 2. Set required environment variables from '.env.example'
 echo 3. Run 'start.bat'
 echo.
 pause

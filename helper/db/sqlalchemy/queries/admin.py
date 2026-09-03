@@ -4,10 +4,12 @@ import json
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, aliased
 
 from helper.db.sqlalchemy.models import (
+    Admin,
+    AdminLog,
     Capacity,
     CapacityLog,
     CapacityPackage,
@@ -20,6 +22,57 @@ from helper.db.sqlalchemy.models import (
     Student,
     User,
 )
+
+
+def count_admins(session: Session) -> int:
+    return int(session.execute(select(func.count()).select_from(Admin)).scalar_one() or 0)
+
+
+def get_active_admin_by_token_hash(session: Session, token_hash: str) -> dict | None:
+    row = session.execute(
+        select(
+            Admin.id.label("id"),
+            Admin.admin_name.label("admin_name"),
+        )
+        .where(Admin.token_hash == token_hash, Admin.status == "active")
+        .limit(1)
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def create_admin(session: Session, admin_name: str, token_hash: str, created_by: str | None = None) -> int:
+    admin = Admin(admin_name=admin_name, token_hash=token_hash, status="active", created_by=created_by)
+    session.add(admin)
+    session.flush()
+    return admin.id
+
+
+def create_admin_log(
+    session: Session,
+    admin_id: int | None,
+    admin_name: str | None,
+    action_type: str,
+    target_phone: str | None,
+    target_user_id: int | None,
+    request_data: str | None,
+    response_status: str | None,
+    response_message: str | None,
+    tracking_code: str | None,
+) -> int:
+    admin_log = AdminLog(
+        admin_id=admin_id,
+        admin_name=admin_name,
+        action_type=action_type,
+        target_phone=target_phone,
+        target_user_id=target_user_id,
+        request_data=request_data,
+        response_status=response_status,
+        response_message=response_message,
+        tracking_code=tracking_code,
+    )
+    session.add(admin_log)
+    session.flush()
+    return admin_log.id
 
 
 def _decode_answer_value(value: Any) -> Any:

@@ -1,3 +1,5 @@
+import logging
+
 import helper.func_helper as func_helper
 import helper.quiz.quiz_data_extractor as quiz_data_extractor
 from helper.db.sqlalchemy import session_scope
@@ -17,6 +19,7 @@ import services.student.student_service as student_service
 
 DEFAULT_SERVICE_ERROR = "مشکلی در اطلاعات شما پیش آمده با پشتیبانی در ارتباط باشید."
 ACCESS_DENIED_MESSAGE = "شما به این سرویس دسترسی ندارید."
+logger = logging.getLogger(__name__)
 
 
 def _error_response(method_type, message=DEFAULT_SERVICE_ERROR):
@@ -522,8 +525,8 @@ def check_student_access(student_user_id, user_info):
             return res["consultant_user_id"] == user_id
         
         return False
-    except Exception as e:
-        print(f"Error checking student access: {e}")
+    except Exception:
+        logger.exception("Error checking student access")
         return False
 
 
@@ -778,7 +781,17 @@ def mark_notification_read(request_data, user_info):
 
 
 # Admin functions
-def admin_change_capacity(request_data):
+def _log_admin_response(admin_context, action_type, request_data, response):
+    admin_service.log_admin_action(
+        admin_context=admin_context,
+        action_type=action_type,
+        request_data=request_data,
+        response=response,
+    )
+    return response
+
+
+def admin_change_capacity(request_data, admin_context=None, action_type="ag_change_capacity"):
     method_type = "UPDATE"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -786,13 +799,14 @@ def admin_change_capacity(request_data):
         method_type=method_type,
     )
     if not is_valid:
-        return error_response
+        return _log_admin_response(admin_context, action_type, request_data, error_response)
     
     tracking_token, response_data, response_message = admin_service.change_capacity(request_data=request_data)
-    return _service_response(method_type, tracking_token, response_data, response_message)
+    response = _service_response(method_type, tracking_token, response_data, response_message)
+    return _log_admin_response(admin_context, action_type, request_data, response)
 
 
-def admin_get_user_info(request_data):
+def admin_get_user_info(request_data, admin_context=None, action_type="ag_get_user_info"):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -800,13 +814,14 @@ def admin_get_user_info(request_data):
         method_type=method_type,
     )
     if not is_valid:
-        return error_response
+        return _log_admin_response(admin_context, action_type, request_data, error_response)
     
     tracking_token, response_data, response_message = admin_service.get_user_info(request_data=request_data)
-    return _service_response(method_type, tracking_token, response_data, response_message)
+    response = _service_response(method_type, tracking_token, response_data, response_message)
+    return _log_admin_response(admin_context, action_type, request_data, response)
 
 
-def admin_check_student_quiz_answer(request_data):
+def admin_check_student_quiz_answer(request_data, admin_context=None, action_type="ag_check_student_quiz_answer"):
     method_type = "SELECT"
     is_valid, error_response = func_helper.validate_request_data_fields(
         request_data=request_data,
@@ -814,9 +829,10 @@ def admin_check_student_quiz_answer(request_data):
         method_type=method_type,
     )
     if not is_valid:
-        return error_response
+        return _log_admin_response(admin_context, action_type, request_data, error_response)
     
     tracking_token, response_data, response_message = admin_service.check_student_quiz_answer(
         request_data=request_data
     )
-    return _service_response(method_type, tracking_token, response_data, response_message)
+    response = _service_response(method_type, tracking_token, response_data, response_message)
+    return _log_admin_response(admin_context, action_type, request_data, response)

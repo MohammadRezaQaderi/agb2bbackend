@@ -11,5 +11,10 @@ class Base(DeclarativeBase):
 
 
 class TimestampMixin:
-    created_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    edited_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_time: Mapped[datetime | None] = mapped_column(DateTime, default=datetime.now, nullable=True)
+    edited_time: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        onupdate=datetime.now,
+        nullable=True,
+    )

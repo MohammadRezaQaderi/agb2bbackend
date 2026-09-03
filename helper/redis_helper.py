@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import logging
+
 from walrus import Database
 
 from config import REDIS_DB, REDIS_HOST, REDIS_PASSWORD, REDIS_PORT
+
+
+logger = logging.getLogger(__name__)
 
 
 async def redis_connection() -> Database:
@@ -15,8 +20,8 @@ async def redis_connection() -> Database:
         )
         redis_db.ping()
         return redis_db
-    except Exception as e:
-        print(f"[Redis] Connection failed: {e}")
+    except Exception:
+        logger.exception("Redis connection failed")
         raise
 
 
@@ -24,5 +29,5 @@ async def close_redis_connection(redis_db: Database | None) -> None:
     try:
         if redis_db is not None:
             redis_db.close()
-    except Exception as e:
-        print(f"[Redis] Error closing connection: {e}")
+    except Exception:
+        logger.exception("Error closing Redis connection")

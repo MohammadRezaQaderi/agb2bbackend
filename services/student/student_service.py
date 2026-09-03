@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 
 import redis
@@ -38,6 +39,9 @@ AG_REPORT_INFO = {
 }
 
 
+logger = logging.getLogger(__name__)
+
+
 def _empty_access():
     return {"AG": {"permission": 0, "limit": 0}, "SCL": {"permission": 0, "limit": 0}}
 
@@ -64,8 +68,8 @@ def _load_student_access(user_id):
                     "limit": int(row.get("limit") or 0),
                 }
             return access
-    except Exception as e:
-        print(f"[student_package_access] student fallback: {e}")
+    except Exception:
+        logger.exception("student_package_access student fallback")
 
     with session_scope() as session:
         access = get_student_legacy_access(session=session, user_id=user_id)
