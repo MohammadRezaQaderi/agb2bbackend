@@ -9,79 +9,85 @@ from routers.action_helpers import (
     run_endpoint,
 )
 import services.admin.admin_service as admin_service
-import services.service as service
+import services.accounts_gateway as accounts_gateway
+import services.admin.admin_gateway as admin_gateway
+import services.auth.auth_gateway as auth_gateway
+import services.management_gateway as management_gateway
+import services.other.other_gateway as other_gateway
+import services.quiz.quiz_gateway as quiz_gateway
+import services.student.student_gateway as student_gateway
 
 router = APIRouter()
 
 
 STUDENT_SELECT_ACTIONS = {
-    "ags_get_dashboard": service.student_get_dashboard,
-    "ags_get_quiz_setting": service.student_get_quiz_setting,
-    "ags_get_access_product": service.student_get_access_product,
-    "ags_get_quiz_table_info": service.student_get_quiz_table_info,
-    "ags_get_quiz_info": service.student_get_quiz_info,
+    "ags_get_dashboard": student_gateway.student_get_dashboard,
+    "ags_get_quiz_setting": quiz_gateway.student_get_quiz_setting,
+    "ags_get_access_product": student_gateway.student_get_access_product,
+    "ags_get_quiz_table_info": student_gateway.student_get_quiz_table_info,
+    "ags_get_quiz_info": student_gateway.student_get_quiz_info,
 }
 
 STUDENT_UPDATE_ACTIONS = {
-    "ags_change_user_info": service.student_change_user_info,
-    "ags_change_password": service.student_change_password,
-    "ags_change_quiz_answer": service.student_change_quiz_answer,
+    "ags_change_user_info": student_gateway.student_change_user_info,
+    "ags_change_password": student_gateway.student_change_password,
+    "ags_change_quiz_answer": student_gateway.student_change_quiz_answer,
 }
 
 STUDENT_DELETE_ACTIONS = {
-    "ags_sign_out": service.sign_out,
+    "ags_sign_out": auth_gateway.sign_out,
 }
 
 MANAGEMENT_INSERT_ACTIONS = {
-    "ag_add_payment_order": service.add_payment_order,
-    "ag_add_consultant": service.add_consultant,
-    "ag_add_student": service.add_student,
-    "ag_mark_notification_read": service.mark_notification_read,
+    "ag_add_payment_order": other_gateway.add_payment_order,
+    "ag_add_consultant": accounts_gateway.add_consultant,
+    "ag_add_student": accounts_gateway.add_student,
+    "ag_mark_notification_read": other_gateway.mark_notification_read,
 }
 
 MANAGEMENT_SELECT_ACTIONS = {
-    "ag_get_dashboard": service.get_dashboard,
-    "ag_get_consultants": service.get_consultants,
-    "ag_get_students": service.get_students,
-    "ag_get_report": service.get_report,
-    "ag_get_management_report": service.get_management_report,
-    "ag_get_quiz_setting": service.get_quiz_setting,
-    "ag_get_quiz_info": service.get_quiz_info,
-    "ag_apply_discount": service.apply_discount,
-    "ag_get_transactions": service.get_transactions,
-    "ag_get_report_data": service.get_report_data,
+    "ag_get_dashboard": management_gateway.get_dashboard,
+    "ag_get_consultants": management_gateway.get_consultants,
+    "ag_get_students": management_gateway.get_students,
+    "ag_get_report": management_gateway.get_report,
+    "ag_get_management_report": management_gateway.get_management_report,
+    "ag_get_quiz_setting": quiz_gateway.get_quiz_setting,
+    "ag_get_quiz_info": quiz_gateway.get_quiz_info,
+    "ag_apply_discount": other_gateway.apply_discount,
+    "ag_get_transactions": other_gateway.get_transactions,
+    "ag_get_report_data": other_gateway.get_report_data,
 }
 
 MANAGEMENT_UPDATE_ACTIONS = {
-    "ag_change_user_info": service.change_user_info,
-    "ag_change_password": service.change_password,
-    "ag_change_setting": service.change_setting,
-    "ag_change_consultant": service.change_consultant,
-    "ag_change_student": service.change_student,
-    "ag_change_comment": service.change_comment,
-    "ag_change_user_quiz_setting": service.change_user_quiz_setting,
-    "ag_change_student_access": service.change_student_access,
+    "ag_change_user_info": management_gateway.change_user_info,
+    "ag_change_password": management_gateway.change_password,
+    "ag_change_setting": management_gateway.change_setting,
+    "ag_change_consultant": management_gateway.change_consultant,
+    "ag_change_student": management_gateway.change_student,
+    "ag_change_comment": management_gateway.change_comment,
+    "ag_change_user_quiz_setting": management_gateway.change_user_quiz_setting,
+    "ag_change_student_access": management_gateway.change_student_access,
 }
 
 MANAGEMENT_DELETE_ACTIONS = {
-    "ag_sign_out": service.sign_out,
+    "ag_sign_out": auth_gateway.sign_out,
 }
 
 MANAGEMENT_INSERT_PRE_AUTH_ACTIONS = {
-    "ag_sign_up": lambda request_data: dispatch_redis_action(service.sign_up, request_data),
-    "ag_send_otp": lambda request_data: dispatch_redis_action(service.send_otp, request_data),
-    "ag_add_comment": service.add_comment,
+    "ag_sign_up": lambda request_data: dispatch_redis_action(auth_gateway.sign_up, request_data),
+    "ag_send_otp": lambda request_data: dispatch_redis_action(auth_gateway.send_otp, request_data),
+    "ag_add_comment": other_gateway.add_comment,
 }
 
 MANAGEMENT_SELECT_PRE_AUTH_ACTIONS = {
-    "ag_check_otp": lambda request_data: dispatch_redis_action(service.check_otp, request_data),
-    "ag_get_comments": lambda _request_data: service.get_comments(),
+    "ag_check_otp": lambda request_data: dispatch_redis_action(auth_gateway.check_otp, request_data),
+    "ag_get_comments": lambda _request_data: other_gateway.get_comments(),
 }
 
 ADMIN_ACTIONS = {
-    "ag_change_capacity": service.admin_change_capacity,
-    "ag_get_user_info": service.admin_get_user_info,
-    "ag_check_student_quiz_answer": service.admin_check_student_quiz_answer,
+    "ag_change_capacity": admin_gateway.admin_change_capacity,
+    "ag_get_user_info": admin_gateway.admin_get_user_info,
+    "ag_check_student_quiz_answer": admin_gateway.admin_check_student_quiz_answer,
 }
 
 
@@ -92,7 +98,7 @@ async def student_signin_api(request: Request):
         "ags_api/signin",
         "student_signin_api",
         "SIGNIN",
-        lambda: dispatch_single_action(request, "SIGNIN", "ags_sign_in", service.student_sign_in),
+        lambda: dispatch_single_action(request, "SIGNIN", "ags_sign_in", auth_gateway.student_sign_in),
     )
 
 
@@ -144,7 +150,7 @@ async def signin_api(request: Request):
         "ag_api/signin",
         "signin_api",
         "SIGNIN",
-        lambda: dispatch_single_action(request, "SIGNIN", "ag_sign_in", service.sign_in),
+        lambda: dispatch_single_action(request, "SIGNIN", "ag_sign_in", auth_gateway.sign_in),
     )
 
 

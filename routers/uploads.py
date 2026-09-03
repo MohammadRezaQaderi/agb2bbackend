@@ -4,10 +4,11 @@ import helper.api_metrics as api_metrics
 import helper.file_helper as file_helper
 import helper.func_helper as func_helper
 import services.institute.institute_service as institute_service
+import services.management_gateway as management_gateway
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
-import services.service as service
 from config import VOICES_DIR
+from services.gateway_helpers import service_response
 
 router = APIRouter()
 
@@ -35,7 +36,7 @@ async def update_user_file_image(request: Request):
         )
         if not state:
             return func_helper.not_auth_return(message=state_message)
-        return service.change_user_info(request_data=request_data, user_info=user_info)
+        return management_gateway.change_user_info(request_data=request_data, user_info=user_info)
     except KeyError as e:
         return await func_helper.key_error_logging("ag_api", "update_user_file_image", str(e), method_type)
     except Exception as e:
@@ -82,17 +83,17 @@ async def update_user_voice(
             tracking_token, response_data, response_message = institute_service.change_user_voice(
                 request_data=data, user_info=user_info
             )
-            return service.service_response(method_type, tracking_token, response_data, response_message)
+            return service_response(method_type, tracking_token, response_data, response_message)
         if role == "sch":
             tracking_token, response_data, response_message = school_service.change_user_voice(
                 request_data=data, user_info=user_info
             )
-            return service.service_response(method_type, tracking_token, response_data, response_message)
+            return service_response(method_type, tracking_token, response_data, response_message)
         if role == "ocon":
             tracking_token, response_data, response_message = owner_consultant_service.change_user_voice(
                 request_data=data, user_info=user_info
             )
-            return service.service_response(method_type, tracking_token, response_data, response_message)
+            return service_response(method_type, tracking_token, response_data, response_message)
 
         return {
             "status": 200,
@@ -101,6 +102,6 @@ async def update_user_voice(
             "error": "شما به این سرویس دسترسی ندارید.",
         }
     except file_helper.FileValidationError:
-        return service.service_response(method_type, None, error_message="فایل صوتی معتبر نیست.")
+        return service_response(method_type, None, error_message="فایل صوتی معتبر نیست.")
     except Exception as e:
         return await func_helper.exception_error_logging("ag_api", "update_user_voice", str(e), method_type)

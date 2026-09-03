@@ -75,8 +75,9 @@ stable.
   - Payment/comment/notification/report-data wrappers moved to
     `services/other/other_gateway.py`.
   - Quiz wrappers moved to `services/quiz/quiz_gateway.py`.
-  - `services/service.py` remains as the compatibility gateway for student and
-    consultant account creation plus re-exported action handlers.
+  - Student and consultant account creation moved to
+    `services/accounts_gateway.py`.
+  - `services/service.py` remains as a compatibility re-export facade.
 
 ## P1 - Database And Transactions
 
