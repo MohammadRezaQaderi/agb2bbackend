@@ -45,7 +45,10 @@ stable.
   - Suggested routers: `auth`, `actions`, `admin`, `files`, `reports`,
     `health`.
   - `routers/health.py`, `routers/static_data.py`, and `routers/files.py`
-    have been extracted; action dispatch, uploads, and report downloads remain.
+    have been extracted.
+  - `routers/actions.py` and `routers/uploads.py` have been extracted.
+  - Report downloads remain in `main.py` intentionally until report cleanup is
+    resumed.
 - [x] Replace `from services.service import *` with explicit imports.
   - This makes endpoint dependencies searchable and safer during refactors.
 - [ ] Extract duplicate report-download logic.
