@@ -58,8 +58,7 @@ stable.
     permission checks, quiz completion checks, queue checks, and file lookup.
   - Create one helper/service such as `get_student_report_file(kind,
     report_number, expected_quiz_count)`.
-  - Deferred for now; report/export flows are not part of the current cleanup
-    pass.
+  - Deferred for now; runtime report-download endpoints remain in `main.py`.
 - [ ] Standardize API response shapes and HTTP status usage.
   - Some business errors return HTTP 200 with `status` in JSON.
   - Other paths use custom HTTP status codes like `321`-`324`.
@@ -178,9 +177,10 @@ stable.
 
 ## P2 - Repository Hygiene
 
-- [ ] Ignore generated report outputs.
-  - `report/outputs/` is currently untracked output and should probably be
-    ignored unless sample fixtures are intentional.
+- [x] Remove legacy manual report scripts.
+  - The tracked `report/` folder contained manual export/import scripts and
+    generated output. It was removed and can be reintroduced later with the new
+    reporting/export structure.
 - [ ] Clean local artifacts before committing.
   - `__pycache__/` and `venv/` are ignored, but local copies exist in the
     workspace.
