@@ -83,7 +83,7 @@ stable.
     password updates, request validation, and student access helpers moved to
     focused helper modules.
   - `helper/func_helper.py` is now a compatibility re-export facade.
-- [ ] Continue splitting `services/service.py`.
+- [x] Continue splitting `services/service.py`.
   - Auth, student, and admin gateway wrappers have moved to dedicated modules.
   - Gateway modules now import focused helper modules directly instead of
     `helper/func_helper.py`.
@@ -95,7 +95,8 @@ stable.
   - Quiz wrappers moved to `services/quiz/quiz_gateway.py`.
   - Student and consultant account creation moved to
     `services/accounts_gateway.py`.
-  - `services/service.py` remains as a compatibility re-export facade.
+  - `services/service.py` was removed after all internal callers moved to the
+    focused gateway modules.
 
 ## P1 - Database And Transactions
 
