@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 
 import helper.api_metrics as api_metrics
-import helper.func_helper as func_helper
+import helper.service_errors as service_errors
 from routers.action_helpers import (
     dispatch_authenticated_action,
     dispatch_redis_action,
@@ -230,18 +230,18 @@ async def _dispatch_admin_action(request: Request):
     token = data.get("token")
     admin_context = admin_service.authenticate_admin_token(token=token)
     if admin_context is None:
-        return func_helper.not_auth_return(message="شما به این سرویس دسترسی ندارید.", method_type=method_type)
+        return service_errors.not_auth_return(message="شما به این سرویس دسترسی ندارید.", method_type=method_type)
 
     action = data.get("action_type")
     if not action:
-        return func_helper.not_method_access_return()
+        return service_errors.not_method_access_return()
 
     request_data = data.get("request_data")
     if request_data is None:
-        return func_helper.not_data_return(method_type=method_type)
+        return service_errors.not_data_return(method_type=method_type)
 
     handler = ADMIN_ACTIONS.get(action)
     if handler is None:
-        return func_helper.not_method_access_return()
+        return service_errors.not_method_access_return()
 
     return handler(request_data=request_data, admin_context=admin_context, action_type=action)

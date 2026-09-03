@@ -1,14 +1,9 @@
-import os
 import string
 import random
 import json
 import logging
-import uuid
-from datetime import datetime
 from random import randint
 from typing import Any, Mapping, Tuple, Optional
-
-from sqlalchemy import text
 
 from helper.constants import (
     AG_QUIZ_NAME_TITLE,
@@ -17,13 +12,13 @@ from helper.constants import (
     SCL_QUIZ_NAME_TITLE,
     get_kind_name,
 )
+from helper.auth_context import authorizer
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.auth import (
-    get_user_identity_by_token,
     update_user_password,
     user_phone_exists,
 )
-from helper.db.sqlalchemy.queries.other import create_api_log, payment_id_exists
+from helper.db.sqlalchemy.queries.other import payment_id_exists
 from helper.db.sqlalchemy.queries.students import (
     consume_capacity_package,
     count_student_packages_for_relation,
@@ -32,7 +27,7 @@ from helper.db.sqlalchemy.queries.students import (
     save_student_package_access,
     update_student_access,
 )
-from helper.log_sanitizer import sanitize_log_data
+from helper.health import health_payload, liveness_payload, readiness_payload
 from helper.password_helper import (
     decrypt_password,
     encrypt_password,
@@ -41,16 +36,22 @@ from helper.password_helper import (
     verify_password,
     verify_password_hash,
 )
+from helper.service_errors import (
+    exception_error_logging,
+    exception_error_message_return,
+    key_error_logging,
+    key_error_message_return,
+    not_auth_return,
+    not_data_return,
+    not_method_access_return,
+    service_exception_error_logging,
+)
+from helper.tracking import get_tracking_code
 from helper.validators import check_security_code, is_valid_mobile, password_format_check
 from helper import file_helper
-from config import REDIS_DB, REDIS_HOST, REDIS_PASSWORD, REDIS_PORT
 
 
 logger = logging.getLogger(__name__)
-
-
-def get_tracking_code() -> str:
-    return str(uuid.uuid4())
 
 
 def save_base64_image(pic_value: str | None, last_pic: str | None, storage_dir: str) -> str | None:
@@ -67,75 +68,6 @@ def save_base64_image(pic_value: str | None, last_pic: str | None, storage_dir: 
 
     return new_file_name
 
-
-async def health_payload(service_name: str):
-    return await readiness_payload(service_name)
-
-
-async def liveness_payload(service_name: str):
-    instance_name = os.getenv("INSTANCE_NAME", "unknown")
-    port = os.getenv("PORT", "unknown")
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "service": service_name,
-        "instance": instance_name,
-        "port": port,
-        "version": "1.0.0"
-    }
-
-
-async def readiness_payload(service_name: str):
-    instance_name = os.getenv("INSTANCE_NAME", "unknown")
-    port = os.getenv("PORT", "unknown")
-    try:
-        with session_scope() as session:
-            session.execute(text("SELECT 1"))
-        db_status = "connected"
-    except Exception:
-        logger.exception("Database readiness check failed")
-        db_status = "error"
-
-    checks = {"database": db_status}
-    include_redis = os.getenv("AG_HEALTH_CHECK_REDIS", "").lower() in {"1", "true", "yes"}
-    if include_redis:
-        checks["redis"] = _redis_health_status()
-
-    healthy = all(value == "connected" for value in checks.values())
-    return {
-        "status": "healthy" if healthy else "degraded",
-        "timestamp": datetime.now().isoformat(),
-        "service": service_name,
-        "instance": instance_name,
-        "port": port,
-        "database": db_status,
-        "checks": checks,
-        "version": "1.0.0"
-    }
-
-
-def _redis_health_status() -> str:
-    from walrus import Database
-
-    redis_db = None
-    try:
-        redis_db = Database(
-            host=REDIS_HOST,
-            port=REDIS_PORT,
-            db=REDIS_DB,
-            password=REDIS_PASSWORD if REDIS_PASSWORD else None,
-        )
-        redis_db.ping()
-        return "connected"
-    except Exception:
-        logger.exception("Redis readiness check failed")
-        return "error"
-    finally:
-        if redis_db is not None:
-            try:
-                redis_db.close()
-            except Exception:
-                logger.exception("Error closing Redis health-check connection")
 
 def upsert_student_package_access(
         stu_user_id: int,
@@ -179,125 +111,6 @@ def get_student_package_access_counts(
     except Exception:
         logger.exception("student_package_access count fallback")
         return None
-
-
-async def authorizer(request_data: Mapping[str, Any]):
-    try:
-        token = request_data.get("token")
-        if not token:
-            return False, "اطلاعات دریافتی شما دچار مشکل شده لطفا یکبار خروج کرده و سپس ورود شوید.", None
-
-        with session_scope() as session:
-            res = get_user_identity_by_token(session=session, token=token)
-
-        if res is None:
-            return False, "نشست شما به پایان رسیده  لطفا یکبار خروج کرده و سپس ورود شوید.", None
-
-        request_user_id = request_data.get("user_id")
-        if request_user_id is None or str(request_user_id) != str(res["user_id"]):
-            return False, "اطلاعات دریافتی شما دچار مشکل شده لطفا یکبار خروج کرده و سپس ورود شوید.", None
-
-        return True, "", {"user_id": res["user_id"], "phone": res["phone"], "role": res["role"]}
-    except Exception as e:
-        service_exception_error_logging("ag_api/check", "check", str(e), request_data, {})
-        return False, "اطلاعات دریافتی شما دچار مشکل شده لطفا یکبار خروج کرده و سپس ورود شوید.", None
-
-
-def not_method_access_return():
-    return {"status": 405, "tracking_code": None, "method_type": None,
-            "error": "سرویس مورد نظر در دسترس نیست."}
-
-
-def not_data_return(method_type):
-    return {"status": 200, "tracking_code": None, "method_type": method_type,
-            "error": "اطلاعات از سمت شما ارسال نشده است."}
-
-
-def not_auth_return(message, method_type="AUTH"):
-    return {"status": 404, "tracking_code": None, "method_type": method_type,
-            "error": message}
-
-
-def key_error_message_return(error_message, method_type):
-    return {"status": 401, "tracking_code": None, "method_type": method_type,
-            "error": "%s با اطلاعات شما ارسال نشده است." % str(error_message)}
-
-
-def exception_error_message_return(error_message, method_type):
-    return {"status": 500, "tracking_code": None, "method_type": method_type,
-            "error": "مشکلی در ارتباط با سرویس‌ها پیش آمده است. درحال بررسی هستیم."}
-
-
-async def key_error_logging(
-        end_point: str,
-        func_name: str,
-        error_message: str,
-        method_type: str,
-) -> dict:
-    """Log missing-key errors to the database and return a standard response."""
-    try:
-        with session_scope() as session:
-            create_api_log(
-                session=session,
-                user_id=None,
-                phone=None,
-                end_point=end_point,
-                func_name=func_name,
-                data=None,
-                error_p=f"{error_message} با اطلاعات شما ارسال نشده است.",
-            )
-    except Exception:
-        logger.exception("key_error_logging failed")
-
-    return key_error_message_return(error_message, method_type)
-
-
-async def exception_error_logging(
-        end_point: str,
-        func_name: str,
-        error_message: str,
-        method_type: str,
-) -> dict:
-    """Log unexpected errors to the database and return a generic error response."""
-    try:
-        with session_scope() as session:
-            create_api_log(
-                session=session,
-                user_id=None,
-                phone=None,
-                end_point=end_point,
-                func_name=func_name,
-                data=None,
-                error_p=str(error_message),
-            )
-    except Exception:
-        logger.exception("exception_error_logging failed")
-
-    return exception_error_message_return(error_message, method_type)
-
-
-def service_exception_error_logging(
-        end_point: str,
-        func_name: str,
-        error_message: str,
-        data: Any,
-        user_info: Mapping[str, Any] | None,
-) -> None:
-    """Log service-level exceptions."""
-    try:
-        user_info = user_info or {}
-        with session_scope() as session:
-            create_api_log(
-                session=session,
-                user_id=user_info.get("user_id"),
-                phone=user_info.get("phone"),
-                end_point=end_point,
-                func_name=func_name,
-                data=json.dumps(sanitize_log_data(data), ensure_ascii=False),
-                error_p=str(error_message),
-            )
-    except Exception:
-        logger.exception("service_exception_error_logging failed")
 
 
 def random_phone_candidate(n: int) -> str:

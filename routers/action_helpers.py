@@ -6,7 +6,8 @@ from typing import Any, Callable, Mapping
 
 from fastapi import Request
 
-import helper.func_helper as func_helper
+import helper.auth_context as auth_context
+import helper.service_errors as service_errors
 from helper.redis_helper import close_redis_connection, redis_connection
 
 ServiceHandler = Callable[..., Any]
@@ -24,11 +25,11 @@ async def read_action_payload(request: Request, method_type: str) -> tuple[Actio
     data = await request.json()
     action = data.get("action_type")
     if not action:
-        return None, func_helper.not_method_access_return()
+        return None, service_errors.not_method_access_return()
 
     request_data = data.get("request_data")
     if request_data is None:
-        return None, func_helper.not_data_return(method_type=method_type)
+        return None, service_errors.not_data_return(method_type=method_type)
 
     return ActionPayload(data=data, action=action, request_data=request_data), None
 
@@ -43,9 +44,9 @@ async def run_endpoint(endpoint: str, func_name: str, method_type: str, handler:
     try:
         return await _maybe_await(handler())
     except KeyError as exc:
-        return await func_helper.key_error_logging(endpoint, func_name, str(exc), method_type)
+        return await service_errors.key_error_logging(endpoint, func_name, str(exc), method_type)
     except Exception as exc:
-        return await func_helper.exception_error_logging(endpoint, func_name, str(exc), method_type)
+        return await service_errors.exception_error_logging(endpoint, func_name, str(exc), method_type)
 
 
 async def dispatch_single_action(
@@ -58,7 +59,7 @@ async def dispatch_single_action(
     if error_response is not None:
         return error_response
     if payload.action != expected_action:
-        return func_helper.not_method_access_return()
+        return service_errors.not_method_access_return()
     return handler(request_data=payload.request_data)
 
 
@@ -77,13 +78,13 @@ async def dispatch_authenticated_action(
     if pre_auth_handler is not None:
         return await _maybe_await(pre_auth_handler(payload.request_data))
 
-    state, state_message, user_info = await func_helper.authorizer(request_data=payload.request_data)
+    state, state_message, user_info = await auth_context.authorizer(request_data=payload.request_data)
     if not state:
-        return func_helper.not_auth_return(message=state_message)
+        return service_errors.not_auth_return(message=state_message)
 
     handler = action_map.get(payload.action)
     if handler is None:
-        return func_helper.not_method_access_return()
+        return service_errors.not_method_access_return()
     return handler(request_data=payload.request_data, user_info=user_info)
 
 

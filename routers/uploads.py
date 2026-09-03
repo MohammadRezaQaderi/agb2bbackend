@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Form, Request, UploadFile
 
 import helper.api_metrics as api_metrics
+import helper.auth_context as auth_context
 import helper.file_helper as file_helper
-import helper.func_helper as func_helper
+import helper.service_errors as service_errors
+from helper.tracking import get_tracking_code
 import services.institute.institute_service as institute_service
 import services.management_gateway as management_gateway
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
@@ -21,26 +23,26 @@ async def update_user_file_image(request: Request):
         data = await request.json()
         action = data.get("action_type")
         if not action:
-            return func_helper.not_method_access_return()
+            return service_errors.not_method_access_return()
         if action not in ["ag_change_user_info", "ag_change_user_image"]:
-            return func_helper.not_method_access_return()
+            return service_errors.not_method_access_return()
 
         request_data = data.get("request_data")
         if request_data is None:
-            return func_helper.not_data_return(method_type=method_type)
+            return service_errors.not_data_return(method_type=method_type)
 
         user_id = request_data["user_id"]
         token = request_data["token"]
-        state, state_message, user_info = await func_helper.authorizer(
+        state, state_message, user_info = await auth_context.authorizer(
             request_data={"user_id": int(user_id), "token": token}
         )
         if not state:
-            return func_helper.not_auth_return(message=state_message)
+            return service_errors.not_auth_return(message=state_message)
         return management_gateway.change_user_info(request_data=request_data, user_info=user_info)
     except KeyError as e:
-        return await func_helper.key_error_logging("ag_api", "update_user_file_image", str(e), method_type)
+        return await service_errors.key_error_logging("ag_api", "update_user_file_image", str(e), method_type)
     except Exception as e:
-        return await func_helper.exception_error_logging("ag_api", "update_user_file_image", str(e), method_type)
+        return await service_errors.exception_error_logging("ag_api", "update_user_file_image", str(e), method_type)
 
 
 @router.post("/ag_api/update_user_voice")
@@ -58,16 +60,16 @@ async def update_user_voice(
 ):
     method_type = "UPDATE"
     try:
-        state, state_message, user_info = await func_helper.authorizer(
+        state, state_message, user_info = await auth_context.authorizer(
             request_data={"user_id": int(user_id), "token": token}
         )
         if not state:
-            return func_helper.not_auth_return(message=state_message)
+            return service_errors.not_auth_return(message=state_message)
 
         file_helper.validate_content_type(voice.content_type, file_helper.VOICE_CONTENT_TYPES)
         extension = file_helper.get_extension(voice.filename, file_helper.VOICE_EXTENSIONS)
         voice_content = file_helper.read_limited_file(voice.file, file_helper.MAX_VOICE_BYTES)
-        new_file_name = f"{func_helper.get_tracking_code()}{extension}"
+        new_file_name = f"{get_tracking_code()}{extension}"
         file_helper.write_storage_file(VOICES_DIR, new_file_name, voice_content)
         file_helper.remove_storage_file(VOICES_DIR, last_voice)
 
@@ -104,4 +106,4 @@ async def update_user_voice(
     except file_helper.FileValidationError:
         return service_response(method_type, None, error_message="فایل صوتی معتبر نیست.")
     except Exception as e:
-        return await func_helper.exception_error_logging("ag_api", "update_user_voice", str(e), method_type)
+        return await service_errors.exception_error_logging("ag_api", "update_user_voice", str(e), method_type)

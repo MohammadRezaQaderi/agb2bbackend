@@ -71,6 +71,14 @@ stable.
     re-exported from `helper/func_helper.py` for compatibility.
   - Pure validators moved to `helper/validators.py` and re-exported from
     `helper/func_helper.py` for compatibility.
+  - Health payloads moved to `helper/health.py`; health routes now import the
+    health helper directly.
+  - Legacy error/return helpers moved to `helper/service_errors.py` and
+    re-exported from `helper/func_helper.py` for compatibility.
+  - Auth context lookup moved to `helper/auth_context.py` and router helpers now
+    import auth/error helpers directly.
+  - Tracking token generation moved to `helper/tracking.py` and re-exported
+    from `helper/func_helper.py` for compatibility.
   - Suggested modules: `constants.py`, `security.py`, `validators.py`,
     `connections.py`.
 - [ ] Continue splitting `services/service.py`.
