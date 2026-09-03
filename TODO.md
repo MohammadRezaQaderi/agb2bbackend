@@ -47,6 +47,8 @@ stable.
   - `routers/health.py`, `routers/static_data.py`, and `routers/files.py`
     have been extracted.
   - `routers/actions.py` and `routers/uploads.py` have been extracted.
+  - `routers/action_helpers.py` now centralizes action payload parsing,
+    auth dispatch, Redis pre-auth dispatch, and endpoint exception logging.
   - Report downloads remain in `main.py` intentionally until report cleanup is
     resumed.
 - [x] Replace `from services.service import *` with explicit imports.
