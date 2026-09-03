@@ -64,7 +64,7 @@ stable.
   - Define one response contract before adding new features.
   - Gateway response helpers are now centralized in `services/gateway_helpers.py`;
     older gateway functions still need gradual cleanup around HTTP semantics.
-- [ ] Move business constants out of `helper/func_helper.py`.
+- [x] Move business constants out of `helper/func_helper.py`.
   - `PROVINCES`, `PACKAGES_DATA`, quiz titles, password helpers, DB helpers,
     and validation helpers are all in one large file.
   - Package/province/quiz-title constants moved to `helper/constants.py` and
@@ -79,8 +79,10 @@ stable.
     import auth/error helpers directly.
   - Tracking token generation moved to `helper/tracking.py` and re-exported
     from `helper/func_helper.py` for compatibility.
-  - Suggested modules: `constants.py`, `security.py`, `validators.py`,
-    `connections.py`.
+  - Image storage, random generators, payment helpers, quiz metadata, account
+    password updates, request validation, and student access helpers moved to
+    focused helper modules.
+  - `helper/func_helper.py` is now a compatibility re-export facade.
 - [ ] Continue splitting `services/service.py`.
   - Auth, student, and admin gateway wrappers have moved to dedicated modules.
   - Management role dispatch moved to `services/management_gateway.py`.
