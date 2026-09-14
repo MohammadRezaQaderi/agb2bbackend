@@ -104,6 +104,8 @@ stable.
 ## P1 - Database And Transactions
 
 - [ ] Resolve duplicate database rows after architecture migration.
+  - Deferred until the account/role ownership decision and production data
+    review; do not delete or merge users automatically.
   - `users.phone` still has duplicates, including same-role duplicates
     (`ins+ins`, `ocon+ocon`, `sch+sch`) and cross-role duplicates
     (`ins+con`, `ins+sch`).
@@ -128,15 +130,15 @@ stable.
     scripts.
   - Account/student creation avoids mutating request payloads with generated
     credentials during DB transactions.
-- [ ] Review dynamic SQL helper inputs.
-  - Values are parameterized, but table names, field names, and conditions are
-    built with f-strings.
-  - Keep these helpers internal or add allowlists for table/column names.
-- [ ] Decide where schema management lives.
-  - `helper/db/db_creator.py`, `helper/db/migration.py`, and
-    `helper/db/last_schema.py`
-    overlap.
-  - Pick a migration workflow and mark old schema helpers as legacy if needed.
+- [x] Review dynamic SQL helper inputs.
+  - Runtime queries use SQLAlchemy expressions and bound values. Migration SQL
+    identifiers are internal or metadata-derived and quoted. `drop_tables()`
+    only accepts tables defined in `db_creator.py`.
+- [x] Decide where schema management lives.
+  - `helper/db/README.md` documents the supported workflow: `db_creator.py`
+    for empty databases, `architecture_migration.py` for legacy copies, and
+    `live_migration.py` for incremental changes. The destructive historical
+    `migration.py` entry point is disabled; `last_schema.py` is absent.
 
 ## P2 - Tooling, Tests, And CI
 
