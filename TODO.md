@@ -142,11 +142,11 @@ stable.
 
 ## P2 - Tooling, Tests, And CI
 
-- [ ] Add a minimal test setup.
-  - Add `pytest`, `pytest-asyncio`, and FastAPI `TestClient` tests for
-    request validation, auth failures, health endpoint behavior, and report
-    permission checks.
-  - Mock DB/Redis/Kavenegar so tests run without production services.
+- [x] Add a minimal test setup.
+  - `tests/test_api_basics.py` covers action payloads, auth rejection, health,
+    report permission, and Redis cleanup with external dependencies mocked.
+  - `requirements-dev.txt` and `pyproject.toml` define the test environment;
+    run with `python -m pytest`.
 - [ ] Add formatting/linting.
   - Suggested baseline: `ruff` for linting/import sorting and `black` or
     `ruff format` for formatting.
