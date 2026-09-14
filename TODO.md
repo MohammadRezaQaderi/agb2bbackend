@@ -147,16 +147,17 @@ stable.
     report permission, and Redis cleanup with external dependencies mocked.
   - `requirements-dev.txt` and `pyproject.toml` define the test environment;
     run with `python -m pytest`.
-- [ ] Add formatting/linting.
-  - Suggested baseline: `ruff` for linting/import sorting and `black` or
-    `ruff format` for formatting.
-  - Add a simple `pyproject.toml` so the team runs the same checks.
-- [ ] Pin all dependencies in `requirements.txt`.
-  - `pandas`, `openpyxl`, `prometheus_client`, `httpx`, and `cryptography` are
-    currently unpinned.
-- [ ] Add a lightweight CI command.
-  - Example stages: install dependencies, run lint, run tests, import-check the
-    app.
+- [x] Add formatting/linting.
+  - Ruff checks critical syntax/name errors across the repository. New tests
+    also pass full `E4,E7,E9,F,I` lint and `ruff format --check`.
+  - Broader formatting of legacy modules is deferred to avoid a large
+    unrelated diff.
+- [x] Pin all direct dependencies in `requirements.txt`.
+  - Production and development dependencies now have explicit versions.
+- [x] Add a lightweight CI command.
+  - `python scripts/checks.py` runs lint, formatting checks for new tests,
+    service-free tests, and app import. GitHub Actions installs development
+    dependencies and runs the same command.
 - [x] Add `.env.example` and update deployment docs to use the same env names
   as `config.py`.
   - Deployment docs now point to `.env.example` and use `AG_DB_*` names.
