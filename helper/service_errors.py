@@ -4,6 +4,7 @@ from typing import Any, Mapping
 
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.other import create_api_log
+from helper.api_responses import api_error, business_error
 from helper.log_sanitizer import sanitize_log_data
 
 
@@ -11,28 +12,23 @@ logger = logging.getLogger(__name__)
 
 
 def not_method_access_return():
-    return {"status": 405, "tracking_code": None, "method_type": None,
-            "error": "سرویس مورد نظر در دسترس نیست."}
+    return api_error(405, None, "سرویس مورد نظر در دسترس نیست.")
 
 
 def not_data_return(method_type):
-    return {"status": 200, "tracking_code": None, "method_type": method_type,
-            "error": "اطلاعات از سمت شما ارسال نشده است."}
+    return business_error(method_type, "اطلاعات از سمت شما ارسال نشده است.")
 
 
 def not_auth_return(message, method_type="AUTH"):
-    return {"status": 404, "tracking_code": None, "method_type": method_type,
-            "error": message}
+    return api_error(404, method_type, message)
 
 
 def key_error_message_return(error_message, method_type):
-    return {"status": 401, "tracking_code": None, "method_type": method_type,
-            "error": "%s با اطلاعات شما ارسال نشده است." % str(error_message)}
+    return api_error(401, method_type, "%s با اطلاعات شما ارسال نشده است." % str(error_message))
 
 
 def exception_error_message_return(error_message, method_type):
-    return {"status": 500, "tracking_code": None, "method_type": method_type,
-            "error": "مشکلی در ارتباط با سرویس‌ها پیش آمده است. درحال بررسی هستیم."}
+    return api_error(500, method_type, "مشکلی در ارتباط با سرویس‌ها پیش آمده است. درحال بررسی هستیم.")
 
 
 async def key_error_logging(

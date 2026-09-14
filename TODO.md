@@ -42,7 +42,7 @@ stable.
 
 ## P1 - Project Structure And Maintainability
 
-- [ ] Split `main.py` into FastAPI routers.
+- [x] Split `main.py` into FastAPI routers.
   - `main.py` is currently about 1350 lines and mixes metrics, auth dispatch,
     uploads, static file serving, and report download logic.
   - Suggested routers: `auth`, `actions`, `admin`, `files`, `reports`,
@@ -52,22 +52,24 @@ stable.
   - `routers/actions.py` and `routers/uploads.py` have been extracted.
   - `routers/action_helpers.py` now centralizes action payload parsing,
     auth dispatch, Redis pre-auth dispatch, and endpoint exception logging.
-  - Report downloads remain in `main.py` intentionally until report cleanup is
-    resumed.
+  - `routers/reports.py` now owns report-download endpoints; `main.py` only
+    wires the application and routers.
 - [x] Replace `from services.service import *` with explicit imports.
   - This makes endpoint dependencies searchable and safer during refactors.
-- [ ] Extract duplicate report-download logic.
+- [x] Extract duplicate report-download logic.
   - `get_ag_first_pdf`, `get_ag_second_pdf`, and SCL report endpoints repeat
     permission checks, quiz completion checks, queue checks, and file lookup.
   - Create one helper/service such as `get_student_report_file(kind,
     report_number, expected_quiz_count)`.
-  - Deferred for now; runtime report-download endpoints remain in `main.py`.
-- [ ] Standardize API response shapes and HTTP status usage.
+  - Shared report-download lookup/error handling now lives in
+    `routers/reports.py`.
+- [x] Standardize API response shapes and HTTP status usage.
   - Some business errors return HTTP 200 with `status` in JSON.
   - Other paths use custom HTTP status codes like `321`-`324`.
-  - Define one response contract before adding new features.
+  - Response builders are centralized in `helper/api_responses.py`.
+  - Existing legacy status semantics are preserved for frontend compatibility.
   - Gateway response helpers are now centralized in `services/gateway_helpers.py`;
-    older gateway functions still need gradual cleanup around HTTP semantics.
+    older gateway functions delegate to the shared response contract.
 - [x] Move business constants out of `helper/func_helper.py`.
   - `PROVINCES`, `PACKAGES_DATA`, quiz titles, password helpers, DB helpers,
     and validation helpers are all in one large file.

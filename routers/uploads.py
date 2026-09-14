@@ -10,7 +10,7 @@ import services.management_gateway as management_gateway
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
 from config import VOICES_DIR
-from services.gateway_helpers import service_response
+from services.gateway_helpers import ACCESS_DENIED_MESSAGE, error_response, service_response
 
 router = APIRouter()
 
@@ -97,12 +97,7 @@ async def update_user_voice(
             )
             return service_response(method_type, tracking_token, response_data, response_message)
 
-        return {
-            "status": 200,
-            "tracking_code": None,
-            "method_type": method_type,
-            "error": "شما به این سرویس دسترسی ندارید.",
-        }
+        return error_response(method_type, ACCESS_DENIED_MESSAGE)
     except file_helper.FileValidationError:
         return service_response(method_type, None, error_message="فایل صوتی معتبر نیست.")
     except Exception as e:
