@@ -189,16 +189,15 @@ stable.
   - The tracked `report/` folder contained manual export/import scripts and
     generated output. It was removed and can be reintroduced later with the new
     reporting/export structure.
-- [ ] Clean local artifacts before committing.
-  - `__pycache__/` and `venv/` are ignored, but local copies exist in the
-    workspace.
-  - Do not delete them during feature work unless the team wants a cleanup
-    commit.
-- [ ] Decide whether deployment scripts are Windows-only.
-  - Current deployment docs and `.bat` scripts are PM2/Windows focused, while
-    Docker files suggest a container path.
-  - Document the supported production path clearly.
-- [ ] Review Postman files for secrets or stale environments.
+- [x] Audit local artifacts before committing.
+  - No ignored virtualenv, cache, log, or environment files are tracked; local
+    ignored copies were left untouched.
+- [x] Decide whether deployment scripts are Windows-only.
+  - PM2/Windows is the supported application path. Docker Compose is
+    monitoring-only, and deployment docs match `instances.json`.
+- [x] Review Postman files for secrets or stale environments.
+  - Admin examples now use the current action contract, have no token value,
+    and target the checked-in management port.
 
 ## P3 - Feature Readiness
 

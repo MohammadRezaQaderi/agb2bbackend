@@ -14,11 +14,9 @@ IS_PRODUCTION = APP_ENV in {"prod", "production"}
 
 def _env(name: str, default: str = "", *, required_in_prod: bool = False) -> str:
     value = os.getenv(name)
-    if value is not None:
-        return value
-    if required_in_prod and IS_PRODUCTION:
+    if required_in_prod and IS_PRODUCTION and (value is None or not value.strip()):
         raise RuntimeError(f"{name} must be set when AG_ENV={APP_ENV}")
-    return default
+    return value if value is not None else default
 
 
 def _env_int(name: str, default: int, *, required_in_prod: bool = False) -> int:

@@ -1,6 +1,8 @@
 # Deployment Guide
 
-This directory deploys the merged AG backend with PM2 on Windows.
+The supported application deployment is PM2 on Windows. `Dockerfile` is not
+wired into `docker-compose.yml`; that Compose file starts only Prometheus and
+Grafana. It is not an alternative application deployment.
 
 The same FastAPI app serves both prefixes:
 
@@ -26,16 +28,18 @@ The setup script checks Node.js/PM2, creates `venv`, installs `requirements.txt`
 
 ## Instances
 
-Edit `instances.json` to change ports or workers. The default layout is:
+Edit `instances.json` to change ports or workers. The checked-in layout is:
 
 ```text
-ag_api   -> 5301, 5302  health: /ag_api/health
-ags_api  -> 5351, 5352  health: /ags_api/health
+ag-test-api-primary-1          -> 5559  health: /ag_api/health
+ags-test-student-api-primary-1 -> 5560  health: /ags_api/health
 ```
 
 Each PM2 app runs `python -m uvicorn main:app` and gets its own `PROMETHEUS_MULTIPROC_DIR` under `metrics/`.
 
-The report worker runs as one PM2 process:
+The report worker is optional. It is not enabled in the checked-in
+`instances.json`. Add a `scheduler` object there only when report generation
+is ready to run:
 
 ```text
 ag-report-scheduler -> scheduler/scheduler.py
@@ -58,7 +62,6 @@ pm2 status
 pm2 logs
 pm2 monit
 pm2 save
-pm2 restart ag-report-scheduler
 ```
 
 ## Health Monitor
@@ -79,4 +82,9 @@ Prometheus endpoints:
 /ags_api/metrics
 ```
 
-The HTTP metrics middleware skips metrics endpoints, and action metrics support both legacy `method_type` and newer `action_type` payloads.
+The HTTP metrics middleware skips metrics endpoints. Action requests use
+`action_type`; metrics still recognize `method_type` on older traffic.
+
+The optional monitoring Compose stack needs `GRAFANA_ADMIN_PASSWORD` in its
+environment. Check `monitoring/prometheus.yml` scrape targets before starting
+it; they are configured for a remote host, not the local PM2 ports.

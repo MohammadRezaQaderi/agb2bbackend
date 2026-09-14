@@ -14,9 +14,8 @@ health.bat
 The merged backend runs the same `main:app` for both service groups:
 
 ```text
-ag_api   -> 5301, 5302  /ag_api/health
-ags_api  -> 5351, 5352  /ags_api/health
-ag-report-scheduler -> Redis report worker
+ag-test-api-primary-1          -> 5559  /ag_api/health
+ags-test-student-api-primary-1 -> 5560  /ags_api/health
 ```
 
 Change ports, workers, or health paths in `instances.json`.
@@ -34,18 +33,17 @@ health.bat
 pm2 status
 pm2 logs
 pm2 monit
-pm2 restart ag-api-primary-1
-pm2 restart ags-student-api-primary-1
-pm2 restart ag-report-scheduler
+pm2 restart ag-test-api-primary-1
+pm2 restart ags-test-student-api-primary-1
 ```
 
 ## Manual Checks
 
 ```cmd
-curl http://localhost:5301/ag_api/health
-curl http://localhost:5351/ags_api/health
-curl http://localhost:5301/ag_api/metrics
-curl http://localhost:5351/ags_api/metrics
+curl http://localhost:5559/ag_api/health
+curl http://localhost:5560/ags_api/health
+curl http://localhost:5559/ag_api/metrics
+curl http://localhost:5560/ags_api/metrics
 ```
 
 ## Files

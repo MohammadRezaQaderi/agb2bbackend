@@ -12,11 +12,8 @@ health.bat
 ## Default Ports
 
 ```text
-ag-api-primary-1           http://localhost:5301/ag_api/health
-ag-api-primary-2           http://localhost:5302/ag_api/health
-ags-student-api-primary-1  http://localhost:5351/ags_api/health
-ags-student-api-primary-2  http://localhost:5352/ags_api/health
-ag-report-scheduler        Redis worker, no HTTP health endpoint
+ag-test-api-primary-1          http://localhost:5559/ag_api/health
+ags-test-student-api-primary-1 http://localhost:5560/ags_api/health
 ```
 
 ## Daily Commands
@@ -31,12 +28,11 @@ stop.bat
 pm2 status
 pm2 logs
 pm2 monit
-pm2 restart ag-report-scheduler
 ```
 
 ## Metrics
 
 ```text
-http://localhost:5301/ag_api/metrics
-http://localhost:5351/ags_api/metrics
+http://localhost:5559/ag_api/metrics
+http://localhost:5560/ags_api/metrics
 ```
