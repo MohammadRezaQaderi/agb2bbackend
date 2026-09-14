@@ -201,9 +201,9 @@ stable.
 
 ## P3 - Feature Readiness
 
-- [ ] Document the current method-type action contract.
-  - Endpoints dispatch behavior through `method_type`; new features should not
-    add more hidden actions without documentation.
+- [x] Document the current action contract.
+  - `ACTION_TYPE_MIGRATION.md` now describes the accepted `action_type` wrapper,
+    auth exceptions, response envelope, multipart exception, and action tables.
 - [ ] Add request/response models for new features.
   - Introduce Pydantic models gradually around new endpoints first, then
     backfill older action handlers.

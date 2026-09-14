@@ -1,11 +1,12 @@
 # Frontend action_type migration for AG/AGS
 
-This is the source of truth for migrating AG and AGS frontend calls to the new
-ERBackend-style API contract.
+This is the source of truth for current AG/AGS action requests and for migrating
+older frontend calls to the ERBackend-style API contract.
 
-Old action names are no longer accepted by the backend. Every `/ag_api/*` and
-`/ags_api/*` request must send the new `action_type` values listed below and
-must wrap payloads in `request_data`.
+Old action names are no longer accepted by the backend. Action-based `POST`
+routes use the `action_type` values listed below and wrap payloads in
+`request_data`. Direct `GET` routes and multipart uploads have separate
+contracts.
 
 ## Required request wrapper
 
@@ -46,6 +47,44 @@ Admin requests keep the admin token at the top level:
   }
 }
 ```
+
+## Current dispatch contract
+
+- `action_type` is the operation name. `method_type` is not a request selector;
+  it remains a category in the response (for example `SIGNIN`, `SELECT`, or
+  `UPDATE`). Error responses can use `AUTH` or `null`.
+- `request_data` must be present for every action request. Authenticated AG and
+  AGS actions include both `user_id` and `token` inside it. Sign-in does not
+  need a token.
+- Only these management actions bypass user-token authentication:
+  `ag_sign_up`, `ag_send_otp`, `ag_add_comment`, `ag_check_otp`, and
+  `ag_get_comments`. They still require the standard wrapper.
+- `/ag_api/admin_request` uses a database-backed admin token at the top level;
+  its `request_data` contains the action fields. An ordinary user token is not
+  an admin token.
+- `/ag_api/update_user_file_image` uses the standard wrapper and accepts only
+  `ag_change_user_info` or `ag_change_user_image`.
+- `/ag_api/update_user_voice` is `multipart/form-data`, not an action JSON
+  request. Static, file, health, and PDF `GET` routes do not use `action_type`.
+
+Successful action responses use this envelope:
+
+```json
+{
+  "status": 200,
+  "tracking_code": "...",
+  "method_type": "SELECT",
+  "response": {"data": {}, "message": ""}
+}
+```
+
+Errors use `error` instead of `response`, with `tracking_code: null`. For
+legacy action routes, an error may still have HTTP 200; clients must inspect
+the JSON `status` and `error` fields. A missing action returns a JSON `status`
+of 405. An unknown action returns 405 after authentication succeeds; an
+unauthenticated request can fail earlier. The migration tables below list the
+accepted action names by route; add new actions there when extending a
+dispatcher.
 
 ## Migration rules
 
@@ -174,7 +213,7 @@ Role service files now use the same local vocabulary:
 
 | Legacy action_type | Required action_type |
 | --- | --- |
-| `delete_token` | `ag_remove_token` |
+| `delete_token` | `ag_sign_out` |
 
 ## /ag_api/admin_request
 
@@ -219,7 +258,7 @@ Role service files now use the same local vocabulary:
 
 | Legacy action_type | Required action_type |
 | --- | --- |
-| `delete_token` | `ags_remove_token` |
+| `delete_token` | `ags_sign_out` |
 
 ## Static GET endpoints
 
