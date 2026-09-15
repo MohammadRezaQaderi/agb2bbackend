@@ -484,14 +484,18 @@ def create_tables(conn: pyodbc.Connection, cursor: pyodbc.Cursor, tables: Iterab
 def drop_tables(conn: pyodbc.Connection, cursor: pyodbc.Cursor, tables: Iterable[str]) -> None:
     """Drop the requested tables if they exist."""
     for table in tables:
+        if table not in TABLE_DEFINITIONS:
+            print(f"[WARN] No definition for '{table}', skipping.")
+            continue
         if not _table_exists(cursor, table):
             print(f"[SKIP] '{table}' does not exist.")
             continue
         try:
-            cursor.execute(f"DROP TABLE {table}")
+            cursor.execute(f"DROP TABLE [{table}]")
             conn.commit()
             print(f"[OK] '{table}' dropped.")
         except pyodbc.Error as exc:
+            conn.rollback()
             print(f"[ERR] Could not drop '{table}': {exc}")
 
 

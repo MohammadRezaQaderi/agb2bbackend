@@ -686,7 +686,7 @@ def migrate_passwords_to_hash(conn: Any, cursor: Any, dry_run: bool) -> None:
         print(f"DRY RUN: migrate users.password to hash for {changed} users")
         return
 
-    from helper.func_helper import decrypt_password, hash_password
+    from helper.password_helper import decrypt_password, hash_password
 
     cursor.execute(
         """

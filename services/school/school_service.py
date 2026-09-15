@@ -1,4 +1,5 @@
 import config
+from helper.constants import PACKAGES_DATA
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.filters import ConsultantFilters, StudentFilters
 from helper.db.sqlalchemy.queries.consultants import (
@@ -24,7 +25,8 @@ from helper.db.sqlalchemy.queries.students import (
     list_students_for_owner,
     update_student_profile_for_owner,
 )
-import helper.func_helper as func_helper
+from helper.image_storage import save_base64_image
+from helper.quiz_metadata import get_quiz_name
 from helper.response import (
     build_consultant_list_response,
     build_dashboard_info_response,
@@ -32,6 +34,9 @@ from helper.response import (
     build_student_management_report_response,
     build_student_report_response,
 )
+from helper.service_errors import service_exception_error_logging
+from helper.student_access import update_student_access_and_capacity
+from helper.tracking import get_tracking_code
 
 
 def get_info(user_id):
@@ -40,7 +45,7 @@ def get_info(user_id):
             res = get_school_profile(session=session, user_id=user_id)
         if not res:
             raise ValueError("school not found")
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         info_response = {
             "phone": res.get("phone"),
             "user_id": user_id,
@@ -51,7 +56,7 @@ def get_info(user_id):
         }
         return token, info_response, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "get_info", str(e), None,
+        service_exception_error_logging("ag_api/sch", "get_info", str(e), None,
                                         {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 
@@ -81,14 +86,14 @@ def get_dashboard(request_data, user_info):
             consultant_count=consultant_count,
             package_counts=package_counts,
             quiz_attempts=quiz_attempts,
-            packages_data=func_helper.PACKAGES_DATA,
+            packages_data=PACKAGES_DATA,
         )
 
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, {"dashboard_info": sch_info, "notifications": notifications}, ""
 
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "get_dashboard", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/sch", "get_dashboard", str(e), request_data, user_info)
         return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
@@ -97,10 +102,10 @@ def get_report(request_data, user_info):
         with session_scope() as session:
             students = list_students_for_owner(session=session, owner_user_id=user_info["user_id"])
         report_info = build_student_report_response(students, include_consultant_name=True)
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "get_report", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/sch", "get_report", str(e), request_data, user_info)
         return None, [], "مشکل در دریافت گزارش رخ داده است."
 
 
@@ -115,14 +120,14 @@ def get_management_report(request_data, user_info):
         report_info = build_student_management_report_response(
             students,
             quiz_attempts,
-            packages_data=func_helper.PACKAGES_DATA,
-            get_quiz_name=func_helper.get_quiz_name,
+            packages_data=PACKAGES_DATA,
+            get_quiz_name=get_quiz_name,
             include_consultant_name=True,
         )
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "get_management_report", str(e),
+        service_exception_error_logging("ag_api/sch", "get_management_report", str(e),
                                         request_data,
                                         user_info)
         return None, [], "مشکل در دریافت گزارش مدیریتی رخ داده است."
@@ -140,10 +145,10 @@ def change_consultant(request_data, user_info):
                 last_name=request_data["last_name"],
                 sex=request_data["sex"],
             )
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, None, "اطلاعات مشاور شما با موفقیت تغییر کرد."
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "change_consultant", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/sch", "change_consultant", str(e), request_data, user_info)
         return None, None, "مشکلی در ثبت نهایی اطلاعات مشاور رخ داده است لطفا با پیشیبانی در ارتباط باشید."
 
 
@@ -158,10 +163,10 @@ def get_consultants(request_data, user_info):
                 filters=filters,
             )
         cons_info = build_consultant_list_response(consultants)
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, cons_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "get_consultants", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/sch", "get_consultants", str(e), request_data, user_info)
         return None, [], "اطلاعات مشاورین دریافت نشد."
 
 
@@ -180,10 +185,10 @@ def change_student(request_data, user_info):
                 consultant_user_id=request_data["con_id"],
                 birth_date=request_data["birth_date"],
             )
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "change_student", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/sch", "change_student", str(e), request_data, user_info)
         return None, None, "مشکلی در تغییر اطلاعات دانش‌آموز رخ داده است."
 
 
@@ -198,16 +203,16 @@ def get_students(request_data, user_info):
                 filters=filters,
             )
         stu_info = build_student_list_response(students)
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, stu_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "get_students", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/sch", "get_students", str(e), request_data, user_info)
         return None, [], "اطلاعات دانش‌آموزان دریافت نشد."
 
 
 def change_user_info(request_data, user_info):
     try:
-        pic = func_helper.save_base64_image(
+        pic = save_base64_image(
             request_data.get("pic"),
             request_data.get("last_pic"),
             config.INS_PIC_DIR,
@@ -219,13 +224,13 @@ def change_user_info(request_data, user_info):
                 name=request_data["name"],
                 logo=pic,
             )
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         response = {"name": request_data["name"]}
         if pic is not None:
             response["pic"] = pic
         return token, response, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "change_user_info", str(e), request_data,
+        service_exception_error_logging("ag_api/sch", "change_user_info", str(e), request_data,
                                         user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
@@ -239,17 +244,17 @@ def change_user_image(request_data, user_info):
                 name=request_data["name"],
                 logo=request_data["pic"],
             )
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, {"name": request_data["name"], "pic": request_data["pic"]}, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "change_user_image", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/sch", "change_user_image", str(e), request_data, user_info)
 
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
 
 def change_user_voice(request_data, user_info):
     try:
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         with session_scope() as session:
             upsert_setting(
                 session=session,
@@ -261,7 +266,7 @@ def change_user_voice(request_data, user_info):
             )
         return token, None, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "change_user_voice", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/sch", "change_user_voice", str(e), request_data, user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
 
@@ -276,10 +281,10 @@ def change_setting(request_data, user_info):
                 voice=request_data.get("voice"),
                 quiz_id=request_data["quiz_id"],
             )
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, None, "پیش اطلاعات اولیه آزمون شما تغییر یافت."
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "change_setting", str(e), request_data, user_info)
+        service_exception_error_logging("ag_api/sch", "change_setting", str(e), request_data, user_info)
         return None, None, "پیش اطلاعات اولیه آزمون شما تغییر نیافت."
 
 
@@ -290,7 +295,7 @@ def verify_user(user_id):
             res = get_school_profile(session=session, user_id=user_id)
         if not res:
             raise ValueError("school not found")
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         user_info = {
             "phone": res.get("phone"),
             "user_id": user_id,
@@ -301,7 +306,7 @@ def verify_user(user_id):
         }
         return token, user_info, ""
     except Exception as e:
-        func_helper.service_exception_error_logging("ag_api/sch", "verify_user", str(e), None,
+        service_exception_error_logging("ag_api/sch", "verify_user", str(e), None,
                                         {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 
@@ -310,9 +315,9 @@ def change_student_access(request_data, user_info):
     """
     Update student access permissions and manage capacity tracking for school.
     
-    Uses the reusable helper function func_helper.update_student_access_and_capacity.
+    Uses the reusable helper function update_student_access_and_capacity.
     """
-    return func_helper.update_student_access_and_capacity(
+    return update_student_access_and_capacity(
         request_data=request_data,
         user_info=user_info,
         role_type="sch",

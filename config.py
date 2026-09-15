@@ -14,11 +14,9 @@ IS_PRODUCTION = APP_ENV in {"prod", "production"}
 
 def _env(name: str, default: str = "", *, required_in_prod: bool = False) -> str:
     value = os.getenv(name)
-    if value is not None:
-        return value
-    if required_in_prod and IS_PRODUCTION:
+    if required_in_prod and IS_PRODUCTION and (value is None or not value.strip()):
         raise RuntimeError(f"{name} must be set when AG_ENV={APP_ENV}")
-    return default
+    return value if value is not None else default
 
 
 def _env_int(name: str, default: int, *, required_in_prod: bool = False) -> int:
@@ -109,6 +107,9 @@ REDIS_PORT = _env_int("AG_REDIS_PORT", 6379)
 REDIS_PASSWORD = _env("AG_REDIS_PASSWORD", "")
 REDIS_DB = _env_int("AG_REDIS_DB", 1)
 REDIS_CACHE_OTP = str(_env("AG_REDIS_CACHE_OTP", "verify_cache_AG"))
+OTP_TTL_SECONDS = _env_int("AG_OTP_TTL_SECONDS", 300)
+if OTP_TTL_SECONDS <= 0:
+    raise RuntimeError("AG_OTP_TTL_SECONDS must be positive")
 REDIS_QUEUE_NAME = _env("AG_REDIS_QUEUE_NAME", "userAGB2BReport")
 
 # Database Configuration

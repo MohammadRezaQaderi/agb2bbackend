@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 #  app:
 #    build: .
@@ -41,12 +39,10 @@ services:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD}
     networks:
       - monitoring
 
 networks:
   monitoring:
     driver: bridge
-
-

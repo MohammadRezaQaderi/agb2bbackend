@@ -1,10 +1,8 @@
 import json
 import logging
-import uuid
 
 import redis
 
-import helper.func_helper as func_helper
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.students import (
     create_redis_log,
@@ -21,11 +19,13 @@ from helper.db.sqlalchemy.queries.students import (
     update_student_name,
     update_user_password,
 )
-from helper.func_helper import service_exception_error_logging
+from helper.password_helper import encrypt_password
 from helper.quiz import answer_store
 from helper.quiz.ag_quiz_data_info import ag_quiz_info
 from helper.quiz.scl_quiz_data_info import scl_quiz_info
 from helper.quiz.quiz_data_extractor import get_quiz_table_info, get_quiz_info
+from helper.service_errors import service_exception_error_logging
+from helper.tracking import get_tracking_code
 from config import REDIS_QUEUE_NAME, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB
 
 AG_REPORT_INFO = {
@@ -95,7 +95,7 @@ def select_student_info(user_id):
             res = get_student_profile(session=session, user_id=user_id)
         if not res:
             raise ValueError("student not found")
-        token = str(uuid.uuid4())
+        token = get_tracking_code()
         if res.get("owner_role") in ["ins", "sch"]:
             if res.get("owner_role") == "ins":
                 owner_name = res.get("institute_name")
@@ -214,7 +214,7 @@ def select_stu_dashboard(request_data, info):
             "result_state": result_state_info,
             "notifications": notifications_res,
         }
-        token = str(uuid.uuid4())
+        token = get_tracking_code()
         return token, dashboard_info, ""
     except Exception as e:
         service_exception_error_logging("ags_api/stu", "select_stu_dashboard", str(e), request_data, info)
@@ -231,7 +231,7 @@ def update_stu_user_profile(request_data, info):
                 first_name=request_data["first_name"],
                 last_name=request_data["last_name"],
             )
-        token = str(uuid.uuid4())
+        token = get_tracking_code()
         return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
         service_exception_error_logging("ags_api/stu", "update_stu_user_profile", str(e), request_data,
@@ -241,10 +241,10 @@ def update_stu_user_profile(request_data, info):
 
 def update_stu_password(request_data, info):
     try:
-        encrypted_password = func_helper.encrypt_password(request_data["password"])
+        encrypted_password = encrypt_password(request_data["password"])
         with session_scope() as session:
             update_user_password(session=session, user_id=info["user_id"], encrypted_password=encrypted_password)
-        token = str(uuid.uuid4())
+        token = get_tracking_code()
         return token, None, "رمز عبور شما با موفقیت تغییر کرد."
     except Exception as e:
         service_exception_error_logging("ags_api/stu", "update_stu_password", str(e), request_data, info)
@@ -257,7 +257,7 @@ def select_stu_quiz_table_info(request_data, info):
         kind = (request_data.get("kind") or "").upper()
         # If kind is not provided, we cannot determine which quiz pack to use
         if not kind:
-            token = str(uuid.uuid4())
+            token = get_tracking_code()
             return token, [], ""
         stu_access = _load_student_access(info["user_id"])
         permission, _ = _package_permission(stu_access, kind)
@@ -269,7 +269,7 @@ def select_stu_quiz_table_info(request_data, info):
         quiz_info = get_quiz_table_info(kind=kind) or []
 
         if not quiz_info:
-            token = str(uuid.uuid4())
+            token = get_tracking_code()
             return token, [], ""
 
         # Use quiz_kind column (per-pack quizzes start from id 1)
@@ -307,7 +307,7 @@ def select_stu_quiz_table_info(request_data, info):
                     student_quiz_info.append(_build_quiz_item(q, status=0, can_start=can_start))
                 else:
                     student_quiz_info.append(_build_quiz_item(q, status=0, can_start=0))
-        token = str(uuid.uuid4())
+        token = get_tracking_code()
         return token, student_quiz_info, ""
     except Exception as e:
         service_exception_error_logging("ags_api/stu", "select_stu_quiz_table_info", str(e), request_data,
@@ -317,7 +317,7 @@ def select_stu_quiz_table_info(request_data, info):
 
 def select_stu_quiz_info(request_data, info):
     try:
-        token = str(uuid.uuid4())
+        token = get_tracking_code()
         quiz_id = request_data["quiz_id"]
 
         # Determine product kind directly from request (per-pack quiz ids start from 1)
@@ -449,7 +449,7 @@ def _enqueue_result_generation(user_id, phone, kind: str):
 
 def submit_quiz_answer(request_data, info):
     try:
-        token = str(uuid.uuid4())
+        token = get_tracking_code()
         # example request_data ==> {"quiz_id": 1, "quiz_kind": "AG", "user_id": 5,
         # "question_Answer": [5, null], "question_Number": 1, "last_question_id": 61,
         # "state": "", "token": "2f674cf6-06bd-4432-bbf3-1cda566537e6"}
@@ -473,7 +473,7 @@ def submit_quiz_answer(request_data, info):
         # If quiz has timed-out on client side, just mark state=2 and exit
         if request_data.get("state") and request_data.get("state") != "":
             answer_store.finish_attempt(info["user_id"], quiz_kind, quiz_id)
-            token = str(uuid.uuid4())
+            token = get_tracking_code()
             return token, None, "آزمون شما به علت اتمام زمان به پایان رسید."
 
         attempt = answer_store.get_attempt(info["user_id"], quiz_kind, quiz_id)
@@ -555,7 +555,7 @@ def select_student_access_info(request_data, info):
         with session_scope() as session:
             res_stu_access = get_student_access_comment(session=session, user_id=info["user_id"])
         stu_access = _load_student_access(info["user_id"])
-        token = str(uuid.uuid4())
+        token = get_tracking_code()
         comment = res_stu_access.get("comment") if res_stu_access else None
         return token, {"access": stu_access or _empty_access(), "comment": comment}, ""
     except Exception as e:

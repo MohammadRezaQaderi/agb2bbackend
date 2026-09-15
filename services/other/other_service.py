@@ -15,8 +15,10 @@ from helper.db.sqlalchemy.queries.other import (
     mark_notification_read_if_allowed,
     record_discount_usage,
 )
-import helper.func_helper as func_helper
+from helper.payments import get_price_payment
 from helper.response import build_comment_list_response, build_transaction_list_response
+from helper.service_errors import service_exception_error_logging
+from helper.tracking import get_tracking_code
 
 
 logger = logging.getLogger(__name__)
@@ -69,7 +71,7 @@ def get_transactions(request_data, user_info):
         with session_scope() as session:
             transactions = list_user_transactions(session=session, user_id=user_info["user_id"])
         transactions_info = build_transaction_list_response(transactions)
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         return token, transactions_info, ""
     except Exception:
         logger.exception("get_transactions failed")
@@ -101,12 +103,12 @@ def apply_discount(request_data, user_info):
                 counter_field="count_apply",
             )
 
-        token = func_helper.get_tracking_code()
+        token = get_tracking_code()
         new_total = (round(int(request_data["total_value"]) * (1 - res["discount_percentage"]))) / 100
         return token, {"new_total": new_total}, ""
     except Exception as e:
         logger.exception("apply_discount failed")
-        func_helper.service_exception_error_logging("ag_api/other", "apply_discount", str(e), request_data, user_info
+        service_exception_error_logging("ag_api/other", "apply_discount", str(e), request_data, user_info
         )
         return None, None, "در پردازش کد تخفیف مشکلی پیش آمده"
 
@@ -150,7 +152,7 @@ def order_payment(request_data, user_info):
                         )
 
         # Keep the existing package/discount validation path while the gateway is disabled.
-        func_helper.get_price_payment(request_data, discount_percentage=discount_percentage)
+        get_price_payment(request_data, discount_percentage=discount_percentage)
         return None, None, "متاسفانه فعلا درگاه پرداخت در دسترس نیست"
     except Exception:
         logger.exception("order_payment failed")
@@ -239,7 +241,7 @@ def get_report_data(request_data, user_info):
                 "brain_categories": brain_categories_data
             }
             
-            token = func_helper.get_tracking_code()
+            token = get_tracking_code()
             return token, report_data, ""
         elif kind == "SCL":
             with session_scope() as session:
@@ -267,10 +269,10 @@ def get_report_data(request_data, user_info):
                 "scl_date": scl_date_data
             }
             
-            token = func_helper.get_tracking_code()
+            token = get_tracking_code()
             return token, report_data, ""
         else:
-            token = func_helper.get_tracking_code()
+            token = get_tracking_code()
             return token, {}, ""
     except Exception:
         logger.exception("get_report_data failed")
@@ -282,10 +284,10 @@ def get_comments():
         with session_scope() as session:
             comment_rows = list_latest_comments(session=session, limit=100)
         comments = build_comment_list_response(comment_rows)
-        return func_helper.get_tracking_code(), comments, ""
+        return get_tracking_code(), comments, ""
     except Exception as e:
         logger.exception("get_comments failed")
-        func_helper.service_exception_error_logging("ag_api/other", "get_comments", str(e), {}, {}
+        service_exception_error_logging("ag_api/other", "get_comments", str(e), {}, {}
         )
         return None, None, "خطا در دریافت نظرات."
 
@@ -308,10 +310,10 @@ def add_comment(request_data):
                 db_name=user["db_name"],
                 role=user["role"],
             )
-        return func_helper.get_tracking_code(), None, "نظر شما با موفقیت ثبت شد."
+        return get_tracking_code(), None, "نظر شما با موفقیت ثبت شد."
     except Exception as e:
         logger.exception("add_comment failed")
-        func_helper.service_exception_error_logging("ag_api/other", "add_comment", str(e), request_data, {}
+        service_exception_error_logging("ag_api/other", "add_comment", str(e), request_data, {}
         )
         return None, None, "خطا در ثبت نظر."
 
@@ -343,11 +345,11 @@ def mark_notification_read(request_data, user_info):
         if not was_marked:
             return None, None, "اعلان مورد نظر یافت نشد."
 
-        return func_helper.get_tracking_code(), {"notification_id": notification_id, "is_read": 1}, ""
+        return get_tracking_code(), {"notification_id": notification_id, "is_read": 1}, ""
     except (TypeError, ValueError):
         return None, None, "شناسه اعلان معتبر نیست."
     except Exception as e:
         logger.exception("mark_notification_read failed")
-        func_helper.service_exception_error_logging("ag_api/other", "mark_notification_read", str(e), request_data, user_info
+        service_exception_error_logging("ag_api/other", "mark_notification_read", str(e), request_data, user_info
         )
         return None, None, "خطا در ثبت وضعیت اعلان."

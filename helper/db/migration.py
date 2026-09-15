@@ -1,3 +1,14 @@
+"""Historical rebuild migration; retained for reference, not for execution.
+
+This script drops current tables before loading *_old data. Use
+architecture_migration.py and live_migration.py for supported upgrades.
+"""
+
+if __name__ == "__main__":
+    raise SystemExit(
+        "Legacy rebuild migration is disabled. See helper/db/README.md for the supported workflow."
+    )
+
 import pyodbc
 import json
 import os
@@ -705,7 +716,3 @@ def migrate():
     print("Migration finished successfully with ID preservation.")
     cursor.close()
     conn.close()
-
-
-if __name__ == "__main__":
-    migrate()
