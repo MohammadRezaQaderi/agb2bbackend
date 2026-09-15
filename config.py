@@ -107,6 +107,9 @@ REDIS_PORT = _env_int("AG_REDIS_PORT", 6379)
 REDIS_PASSWORD = _env("AG_REDIS_PASSWORD", "")
 REDIS_DB = _env_int("AG_REDIS_DB", 1)
 REDIS_CACHE_OTP = str(_env("AG_REDIS_CACHE_OTP", "verify_cache_AG"))
+OTP_TTL_SECONDS = _env_int("AG_OTP_TTL_SECONDS", 300)
+if OTP_TTL_SECONDS <= 0:
+    raise RuntimeError("AG_OTP_TTL_SECONDS must be positive")
 REDIS_QUEUE_NAME = _env("AG_REDIS_QUEUE_NAME", "userAGB2BReport")
 
 # Database Configuration

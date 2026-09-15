@@ -1,6 +1,4 @@
-import json
-
-from config import REDIS_CACHE_OTP
+from config import OTP_TTL_SECONDS, REDIS_CACHE_OTP
 import helper.otp.otp_helper as otp_helper
 from helper.constants import PACKAGES_DATA
 from helper.db.sqlalchemy import session_scope
@@ -15,6 +13,7 @@ from helper.db.sqlalchemy.queries.auth import (
     token_exists,
     user_phone_exists,
 )
+from helper.otp.otp_cache import consume_otp, store_otp
 from helper.password_helper import encrypt_password, verify_password
 from helper.random_generators import random_generate_otp_code
 from helper.service_errors import service_exception_error_logging
@@ -169,14 +168,10 @@ def sign_up(redis_db, request_data):
                 package_names=list(PACKAGES_DATA.keys()),
             )
 
-        cache = redis_db.cache(REDIS_CACHE_OTP)
-        cache_record = cache.get(phone)
-        if cache_record is not None:
-            cache.delete(phone)
         code = random_generate_otp_code(5)
-        # todo here checkout the try/except handle for otp
-        res_otp = otp_helper.send_otp_message(code=code, phone=phone, type="VERIFY")
-        cache.set(phone, json.dumps({"code": code}), 60 * 60 * 24 * 100)
+        if otp_helper.send_otp_message(code=code, phone=phone, type="VERIFY") is None:
+            return None, None, "حساب ثبت شد اما پیامک ارسال نشد؛ از بخش ارسال مجدد کد استفاده کنید."
+        store_otp(redis_db.cache(REDIS_CACHE_OTP), phone, code, "verify", OTP_TTL_SECONDS)
 
         return get_tracking_code(), None, "ثبت نام شما با موفقیت انجام شد."
 
@@ -196,36 +191,28 @@ def send_otp(redis_db, request_data):
         if not check_security_code(code=request_data["code"], check=request_data["check"]):
             return None, None, "کد امنیتی وارد شده اشتباه است."
 
+        if type_otp not in {"otp", "verify"}:
+            return None, None, "نوع کد معتبر نیست."
+
         with session_scope() as session:
             res = get_user_identity_by_phone(session=session, phone=phone)
         if res is None:
             return None, None, "کاربری با این شماره تلفن موجود نمی‌باشد."
 
-        if res["role"] == "ins" and type_otp == "verify":
+        if type_otp == "verify" and res["role"] not in {"ins", "sch", "ocon"}:
+            return None, None, "شما به این سرویس دسترسی ندارید."
+        if type_otp == "otp" and res["role"] not in {"ins", "sch", "ocon", "con"}:
+            return None, None, "شما به این سرویس دسترسی ندارید."
+
+        if type_otp == "verify":
             with session_scope() as session:
                 verify_status = get_role_verify_status(session=session, user_id=res["user_id"], role=res["role"])
             if verify_status == 1:
                 return None, None, "شما از قبل احراز هویت نموده‌اید."
-
-        if res["role"] == "sch" and type_otp == "verify":
-            with session_scope() as session:
-                verify_status = get_role_verify_status(session=session, user_id=res["user_id"], role=res["role"])
-            if verify_status == 1:
-                return None, None, "شما از قبل احراز هویت نموده‌اید."
-
-        if res["role"] == "ocon" and type_otp == "verify":
-            with session_scope() as session:
-                verify_status = get_role_verify_status(session=session, user_id=res["user_id"], role=res["role"])
-            if verify_status == 1:
-                return None, None, "شما از قبل احراز هویت نموده‌اید."
-
-        cache = redis_db.cache(REDIS_CACHE_OTP)
-        cache_record = cache.get(phone)
-        if cache_record is not None:
-            cache.delete(phone)
         code = random_generate_otp_code(5)
-        res_otp = otp_helper.send_otp_message(code=code, phone=phone, type=type_otp.upper())
-        cache.set(res["phone"], json.dumps({"code": code}), 60 * 60 * 24 * 100)
+        if otp_helper.send_otp_message(code=code, phone=phone, type=type_otp.upper()) is None:
+            return None, None, "پیامک ارسال نشد؛ لطفا دوباره تلاش کنید."
+        store_otp(redis_db.cache(REDIS_CACHE_OTP), res["phone"], code, type_otp, OTP_TTL_SECONDS)
         token = get_tracking_code()
         return token, {"phone": phone}, ""
     except Exception as e:
@@ -239,25 +226,25 @@ def check_otp(redis_db, request_data):
         code = request_data["code"]
         type_otp = request_data["type"]
 
+        if type_otp not in {"otp", "verify"}:
+            return None, None, "نوع کد معتبر نیست."
+
         with session_scope() as session:
             res = get_user_auth_by_phone(session=session, phone=phone)
 
         if res is None:
             return None, None, "کاربری با این شماره تلفن موجود نمی‌باشد."
 
-        cache = redis_db.cache(REDIS_CACHE_OTP)
-        cache_record = cache.get(phone)
+        if type_otp == "otp" and res["role"] not in {"ins", "sch", "ocon", "con"}:
+            return None, None, "شما به این سرویس دسترسی ندارید."
+        if type_otp == "verify" and res["role"] not in {"ins", "sch", "ocon"}:
+            return None, None, "شما به این سرویس دسترسی ندارید."
 
-        if cache_record is None:
-            return None, None, "کدی برای این شماره تلفن در سامانه ثبت نشده. لطفا دوباره  درخواست دهید."
-
-        record = json.loads(cache_record)
-
-        if int(code) != record["code"]:
+        result = consume_otp(redis_db.cache(REDIS_CACHE_OTP), phone, code, type_otp)
+        if result == "missing":
+            return None, None, "کدی برای این شماره تلفن ثبت نشده یا منقضی شده است. لطفا دوباره درخواست دهید."
+        if result == "invalid":
             return None, None, "کد وارد شده صحیح نمی‌باشد."
-
-        user_info = [res["user_id"], phone, res["role"]]
-        token_user = _create_token(user_info=user_info)
 
         if type_otp == "otp":
 
@@ -269,20 +256,20 @@ def check_otp(redis_db, request_data):
                 _, user_info, _ = owner_consultant_service.get_info(user_id=res["user_id"])
             elif res["role"] == "con":
                 _, user_info, _ = consultant_service.get_info(user_id=res["user_id"])
-            else:
-                return None, None, "شما به این سرویس دسترسی ندارید."
-            return token_user, user_info, ""
-
-        else:
+        elif type_otp == "verify":
             if res["role"] == "ins":
                 _, user_info, _ = institute_service.verify_user(user_id=res["user_id"])
             elif res["role"] == "sch":
                 _, user_info, _ = school_service.verify_user(user_id=res["user_id"])
             elif res["role"] == "ocon":
                 _, user_info, _ = owner_consultant_service.verify_user(user_id=res["user_id"])
-            else:
-                return None, None, "شما به این سرویس دسترسی ندارید."
-            return token_user, user_info, ""
+
+        if user_info is None:
+            return None, None, "اطلاعات کاربر یافت نشد. لطفا دوباره درخواست دهید."
+        token_user = _create_token(user_info=[res["user_id"], phone, res["role"]])
+        if token_user is None:
+            return None, None, "مشکلی در ورود شما رخ داده؛ لطفا دوباره درخواست دهید."
+        return token_user, user_info, ""
 
     except Exception as e:
         service_exception_error_logging("ag_api/auth", "check_otp", str(e), request_data, {})

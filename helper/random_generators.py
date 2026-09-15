@@ -1,4 +1,5 @@
 import random
+import secrets
 import string
 from random import randint
 
@@ -31,5 +32,4 @@ def random_generate_password(size: int = 6, chars: str = string.digits) -> str:
 def random_generate_otp_code(n: int) -> int:
     """Generate a random n-digit OTP code."""
     range_start = 10 ** (n - 1)
-    range_end = (10 ** n) - 1
-    return randint(range_start, range_end)
+    return range_start + secrets.randbelow(9 * range_start)
