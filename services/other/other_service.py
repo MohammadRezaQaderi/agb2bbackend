@@ -133,26 +133,18 @@ def order_payment(request_data, user_info):
             elif res_discount:
                 if res_discount["expire_time"] and datetime.now() > res_discount["expire_time"]:
                     return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-                elif res_discount["status"] == 'EXPIRED':
+                elif (res_discount["status"] or "").upper() == 'EXPIRED':
                     return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-                elif res_discount["count"] == 0:
+                elif res_discount["count"] is not None and res_discount["count"] <= 0:
                     return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
                 else:
-                    discount_id = res_discount["id"]
                     discount_percentage = res_discount["discount_percentage"]
-                    with session_scope() as session:
-                        record_discount_usage(
-                            session=session,
-                            discount_id=discount_id,
-                            code=request_data["discount_code"],
-                            status="GOPAYMENT",
-                            phone=user_info["phone"],
-                            user_id=user_info["user_id"],
-                            counter_field="used_apply",
-                        )
 
         # Keep the existing package/discount validation path while the gateway is disabled.
-        get_price_payment(request_data, discount_percentage=discount_percentage)
+        try:
+            get_price_payment(request_data, discount_percentage=discount_percentage)
+        except (TypeError, ValueError):
+            return None, None, "تعداد بسته‌ها یا درصد تخفیف معتبر نیست."
         return None, None, "متاسفانه فعلا درگاه پرداخت در دسترس نیست"
     except Exception:
         logger.exception("order_payment failed")

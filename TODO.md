@@ -201,6 +201,15 @@ stable.
 
 ## P3 - Feature Readiness
 
+- [ ] Decide the AG payment contract before enabling a real gateway.
+  - Reconcile backend `PACKAGES_DATA` prices with AGUB2BFrontend prices;
+    payment amounts must be calculated from server-side package counts, not
+    the client-provided `price` or `total_value` discount preview.
+  - Use AG-specific Mellat credentials, callback/return URLs, and a database
+    migration for gateway metadata and unique payment order IDs.
+  - Verify and settle before applying capacity/discount changes; include SCL,
+    and make repeated/concurrent callbacks idempotent. Do not copy ER's
+    hardcoded test-phone access or payment credentials.
 - [ ] Add centralized authentication and useful Swagger/OpenAPI documentation for frontend developers.
   - Document action request/response payloads and user/admin authentication in one place.
     Plan the move from body tokens to header credentials without breaking existing clients;
