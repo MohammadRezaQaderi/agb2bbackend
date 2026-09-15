@@ -201,6 +201,10 @@ stable.
 
 ## P3 - Feature Readiness
 
+- [ ] Add centralized authentication and useful Swagger/OpenAPI documentation for frontend developers.
+  - Document action request/response payloads and user/admin authentication in one place.
+    Plan the move from body tokens to header credentials without breaking existing clients;
+    keep public auth actions public and decide whether API docs need restricted access.
 - [x] Document the current action contract.
   - `ACTION_TYPE_MIGRATION.md` now describes the accepted `action_type` wrapper,
     auth exceptions, response envelope, multipart exception, and action tables.
