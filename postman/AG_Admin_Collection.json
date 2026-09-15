@@ -1,125 +1,77 @@
 {
-	"info": {
-		"_postman_id": "admin-collection-001",
-		"name": "AG Admin API",
-		"description": "Admin API endpoints for AG User Backend",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-	},
-	"item": [
-		{
-			"name": "Admin - Update Capacity",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "Content-Type",
-						"value": "application/json",
-						"type": "text"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n    \"token\": \"{{token}}\",\n    \"method_type\": \"update_capacity\",\n    \"data\": {\n        \"phone\": \"09123456789\",\n        \"kind\": \"AG\",\n        \"count\": 10\n    }\n}",
-					"options": {
-						"raw": {
-							"language": "json"
-						}
-					}
-				},
-				"url": {
-					"raw": "{{url}}/ag_api/admin_request",
-					"host": [
-						"{{url}}"
-					],
-					"path": [
-						"ag_api",
-						"admin_request"
-					]
-				},
-				"description": "Update capacity for a user (ins, sch, ocon). Kind should be AG or SCL. Count must be a positive integer."
-			},
-			"response": []
-		},
-		{
-			"name": "Admin - Get User Info",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "Content-Type",
-						"value": "application/json",
-						"type": "text"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n    \"token\": \"{{token}}\",\n    \"method_type\": \"get_user_info\",\n    \"data\": {\n        \"phone\": \"09123456789\"\n    }\n}",
-					"options": {
-						"raw": {
-							"language": "json"
-						}
-					}
-				},
-				"url": {
-					"raw": "{{url}}/ag_api/admin_request",
-					"host": [
-						"{{url}}"
-					],
-					"path": [
-						"ag_api",
-						"admin_request"
-					]
-				},
-				"description": "Get user information by phone number. Returns info from users, ins, sch, ocon, con, stu tables. For ins, sch, ocon also returns capacity."
-			},
-			"response": []
-		},
-		{
-			"name": "Admin - Check Student Quiz Answer",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "Content-Type",
-						"value": "application/json",
-						"type": "text"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n    \"token\": \"{{token}}\",\n    \"method_type\": \"check_student_quiz_answer\",\n    \"data\": {\n        \"phone\": \"09123456789\"\n    }\n}",
-					"options": {
-						"raw": {
-							"language": "json"
-						}
-					}
-				},
-				"url": {
-					"raw": "{{url}}/ag_api/admin_request",
-					"host": [
-						"{{url}}"
-					],
-					"path": [
-						"ag_api",
-						"admin_request"
-					]
-				},
-				"description": "Check student quiz answers and state. Returns quiz answers from quiz_answer table and student state from stu table access field."
-			},
-			"response": []
-		}
-	],
-	"variable": [
-		{
-			"key": "url",
-			"value": "http://localhost:8000",
-			"type": "string"
-		},
-		{
-			"key": "token",
-			"value": "your-develop-token-here",
-			"type": "string"
-		}
-	]
+  "info": {
+    "_postman_id": "admin-collection-001",
+    "name": "AG Admin API",
+    "description": "Admin API endpoints for AG B2B Backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Admin - Update Capacity",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{token}}\",\n  \"action_type\": \"ag_change_capacity\",\n  \"request_data\": {\n    \"phone\": \"09123456789\",\n    \"kind\": \"AG\",\n    \"count\": 10\n  }\n}",
+          "options": {"raw": {"language": "json"}}
+        },
+        "url": {
+          "raw": "{{url}}/ag_api/admin_request",
+          "host": ["{{url}}"],
+          "path": ["ag_api", "admin_request"]
+        },
+        "description": "Add capacity for an institute, school, or owner consultant."
+      },
+      "response": []
+    },
+    {
+      "name": "Admin - Get User Info",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{token}}\",\n  \"action_type\": \"ag_get_user_info\",\n  \"request_data\": {\n    \"phone\": \"09123456789\"\n  }\n}",
+          "options": {"raw": {"language": "json"}}
+        },
+        "url": {
+          "raw": "{{url}}/ag_api/admin_request",
+          "host": ["{{url}}"],
+          "path": ["ag_api", "admin_request"]
+        },
+        "description": "Look up account details by phone number."
+      },
+      "response": []
+    },
+    {
+      "name": "Admin - Check Student Quiz Answer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{token}}\",\n  \"action_type\": \"ag_check_student_quiz_answer\",\n  \"request_data\": {\n    \"phone\": \"09123456789\"\n  }\n}",
+          "options": {"raw": {"language": "json"}}
+        },
+        "url": {
+          "raw": "{{url}}/ag_api/admin_request",
+          "host": ["{{url}}"],
+          "path": ["ag_api", "admin_request"]
+        },
+        "description": "Check student quiz attempts, answers, and access state."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {"key": "url", "value": "http://localhost:5559", "type": "string"},
+    {"key": "token", "value": "", "type": "string"}
+  ]
 }
-

@@ -13,7 +13,9 @@ stable.
     `AG_DB_UID`, and `AG_DB_PWD` were removed.
   - `.env.example` now documents the required runtime values.
   - Production fails fast when required env vars are missing.
-- [ ] Rotate any credentials that have already been committed or shared.
+- [x] Rotate any credentials that have already been committed or shared.
+  - Handled operationally outside the codebase. Runtime code no longer ships
+    committed secret fallbacks.
 - [x] Rework `DEVELOP_TOKEN` usage in `/ag_api/admin_request`.
   - The admin endpoint currently trusts one static token from config.
   - Replace with a real admin auth path or a scoped internal service token.
@@ -21,11 +23,12 @@ stable.
     `admin_logs`.
   - Admin tokens are created/rotated with `helper/db/create_admin.py`; there is
     no config-token bootstrap path left in runtime.
-- [ ] Review password storage behavior.
+- [x] Review password storage behavior.
   - Passwords are decryptable via Fernet and some APIs return decrypted
     passwords in responses/reports.
-  - Decide whether the product really needs reversible passwords; otherwise
-    migrate to one-way hashing.
+  - Decision: keep the current reversible-password behavior for now. Do not
+    migrate to one-way hashes until the product flow is redesigned around that
+    change.
 - [x] Redact sensitive request fields before writing service error logs.
   - `password`, `re_password`, OTP/security codes, and tokens are masked before
     storing `api_logs.data`.
@@ -39,7 +42,7 @@ stable.
 
 ## P1 - Project Structure And Maintainability
 
-- [ ] Split `main.py` into FastAPI routers.
+- [x] Split `main.py` into FastAPI routers.
   - `main.py` is currently about 1350 lines and mixes metrics, auth dispatch,
     uploads, static file serving, and report download logic.
   - Suggested routers: `auth`, `actions`, `admin`, `files`, `reports`,
@@ -47,28 +50,62 @@ stable.
   - `routers/health.py`, `routers/static_data.py`, and `routers/files.py`
     have been extracted.
   - `routers/actions.py` and `routers/uploads.py` have been extracted.
-  - Report downloads remain in `main.py` intentionally until report cleanup is
-    resumed.
+  - `routers/action_helpers.py` now centralizes action payload parsing,
+    auth dispatch, Redis pre-auth dispatch, and endpoint exception logging.
+  - `routers/reports.py` now owns report-download endpoints; `main.py` only
+    wires the application and routers.
 - [x] Replace `from services.service import *` with explicit imports.
   - This makes endpoint dependencies searchable and safer during refactors.
-- [ ] Extract duplicate report-download logic.
+- [x] Extract duplicate report-download logic.
   - `get_ag_first_pdf`, `get_ag_second_pdf`, and SCL report endpoints repeat
     permission checks, quiz completion checks, queue checks, and file lookup.
   - Create one helper/service such as `get_student_report_file(kind,
     report_number, expected_quiz_count)`.
-- [ ] Standardize API response shapes and HTTP status usage.
+  - Shared report-download lookup/error handling now lives in
+    `routers/reports.py`.
+- [x] Standardize API response shapes and HTTP status usage.
   - Some business errors return HTTP 200 with `status` in JSON.
   - Other paths use custom HTTP status codes like `321`-`324`.
-  - Define one response contract before adding new features.
-- [ ] Move business constants out of `helper/func_helper.py`.
+  - Response builders are centralized in `helper/api_responses.py`.
+  - Existing legacy status semantics are preserved for frontend compatibility.
+  - Gateway response helpers are now centralized in `services/gateway_helpers.py`;
+    older gateway functions delegate to the shared response contract.
+- [x] Move business constants out of `helper/func_helper.py`.
   - `PROVINCES`, `PACKAGES_DATA`, quiz titles, password helpers, DB helpers,
     and validation helpers are all in one large file.
-  - Suggested modules: `constants.py`, `security.py`, `validators.py`,
-    `connections.py`.
+  - Package/province/quiz-title constants moved to `helper/constants.py`.
+  - Pure validators moved to `helper/validators.py`.
+  - Health payloads moved to `helper/health.py`; health routes now import the
+    health helper directly.
+  - Legacy error/return helpers moved to `helper/service_errors.py`.
+  - Auth context lookup moved to `helper/auth_context.py` and router helpers now
+    import auth/error helpers directly.
+  - Tracking token generation moved to `helper/tracking.py`.
+  - Image storage, random generators, payment helpers, quiz metadata, account
+    password updates, request validation, and student access helpers moved to
+    focused helper modules.
+  - `helper/func_helper.py` was removed after all callers moved to focused
+    helper modules.
+- [x] Continue splitting `services/service.py`.
+  - Auth, student, and admin gateway wrappers have moved to dedicated modules.
+  - Gateway modules now import focused helper modules directly instead of
+    `helper/func_helper.py`.
+  - Service modules, report scripts, `main.py`, and migration scripts now
+    import focused helper modules directly instead of `helper/func_helper.py`.
+  - Management role dispatch moved to `services/management_gateway.py`.
+  - Payment/comment/notification/report-data wrappers moved to
+    `services/other/other_gateway.py`.
+  - Quiz wrappers moved to `services/quiz/quiz_gateway.py`.
+  - Student and consultant account creation moved to
+    `services/accounts_gateway.py`.
+  - `services/service.py` was removed after all internal callers moved to the
+    focused gateway modules.
 
 ## P1 - Database And Transactions
 
 - [ ] Resolve duplicate database rows after architecture migration.
+  - Deferred until the account/role ownership decision and production data
+    review; do not delete or merge users automatically.
   - `users.phone` still has duplicates, including same-role duplicates
     (`ins+ins`, `ocon+ocon`, `sch+sch`) and cross-role duplicates
     (`ins+con`, `ins+sch`).
@@ -93,33 +130,34 @@ stable.
     scripts.
   - Account/student creation avoids mutating request payloads with generated
     credentials during DB transactions.
-- [ ] Review dynamic SQL helper inputs.
-  - Values are parameterized, but table names, field names, and conditions are
-    built with f-strings.
-  - Keep these helpers internal or add allowlists for table/column names.
-- [ ] Decide where schema management lives.
-  - `helper/db/db_creator.py`, `helper/db/migration.py`, and
-    `helper/db/last_schema.py`
-    overlap.
-  - Pick a migration workflow and mark old schema helpers as legacy if needed.
+- [x] Review dynamic SQL helper inputs.
+  - Runtime queries use SQLAlchemy expressions and bound values. Migration SQL
+    identifiers are internal or metadata-derived and quoted. `drop_tables()`
+    only accepts tables defined in `db_creator.py`.
+- [x] Decide where schema management lives.
+  - `helper/db/README.md` documents the supported workflow: `db_creator.py`
+    for empty databases, `architecture_migration.py` for legacy copies, and
+    `live_migration.py` for incremental changes. The destructive historical
+    `migration.py` entry point is disabled; `last_schema.py` is absent.
 
 ## P2 - Tooling, Tests, And CI
 
-- [ ] Add a minimal test setup.
-  - Add `pytest`, `pytest-asyncio`, and FastAPI `TestClient` tests for
-    request validation, auth failures, health endpoint behavior, and report
-    permission checks.
-  - Mock DB/Redis/Kavenegar so tests run without production services.
-- [ ] Add formatting/linting.
-  - Suggested baseline: `ruff` for linting/import sorting and `black` or
-    `ruff format` for formatting.
-  - Add a simple `pyproject.toml` so the team runs the same checks.
-- [ ] Pin all dependencies in `requirements.txt`.
-  - `pandas`, `openpyxl`, `prometheus_client`, `httpx`, and `cryptography` are
-    currently unpinned.
-- [ ] Add a lightweight CI command.
-  - Example stages: install dependencies, run lint, run tests, import-check the
-    app.
+- [x] Add a minimal test setup.
+  - `tests/test_api_basics.py` covers action payloads, auth rejection, health,
+    report permission, and Redis cleanup with external dependencies mocked.
+  - `requirements-dev.txt` and `pyproject.toml` define the test environment;
+    run with `python -m pytest`.
+- [x] Add formatting/linting.
+  - Ruff checks critical syntax/name errors across the repository. New tests
+    also pass full `E4,E7,E9,F,I` lint and `ruff format --check`.
+  - Broader formatting of legacy modules is deferred to avoid a large
+    unrelated diff.
+- [x] Pin all direct dependencies in `requirements.txt`.
+  - Production and development dependencies now have explicit versions.
+- [x] Add a lightweight CI command.
+  - `python scripts/checks.py` runs lint, formatting checks for new tests,
+    service-free tests, and app import. GitHub Actions installs development
+    dependencies and runs the same command.
 - [x] Add `.env.example` and update deployment docs to use the same env names
   as `config.py`.
   - Deployment docs now point to `.env.example` and use `AG_DB_*` names.
@@ -147,25 +185,29 @@ stable.
 
 ## P2 - Repository Hygiene
 
-- [ ] Ignore generated report outputs.
-  - `report/outputs/` is currently untracked output and should probably be
-    ignored unless sample fixtures are intentional.
-- [ ] Clean local artifacts before committing.
-  - `__pycache__/` and `venv/` are ignored, but local copies exist in the
-    workspace.
-  - Do not delete them during feature work unless the team wants a cleanup
-    commit.
-- [ ] Decide whether deployment scripts are Windows-only.
-  - Current deployment docs and `.bat` scripts are PM2/Windows focused, while
-    Docker files suggest a container path.
-  - Document the supported production path clearly.
-- [ ] Review Postman files for secrets or stale environments.
+- [x] Remove legacy manual report scripts.
+  - The tracked `report/` folder contained manual export/import scripts and
+    generated output. It was removed and can be reintroduced later with the new
+    reporting/export structure.
+- [x] Audit local artifacts before committing.
+  - No ignored virtualenv, cache, log, or environment files are tracked; local
+    ignored copies were left untouched.
+- [x] Decide whether deployment scripts are Windows-only.
+  - PM2/Windows is the supported application path. Docker Compose is
+    monitoring-only, and deployment docs match `instances.json`.
+- [x] Review Postman files for secrets or stale environments.
+  - Admin examples now use the current action contract, have no token value,
+    and target the checked-in management port.
 
 ## P3 - Feature Readiness
 
-- [ ] Document the current method-type action contract.
-  - Endpoints dispatch behavior through `method_type`; new features should not
-    add more hidden actions without documentation.
+- [ ] Add centralized authentication and useful Swagger/OpenAPI documentation for frontend developers.
+  - Document action request/response payloads and user/admin authentication in one place.
+    Plan the move from body tokens to header credentials without breaking existing clients;
+    keep public auth actions public and decide whether API docs need restricted access.
+- [x] Document the current action contract.
+  - `ACTION_TYPE_MIGRATION.md` now describes the accepted `action_type` wrapper,
+    auth exceptions, response envelope, multipart exception, and action tables.
 - [ ] Add request/response models for new features.
   - Introduce Pydantic models gradually around new endpoints first, then
     backfill older action handlers.
