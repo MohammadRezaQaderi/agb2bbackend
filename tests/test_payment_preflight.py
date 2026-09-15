@@ -73,3 +73,35 @@ def test_disabled_payment_rejects_invalid_package_without_writes(monkeypatch):
     assert token is None and data is None
     assert "تعداد بسته‌ها" in message
     session_scope.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("status", "count"),
+    [("expired", 1), ("EXPIRED", 1), ("ACTIVE", 0), ("ACTIVE", -1)],
+)
+def test_discount_rejection_is_consistent_for_preview_and_order(monkeypatch, status, count):
+    monkeypatch.setattr(other_service, "session_scope", lambda: nullcontext(Mock()))
+    monkeypatch.setattr(
+        other_service,
+        "get_discount_by_code",
+        Mock(
+            return_value={
+                "id": 1,
+                "discount_percentage": 0.1,
+                "count": count,
+                "status": status,
+                "expire_time": None,
+            }
+        ),
+    )
+    write_usage = Mock(side_effect=AssertionError("rejected discount wrote usage"))
+    monkeypatch.setattr(other_service, "record_discount_usage", write_usage)
+    user_info = {"user_id": 1, "phone": "09123456789"}
+
+    preview = other_service.apply_discount({"discount_code": "TEST", "total_value": 1000}, user_info)
+    order = other_service.order_payment({"AG": 10, "discount_code": "TEST"}, user_info)
+
+    assert preview[0] is None and preview[1] is None
+    assert order[0] is None and order[1] is None
+    assert preview[2] == order[2]
+    write_usage.assert_not_called()

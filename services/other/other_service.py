@@ -24,6 +24,20 @@ from helper.tracking import get_tracking_code
 logger = logging.getLogger(__name__)
 
 
+def _get_active_discount(code, missing_message):
+    with session_scope() as session:
+        discount = get_discount_by_code(session=session, code=code)
+    if not discount:
+        return None, missing_message
+    if discount["expire_time"] and datetime.now() > discount["expire_time"]:
+        return None, "متاسفانه زمان مصرف این کد به پایان رسیده."
+    if (discount["status"] or "").upper() == "EXPIRED":
+        return None, "متاسفانه زمان مصرف این کد به پایان رسیده."
+    if discount["count"] is not None and discount["count"] <= 0:
+        return None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
+    return discount, None
+
+
 # AG_REPORT_INFO structure mapping result_state fields to their display names
 # Fields from result_state table:
 #   t_state NVARCHAR(100) -> تجربی (Experimental Sciences)
@@ -80,17 +94,9 @@ def get_transactions(request_data, user_info):
 
 def apply_discount(request_data, user_info):
     try:
-        with session_scope() as session:
-            res = get_discount_by_code(session=session, code=request_data["discount_code"])
-        if not res:
-            return None, None, "کد تخفیف مد نظر شما موجود نیست."
-
-        if res["expire_time"] and datetime.now() > res["expire_time"]:
-            return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-        if res["status"] == 'expired':
-            return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-        if res["count"] == 0:
-            return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
+        res, error = _get_active_discount(request_data["discount_code"], "کد تخفیف مد نظر شما موجود نیست.")
+        if error:
+            return None, None, error
 
         with session_scope() as session:
             record_discount_usage(
@@ -126,19 +132,10 @@ def order_payment(request_data, user_info):
 
         discount_percentage = None
         if request_data.get("discount_code"):
-            with session_scope() as session:
-                res_discount = get_discount_by_code(session=session, code=request_data["discount_code"])
-            if not res_discount:
-                return None, None, "کد تخفیف شما موجود نیست."
-            elif res_discount:
-                if res_discount["expire_time"] and datetime.now() > res_discount["expire_time"]:
-                    return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-                elif (res_discount["status"] or "").upper() == 'EXPIRED':
-                    return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-                elif res_discount["count"] is not None and res_discount["count"] <= 0:
-                    return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
-                else:
-                    discount_percentage = res_discount["discount_percentage"]
+            res_discount, error = _get_active_discount(request_data["discount_code"], "کد تخفیف شما موجود نیست.")
+            if error:
+                return None, None, error
+            discount_percentage = res_discount["discount_percentage"]
 
         # Keep the existing package/discount validation path while the gateway is disabled.
         try:
