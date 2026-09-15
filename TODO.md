@@ -205,10 +205,9 @@ stable.
   - Reconcile backend `PACKAGES_DATA` prices with AGUB2BFrontend prices;
     payment amounts must be calculated from server-side package counts, not
     the client-provided `price` or `total_value` discount preview.
-  - Confirm whether existing `discounts.discount_percentage` values are
-    fractions (0.1 for 10%) or whole percentages (10 for 10%). The current
-    preview and order calculations disagree, and preview also divides its
-    output by 100 despite receiving a frontend price in tomans.
+  - Audit existing `discounts.discount_percentage` values before activation.
+    Preview and order now both require fractional rates (0.1 for 10%); legacy
+    whole-percentage rows must be reviewed and migrated intentionally.
   - Use AG-specific Mellat credentials, callback/return URLs, and a database
     migration for gateway metadata and unique payment order IDs.
   - Verify and settle before applying capacity/discount changes; include SCL,

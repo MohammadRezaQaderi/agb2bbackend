@@ -15,7 +15,7 @@ from helper.db.sqlalchemy.queries.other import (
     mark_notification_read_if_allowed,
     record_discount_usage,
 )
-from helper.payments import get_price_payment
+from helper.payments import calculate_discounted_amount, get_price_payment
 from helper.response import build_comment_list_response, build_transaction_list_response
 from helper.service_errors import service_exception_error_logging
 from helper.tracking import get_tracking_code
@@ -98,6 +98,18 @@ def apply_discount(request_data, user_info):
         if error:
             return None, None, error
 
+        raw_total = request_data["total_value"]
+        if type(raw_total) is int:
+            total = raw_total
+        elif isinstance(raw_total, str) and raw_total.isdecimal():
+            total = int(raw_total)
+        else:
+            return None, None, "مبلغ یا درصد تخفیف معتبر نیست."
+        try:
+            new_total = calculate_discounted_amount(total, res["discount_percentage"])
+        except ValueError:
+            return None, None, "مبلغ یا درصد تخفیف معتبر نیست."
+
         with session_scope() as session:
             record_discount_usage(
                 session=session,
@@ -110,7 +122,6 @@ def apply_discount(request_data, user_info):
             )
 
         token = get_tracking_code()
-        new_total = (round(int(request_data["total_value"]) * (1 - res["discount_percentage"]))) / 100
         return token, {"new_total": new_total}, ""
     except Exception as e:
         logger.exception("apply_discount failed")

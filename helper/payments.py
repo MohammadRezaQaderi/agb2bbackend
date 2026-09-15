@@ -17,13 +17,25 @@ def get_payment_id() -> int:
             return payment_id
 
 
+def calculate_discounted_amount(total: int, discount_rate: float | None) -> int:
+    if type(total) is not int or total <= 0:
+        raise ValueError("Invalid payment amount")
+    try:
+        rate = Decimal(str(discount_rate)) if discount_rate is not None else Decimal(0)
+    except InvalidOperation as exc:
+        raise ValueError("Invalid discount rate") from exc
+    if not rate.is_finite() or not 0 <= rate <= 1:
+        raise ValueError("Invalid discount rate")
+    return int((Decimal(total) * (1 - rate)).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
 def get_price_payment(request_data: Mapping[str, int], discount_percentage: float | None) -> Tuple[int, int, int, int]:
     """
     Calculate total price for AG / SCL packages.
 
     Args:
         request_data: Dictionary containing package counts, e.g. {"AG": 20, "SCL": 10}
-        discount_percentage: Optional discount percentage (0.0 to 100.0).
+        discount_percentage: Optional fractional discount rate (0.0 to 1.0).
 
     Returns:
         Tuple of (total_price, discounted_price, ag_count, scl_count) in Rials.
@@ -47,12 +59,5 @@ def get_price_payment(request_data: Mapping[str, int], discount_percentage: floa
     if total <= 0:
         raise ValueError("No valid package selected")
 
-    try:
-        percentage = Decimal(str(discount_percentage)) if discount_percentage is not None else Decimal(0)
-    except InvalidOperation as exc:
-        raise ValueError("Invalid discount percentage") from exc
-    if not percentage.is_finite() or not 0 <= percentage <= 100:
-        raise ValueError("Invalid discount percentage")
-
-    discounted_total = int((Decimal(total) * (100 - percentage) / 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    discounted_total = calculate_discounted_amount(total, discount_percentage)
     return total, discounted_total, counts["AG"], counts["SCL"]
