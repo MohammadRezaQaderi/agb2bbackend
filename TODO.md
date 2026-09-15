@@ -214,6 +214,8 @@ stable.
 - [ ] Create a small service boundary for external integrations.
   - SMS, Redis OTP cache, report files, and payment helpers should be behind
     interfaces that are easy to mock.
+  - OTP issuing and consumption now go through `helper/otp/otp_gateway.py`;
+    report files and payment helpers still need their own review.
 - [ ] Add migration notes for any future auth/password changes.
   - Password encryption and token tables are sensitive; write rollback and data
     migration notes before changing production data.
