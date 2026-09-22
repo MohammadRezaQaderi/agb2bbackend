@@ -201,6 +201,18 @@ stable.
 
 ## P3 - Feature Readiness
 
+- [ ] Decide the AG payment contract before enabling a real gateway.
+  - Reconcile backend `PACKAGES_DATA` prices with AGUB2BFrontend prices;
+    payment amounts must be calculated from server-side package counts, not
+    the client-provided `price` or `total_value` discount preview.
+  - Audit existing `discounts.discount_percentage` values before activation.
+    Preview and order now both require fractional rates (0.1 for 10%); legacy
+    whole-percentage rows must be reviewed and migrated intentionally.
+  - Use AG-specific Mellat credentials, callback/return URLs, and a database
+    migration for gateway metadata and unique payment order IDs.
+  - Verify and settle before applying capacity/discount changes; include SCL,
+    and make repeated/concurrent callbacks idempotent. Do not copy ER's
+    hardcoded test-phone access or payment credentials.
 - [ ] Add centralized authentication and useful Swagger/OpenAPI documentation for frontend developers.
   - Document action request/response payloads and user/admin authentication in one place.
     Plan the move from body tokens to header credentials without breaking existing clients;
@@ -214,6 +226,8 @@ stable.
 - [ ] Create a small service boundary for external integrations.
   - SMS, Redis OTP cache, report files, and payment helpers should be behind
     interfaces that are easy to mock.
+  - OTP issuing and consumption now go through `helper/otp/otp_gateway.py`;
+    report files and payment helpers still need their own review.
 - [ ] Add migration notes for any future auth/password changes.
   - Password encryption and token tables are sensitive; write rollback and data
     migration notes before changing production data.

@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import pytest
 from redis.exceptions import WatchError
 
+import helper.otp.otp_gateway as otp_gateway
 import services.auth.auth_service as auth_service
 from helper.otp.otp_cache import consume_otp, store_otp
 
@@ -107,8 +108,8 @@ def test_send_otp_provider_failure_keeps_previous_code(monkeypatch, otp_cache):
         Mock(return_value={"user_id": 1, "phone": "09123456789", "role": "ins"}),
     )
     monkeypatch.setattr(auth_service, "get_role_verify_status", Mock(return_value=0))
-    monkeypatch.setattr(auth_service.otp_helper, "send_otp_message", Mock(return_value=None))
-    monkeypatch.setattr(auth_service, "random_generate_otp_code", Mock(return_value=99999))
+    monkeypatch.setattr(otp_gateway.otp_helper, "send_otp_message", Mock(return_value=None))
+    monkeypatch.setattr(otp_gateway, "random_generate_otp_code", Mock(return_value=99999))
 
     token, data, message = auth_service.send_otp(
         redis_db,
@@ -134,8 +135,8 @@ def test_send_otp_success_replaces_code_with_short_expiry(monkeypatch, otp_cache
         Mock(return_value={"user_id": 1, "phone": "09123456789", "role": "ins"}),
     )
     send_message = Mock(return_value={"status": "sent"})
-    monkeypatch.setattr(auth_service.otp_helper, "send_otp_message", send_message)
-    monkeypatch.setattr(auth_service, "random_generate_otp_code", Mock(return_value=99999))
+    monkeypatch.setattr(otp_gateway.otp_helper, "send_otp_message", send_message)
+    monkeypatch.setattr(otp_gateway, "random_generate_otp_code", Mock(return_value=99999))
     monkeypatch.setattr(auth_service, "get_tracking_code", Mock(return_value="tracking"))
 
     token, data, message = auth_service.send_otp(
@@ -145,7 +146,7 @@ def test_send_otp_success_replaces_code_with_short_expiry(monkeypatch, otp_cache
 
     assert (token, data, message) == ("tracking", {"phone": "09123456789"}, "")
     assert json.loads(otp_cache.record) == {"code": 99999, "type": "otp"}
-    assert otp_cache.timeout == auth_service.OTP_TTL_SECONDS
+    assert otp_cache.timeout == otp_gateway.OTP_TTL_SECONDS
     send_message.assert_called_once_with(code=99999, phone="09123456789", type="OTP")
 
 
@@ -159,8 +160,8 @@ def test_signup_provider_failure_keeps_unverified_account_for_resend(monkeypatch
     monkeypatch.setattr(auth_service, "session_scope", lambda: nullcontext(Mock()))
     monkeypatch.setattr(auth_service, "encrypt_password", Mock(return_value="encrypted"))
     monkeypatch.setattr(auth_service, "create_signup_account", create_account)
-    monkeypatch.setattr(auth_service, "random_generate_otp_code", Mock(return_value=12345))
-    monkeypatch.setattr(auth_service.otp_helper, "send_otp_message", Mock(return_value=None))
+    monkeypatch.setattr(otp_gateway, "random_generate_otp_code", Mock(return_value=12345))
+    monkeypatch.setattr(otp_gateway.otp_helper, "send_otp_message", Mock(return_value=None))
 
     token, data, message = auth_service.sign_up(
         redis_db,
@@ -171,6 +172,29 @@ def test_signup_provider_failure_keeps_unverified_account_for_resend(monkeypatch
     assert "حساب ثبت شد" in message
     create_account.assert_called_once()
     assert otp_cache.record is None
+
+
+def test_auth_service_can_use_fake_otp_gateway(monkeypatch):
+    fake_gateway = Mock()
+    fake_gateway.consume.return_value = "invalid"
+    gateway_factory = Mock(return_value=fake_gateway)
+    monkeypatch.setattr(auth_service, "OtpGateway", gateway_factory)
+    monkeypatch.setattr(auth_service, "session_scope", lambda: nullcontext(Mock()))
+    monkeypatch.setattr(
+        auth_service,
+        "get_user_auth_by_phone",
+        Mock(return_value={"user_id": 1, "phone": "09123456789", "role": "ins"}),
+    )
+    redis_db = object()
+
+    token, data, message = auth_service.check_otp(
+        redis_db,
+        {"phone": "09123456789", "code": "12345", "type": "otp"},
+    )
+
+    assert token is None and data is None and "صحیح نمی‌باشد" in message
+    gateway_factory.assert_called_once_with(redis_db)
+    fake_gateway.consume.assert_called_once_with("09123456789", "12345", "otp")
 
 
 def test_check_otp_success_cannot_issue_second_token(monkeypatch, otp_cache):

@@ -1,5 +1,3 @@
-from config import OTP_TTL_SECONDS, REDIS_CACHE_OTP
-import helper.otp.otp_helper as otp_helper
 from helper.constants import PACKAGES_DATA
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.accounts import create_signup_account
@@ -13,9 +11,8 @@ from helper.db.sqlalchemy.queries.auth import (
     token_exists,
     user_phone_exists,
 )
-from helper.otp.otp_cache import consume_otp, store_otp
+from helper.otp.otp_gateway import OtpGateway
 from helper.password_helper import encrypt_password, verify_password
-from helper.random_generators import random_generate_otp_code
 from helper.service_errors import service_exception_error_logging
 from helper.tracking import get_tracking_code
 from helper.validators import check_security_code, is_valid_mobile, password_format_check
@@ -168,10 +165,8 @@ def sign_up(redis_db, request_data):
                 package_names=list(PACKAGES_DATA.keys()),
             )
 
-        code = random_generate_otp_code(5)
-        if otp_helper.send_otp_message(code=code, phone=phone, type="VERIFY") is None:
+        if not OtpGateway(redis_db).issue(phone, "verify"):
             return None, None, "حساب ثبت شد اما پیامک ارسال نشد؛ از بخش ارسال مجدد کد استفاده کنید."
-        store_otp(redis_db.cache(REDIS_CACHE_OTP), phone, code, "verify", OTP_TTL_SECONDS)
 
         return get_tracking_code(), None, "ثبت نام شما با موفقیت انجام شد."
 
@@ -209,10 +204,8 @@ def send_otp(redis_db, request_data):
                 verify_status = get_role_verify_status(session=session, user_id=res["user_id"], role=res["role"])
             if verify_status == 1:
                 return None, None, "شما از قبل احراز هویت نموده‌اید."
-        code = random_generate_otp_code(5)
-        if otp_helper.send_otp_message(code=code, phone=phone, type=type_otp.upper()) is None:
+        if not OtpGateway(redis_db).issue(res["phone"], type_otp):
             return None, None, "پیامک ارسال نشد؛ لطفا دوباره تلاش کنید."
-        store_otp(redis_db.cache(REDIS_CACHE_OTP), res["phone"], code, type_otp, OTP_TTL_SECONDS)
         token = get_tracking_code()
         return token, {"phone": phone}, ""
     except Exception as e:
@@ -240,7 +233,7 @@ def check_otp(redis_db, request_data):
         if type_otp == "verify" and res["role"] not in {"ins", "sch", "ocon"}:
             return None, None, "شما به این سرویس دسترسی ندارید."
 
-        result = consume_otp(redis_db.cache(REDIS_CACHE_OTP), phone, code, type_otp)
+        result = OtpGateway(redis_db).consume(phone, code, type_otp)
         if result == "missing":
             return None, None, "کدی برای این شماره تلفن ثبت نشده یا منقضی شده است. لطفا دوباره درخواست دهید."
         if result == "invalid":
