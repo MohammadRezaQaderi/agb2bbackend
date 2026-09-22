@@ -15,13 +15,27 @@ from helper.db.sqlalchemy.queries.other import (
     mark_notification_read_if_allowed,
     record_discount_usage,
 )
-from helper.payments import get_price_payment
+from helper.payments import calculate_discounted_amount, get_price_payment
 from helper.response import build_comment_list_response, build_transaction_list_response
 from helper.service_errors import service_exception_error_logging
 from helper.tracking import get_tracking_code
 
 
 logger = logging.getLogger(__name__)
+
+
+def _get_active_discount(code, missing_message):
+    with session_scope() as session:
+        discount = get_discount_by_code(session=session, code=code)
+    if not discount:
+        return None, missing_message
+    if discount["expire_time"] and datetime.now() > discount["expire_time"]:
+        return None, "متاسفانه زمان مصرف این کد به پایان رسیده."
+    if (discount["status"] or "").upper() == "EXPIRED":
+        return None, "متاسفانه زمان مصرف این کد به پایان رسیده."
+    if discount["count"] is not None and discount["count"] <= 0:
+        return None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
+    return discount, None
 
 
 # AG_REPORT_INFO structure mapping result_state fields to their display names
@@ -80,17 +94,21 @@ def get_transactions(request_data, user_info):
 
 def apply_discount(request_data, user_info):
     try:
-        with session_scope() as session:
-            res = get_discount_by_code(session=session, code=request_data["discount_code"])
-        if not res:
-            return None, None, "کد تخفیف مد نظر شما موجود نیست."
+        res, error = _get_active_discount(request_data["discount_code"], "کد تخفیف مد نظر شما موجود نیست.")
+        if error:
+            return None, None, error
 
-        if res["expire_time"] and datetime.now() > res["expire_time"]:
-            return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-        if res["status"] == 'expired':
-            return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-        if res["count"] == 0:
-            return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
+        raw_total = request_data["total_value"]
+        if type(raw_total) is int:
+            total = raw_total
+        elif isinstance(raw_total, str) and raw_total.isdecimal():
+            total = int(raw_total)
+        else:
+            return None, None, "مبلغ یا درصد تخفیف معتبر نیست."
+        try:
+            new_total = calculate_discounted_amount(total, res["discount_percentage"])
+        except ValueError:
+            return None, None, "مبلغ یا درصد تخفیف معتبر نیست."
 
         with session_scope() as session:
             record_discount_usage(
@@ -104,7 +122,6 @@ def apply_discount(request_data, user_info):
             )
 
         token = get_tracking_code()
-        new_total = (round(int(request_data["total_value"]) * (1 - res["discount_percentage"]))) / 100
         return token, {"new_total": new_total}, ""
     except Exception as e:
         logger.exception("apply_discount failed")
@@ -126,33 +143,16 @@ def order_payment(request_data, user_info):
 
         discount_percentage = None
         if request_data.get("discount_code"):
-            with session_scope() as session:
-                res_discount = get_discount_by_code(session=session, code=request_data["discount_code"])
-            if not res_discount:
-                return None, None, "کد تخفیف شما موجود نیست."
-            elif res_discount:
-                if res_discount["expire_time"] and datetime.now() > res_discount["expire_time"]:
-                    return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-                elif res_discount["status"] == 'EXPIRED':
-                    return None, None, "متاسفانه زمان مصرف این کد به پایان رسیده."
-                elif res_discount["count"] == 0:
-                    return None, None, "متاسفانه کد تخفیف مدنظر اتمام یافته."
-                else:
-                    discount_id = res_discount["id"]
-                    discount_percentage = res_discount["discount_percentage"]
-                    with session_scope() as session:
-                        record_discount_usage(
-                            session=session,
-                            discount_id=discount_id,
-                            code=request_data["discount_code"],
-                            status="GOPAYMENT",
-                            phone=user_info["phone"],
-                            user_id=user_info["user_id"],
-                            counter_field="used_apply",
-                        )
+            res_discount, error = _get_active_discount(request_data["discount_code"], "کد تخفیف شما موجود نیست.")
+            if error:
+                return None, None, error
+            discount_percentage = res_discount["discount_percentage"]
 
         # Keep the existing package/discount validation path while the gateway is disabled.
-        get_price_payment(request_data, discount_percentage=discount_percentage)
+        try:
+            get_price_payment(request_data, discount_percentage=discount_percentage)
+        except (TypeError, ValueError):
+            return None, None, "تعداد بسته‌ها یا درصد تخفیف معتبر نیست."
         return None, None, "متاسفانه فعلا درگاه پرداخت در دسترس نیست"
     except Exception:
         logger.exception("order_payment failed")
