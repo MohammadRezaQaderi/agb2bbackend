@@ -91,7 +91,7 @@ KAVENEGAR_OTP_TEMPLATE = _env("AG_KAVENEGAR_OTP_TEMPLATE", "AGOTP")
 #   AG_PASSWORD_SECRET_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 PASSWORD_SECRET_KEY = _env(
     "AG_PASSWORD_SECRET_KEY",
-    "",
+    "8q2F8J7x1a6F1C5B8L3q6N2v9R4s7W0yF1z3X6C8q2M=",
     required_in_prod=True,
 )
 
