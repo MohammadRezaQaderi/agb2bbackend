@@ -81,7 +81,7 @@ BRAIN_EXCEL_PATH = Path(
 # Kavenegar SMS API configuration
 KAVENEGAR_API_KEY = _env(
     "AG_KAVENEGAR_API_KEY",
-    "",
+    "5345574F44473868686938596E4744536C4E335232506B72687A376C6C743949666335584E727A653938343D",
     required_in_prod=True,
 )
 KAVENEGAR_OTP_TEMPLATE = _env("AG_KAVENEGAR_OTP_TEMPLATE", "AGOTP")
@@ -116,8 +116,8 @@ REDIS_QUEUE_NAME = _env("AG_REDIS_QUEUE_NAME", "userAGB2BReport")
 DB_DRIVER = _env("AG_DB_DRIVER", "ODBC Driver 17 for SQL Server")
 DB_SERVER = _env("AG_DB_SERVER", "localhost,1433")
 DB_DATABASE = _env("AG_DB_DATABASE", "AGB2B_COPY")
-DB_UID = _env("AG_DB_UID", "", required_in_prod=True)
-DB_PWD = _env("AG_DB_PWD", "", required_in_prod=True)
+DB_UID = _env("AG_DB_UID", "mgh27", required_in_prod=True)
+DB_PWD = _env("AG_DB_PWD", "m2711gH9985", required_in_prod=True)
 DB_TRUST_CERT = _env("AG_DB_TRUST_CERT", "yes")
 
 # Database Connection String

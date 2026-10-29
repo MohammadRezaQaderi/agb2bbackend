@@ -138,6 +138,49 @@ def list_students_for_consultant(
     return list_students(session, scope="consultant", user_id=consultant_user_id, filters=filters)
 
 
+def list_students_without_package_access(
+    session: Session,
+    scope: StudentScope,
+    user_id: int,
+    package_name: str,
+) -> list[dict]:
+    if scope == "owner":
+        scope_column = Student.owner_user_id
+    elif scope == "consultant":
+        scope_column = Student.consultant_user_id
+    else:
+        raise ValueError(f"Unsupported student scope: {scope}")
+
+    has_package_access = (
+        select(StudentPackageAccess.id)
+        .where(StudentPackageAccess.stu_user_id == Student.user_id)
+        .where(StudentPackageAccess.package_name == package_name.upper())
+        .where(StudentPackageAccess.permission == 1)
+        .exists()
+    )
+    statement = (
+        select(
+            Student.stu_id.label("stu_id"),
+            Student.first_name.label("first_name"),
+            Student.last_name.label("last_name"),
+            User.phone.label("phone"),
+        )
+        .join(User, User.user_id == Student.user_id)
+        .where(scope_column == user_id)
+        .where(~has_package_access)
+        .order_by(Student.created_time.desc(), Student.user_id.desc())
+    )
+    rows = session.execute(statement).mappings().all()
+    return [
+        {
+            "stu_id": row["stu_id"],
+            "full_name": f"{row['first_name'] or ''} {row['last_name'] or ''}".strip(),
+            "phone": row["phone"],
+        }
+        for row in rows
+    ]
+
+
 def get_student_birth_date(session: Session, user_id: int) -> str | None:
     statement = select(Student.birth_date).where(Student.user_id == user_id)
     return session.execute(statement).scalar_one_or_none()

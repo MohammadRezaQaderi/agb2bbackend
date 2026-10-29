@@ -23,6 +23,7 @@ from helper.db.sqlalchemy.queries.schools import (
 from helper.db.sqlalchemy.queries.settings import upsert_setting
 from helper.db.sqlalchemy.queries.students import (
     list_students_for_owner,
+    list_students_without_package_access,
     update_student_profile_for_owner,
 )
 from helper.image_storage import save_base64_image
@@ -117,6 +118,24 @@ def get_capacity(package_names, user_info):
     except Exception as e:
         service_exception_error_logging("ag_api/sch", "get_capacity", str(e), request_data, user_info)
         return None, None, "ظرفیت محصول دریافت نشد."
+
+
+def get_students_without_product_access(package_name, user_info):
+    request_data = {"package_name": package_name}
+    try:
+        with session_scope() as session:
+            students = list_students_without_package_access(
+                session=session,
+                scope="owner",
+                user_id=user_info["user_id"],
+                package_name=package_name,
+            )
+        return get_tracking_code(), students, ""
+    except Exception as e:
+        service_exception_error_logging(
+            "ag_api/sch", "get_students_without_product_access", str(e), request_data, user_info
+        )
+        return None, [], "اطلاعات دانش‌آموزان دریافت نشد."
 
 
 def get_report(request_data, user_info):

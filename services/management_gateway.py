@@ -144,6 +144,25 @@ def get_capacity(request_data, user_info):
     return service_response(method_type, tracking_token, response_data, response_message)
 
 
+def get_students_without_product_access(request_data, user_info):
+    method_type = "SELECT"
+    package_name = str(request_data.get("package_name") or "").strip().upper()
+    if not package_name or package_name not in PACKAGES_DATA:
+        return error_response(method_type, "A valid package_name is required.")
+
+    result = role_handler(user_info, {
+        "ins": lambda: institute_service.get_students_without_product_access(package_name, user_info),
+        "sch": lambda: school_service.get_students_without_product_access(package_name, user_info),
+        "ocon": lambda: owner_consultant_service.get_students_without_product_access(package_name, user_info),
+        "con": lambda: consultant_service.get_students_without_product_access(package_name, user_info),
+    })
+    if result is None:
+        return not_method_access_return()
+
+    tracking_token, response_data, response_message = result
+    return service_response(method_type, tracking_token, response_data, response_message)
+
+
 def get_consultants(request_data, user_info):
     method_type = "SELECT"
     result = role_handler(user_info, {
