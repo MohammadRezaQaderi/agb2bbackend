@@ -160,7 +160,7 @@ def list_students_without_package_access(
     )
     statement = (
         select(
-            Student.stu_id.label("stu_id"),
+            Student.user_id.label("stu_id"),
             Student.first_name.label("first_name"),
             Student.last_name.label("last_name"),
             User.phone.label("phone"),
