@@ -1,4 +1,5 @@
 from helper.account_passwords import update_user_and_role_password
+from helper.constants import PACKAGES_DATA
 from helper.request_validation import validate_request_data_fields
 from helper.service_errors import not_method_access_return
 from helper.validators import password_format_check
@@ -112,6 +113,29 @@ def get_dashboard(request_data, user_info):
         "sch": lambda: school_service.get_dashboard(request_data=request_data, user_info=user_info),
         "ocon": lambda: owner_consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
         "con": lambda: consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
+    })
+    if result is None:
+        return not_method_access_return()
+
+    tracking_token, response_data, response_message = result
+    return service_response(method_type, tracking_token, response_data, response_message)
+
+
+def get_capacity(request_data, user_info):
+    method_type = "SELECT"
+    raw_package_names = request_data.get("package_names")
+    if not isinstance(raw_package_names, list) or not raw_package_names:
+        return error_response(method_type, "package_names must be a non-empty list.")
+
+    package_names = list(dict.fromkeys(str(name).strip().upper() for name in raw_package_names))
+    if any(not name or name not in PACKAGES_DATA for name in package_names):
+        return error_response(method_type, "One or more package names are invalid.")
+
+    result = role_handler(user_info, {
+        "ins": lambda: institute_service.get_capacity(package_names, user_info),
+        "sch": lambda: school_service.get_capacity(package_names, user_info),
+        "ocon": lambda: owner_consultant_service.get_capacity(package_names, user_info),
+        "con": lambda: consultant_service.get_capacity(package_names, user_info),
     })
     if result is None:
         return not_method_access_return()

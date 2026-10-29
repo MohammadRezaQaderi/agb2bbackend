@@ -91,10 +91,35 @@ def get_dashboard(request_data, user_info):
         return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
-def get_report(request_data, user_info):
+def get_capacity(package_names, user_info):
+    request_data = {"package_names": package_names}
     try:
         with session_scope() as session:
-            students = list_students_for_owner(session=session, owner_user_id=user_info["user_id"])
+            packages = list_capacity_packages_for_user(
+                session=session,
+                user_id=user_info["user_id"],
+                package_names=package_names,
+            )
+        capacity = {
+            package["package_name"]: {
+                "allowed": package.get("allowed"),
+                "used": package.get("used"),
+            }
+            for package in packages
+        }
+        return get_tracking_code(), {"capacity": capacity}, ""
+    except Exception as e:
+        service_exception_error_logging("ag_api/ins", "get_capacity", str(e), request_data, user_info)
+        return None, None, "ظرفیت محصول دریافت نشد."
+
+
+def get_report(request_data, user_info):
+    try:
+        filters = StudentFilters.from_request(request_data)
+        with session_scope() as session:
+            students = list_students_for_owner(
+                session=session, owner_user_id=user_info["user_id"], filters=filters
+            )
         report_info = build_student_report_response(students, include_consultant_name=True)
         token = get_tracking_code()
         return token, report_info, ""
@@ -105,8 +130,11 @@ def get_report(request_data, user_info):
 
 def get_management_report(request_data, user_info):
     try:
+        filters = StudentFilters.from_request(request_data)
         with session_scope() as session:
-            students = list_students_for_owner(session=session, owner_user_id=user_info["user_id"])
+            students = list_students_for_owner(
+                session=session, owner_user_id=user_info["user_id"], filters=filters
+            )
             quiz_attempts = list_quiz_attempts_for_users(
                 session=session,
                 user_ids=[student["user_id"] for student in students],

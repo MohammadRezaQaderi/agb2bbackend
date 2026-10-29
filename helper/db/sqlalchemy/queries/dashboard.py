@@ -42,7 +42,11 @@ def _quiz_scope_column(scope: StudentScope):
     raise ValueError(f"Unsupported quiz scope: {scope}")
 
 
-def list_capacity_packages_for_user(session: Session, user_id: int) -> list[dict]:
+def list_capacity_packages_for_user(
+    session: Session,
+    user_id: int,
+    package_names: list[str] | None = None,
+) -> list[dict]:
     statement = (
         select(
             CapacityPackage.package_name.label("package_name"),
@@ -52,6 +56,8 @@ def list_capacity_packages_for_user(session: Session, user_id: int) -> list[dict
         .where(CapacityPackage.user_id == user_id)
         .order_by(CapacityPackage.package_name.asc())
     )
+    if package_names:
+        statement = statement.where(CapacityPackage.package_name.in_(package_names))
     return [dict(row) for row in session.execute(statement).mappings().all()]
 
 
