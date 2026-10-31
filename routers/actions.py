@@ -60,10 +60,16 @@ async def export_api(request: Request):
             from fastapi.responses import JSONResponse
             return JSONResponse(status_code=400, content={"detail": "Invalid export_type"})
 
-        tracking_code, rows, message = result
+        tracking_code = result.get("tracking_code") if isinstance(result, dict) else None
+        response_data = (result.get("response") or {}).get("data") if isinstance(result, dict) else None
+        message = (result.get("response") or {}).get("message") if isinstance(result, dict) else None
         if not tracking_code:
             from fastapi.responses import JSONResponse
-            return JSONResponse(status_code=403, content={"detail": message or "Export unavailable"})
+            status_code = result.get("status", 403) if isinstance(result, dict) else 500
+            return JSONResponse(status_code=status_code, content=result if isinstance(result, dict) else {
+                "detail": message or "Export unavailable"
+            })
+        rows = response_data or []
         if export_type == "students":
             rows = [{**row, "sex": "مرد" if row.get("sex") == 0 else "زن",
                      "city": (row.get("city") or "").split(",")[0]} for row in rows]
