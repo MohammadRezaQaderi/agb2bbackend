@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request
+from fastapi.responses import Response
 
 import helper.api_metrics as api_metrics
 import helper.service_errors as service_errors
@@ -16,8 +17,63 @@ import services.management_gateway as management_gateway
 import services.other.other_gateway as other_gateway
 import services.quiz.quiz_gateway as quiz_gateway
 import services.student.student_gateway as student_gateway
+import helper.auth_context as auth_context
+from helper.office.export_workbook import build_export_workbook
 
 router = APIRouter()
+
+
+@router.post("/ag_api/export")
+@api_metrics.monitor_endpoint("ag_api/export")
+async def export_api(request: Request):
+    async def handler():
+        payload = await request.json()
+        request_data = payload.get("request_data") or {}
+        state, message, user_info = await auth_context.authorizer(request_data=request_data)
+        if not state:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=401, content=service_errors.not_auth_return(message=message))
+
+        export_type = request_data.get("export_type")
+        if export_type == "students":
+            result = management_gateway.get_students(request_data, user_info)
+            headers = [("نام کاربری", "phone"), ("نام", "first_name"), ("نام خانوادگی", "last_name"),
+                       ("رمز عبور", "password"), ("مشاور", "con_name"), ("جنسیت", "sex"),
+                       ("شهر", "city"), ("سال تولد", "birth_date")]
+            file_name = "students.xlsx"
+        elif export_type == "consultants":
+            result = management_gateway.get_consultants(request_data, user_info)
+            headers = [("نام", "first_name"), ("نام خانوادگی", "last_name"), ("جنسیت", "sex"),
+                       ("نام کاربری", "phone"), ("رمز عبور", "password")]
+            file_name = "consultants.xlsx"
+        elif export_type == "management":
+            result = management_gateway.get_management_report(request_data, user_info)
+            product_name = str(request_data.get("package_name") or "").upper()
+            product_label = request_data.get("product_label") or product_name
+            if product_name in {"AG", "SCL"}:
+                headers = [("نام", "first_name"), ("نام خانوادگی", "last_name"),
+                           ("مشاور", "con_name"), (product_label, "ag_state" if product_name == "AG" else "scl_state")]
+            else:
+                headers = None
+            file_name = "management-report.xlsx"
+        else:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=400, content={"detail": "Invalid export_type"})
+
+        tracking_code, rows, message = result
+        if not tracking_code:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=403, content={"detail": message or "Export unavailable"})
+        if export_type == "students":
+            rows = [{**row, "sex": "مرد" if row.get("sex") == 0 else "زن",
+                     "city": (row.get("city") or "").split(",")[0]} for row in rows]
+        elif export_type == "consultants":
+            rows = [{**row, "sex": "زن" if row.get("sex") == 1 else "مرد"} for row in rows]
+        data = build_export_workbook(rows, headers=headers)
+        return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": f'attachment; filename="{file_name}"'})
+
+    return await run_endpoint("ag_api/export", "export_api", "SELECT", handler)
 
 
 STUDENT_SELECT_ACTIONS = {
