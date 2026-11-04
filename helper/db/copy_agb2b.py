@@ -64,6 +64,18 @@ def resolve_backup_directory(cursor, source_data_directory: str, explicit_direct
     return str(default_directory or source_data_directory).rstrip("\\/")
 
 
+def execute_and_drain(cursor, sql: str) -> None:
+    cursor.execute(sql)
+    while cursor.nextset():
+        pass
+
+
+def server_file_exists(cursor, path: str) -> bool:
+    cursor.execute("EXEC master.dbo.xp_fileexist ?", path)
+    row = cursor.fetchone()
+    return bool(row and row[0])
+
+
 def copy_database(
     dry_run: bool = False,
     replace_existing: bool = False,
@@ -140,14 +152,19 @@ def copy_database(
             "WITH COPY_ONLY, INIT, COMPRESSION, CHECKSUM, STATS = 10"
         )
         try:
-            cursor.execute(backup_sql)
+            execute_and_drain(cursor, backup_sql)
         except pyodbc.Error as exc:
             raise RuntimeError(
                 f"SQL Server could not write backup file '{backup_file}'. "
                 "The directory must exist on the SQL Server host and its service account must have write access. "
                 "Set --backup-directory or AG_DB_BACKUP_DIRECTORY to a valid server-side backup directory."
             ) from exc
-        cursor.execute(f"RESTORE VERIFYONLY FROM DISK = {quote_literal(backup_file)} WITH CHECKSUM")
+        if not server_file_exists(cursor, backup_file):
+            raise RuntimeError(
+                f"SQL Server completed BACKUP but cannot see '{backup_file}'. "
+                "Check the server-side directory, SQL Server service account permissions, and any cleanup software."
+            )
+        execute_and_drain(cursor, f"RESTORE VERIFYONLY FROM DISK = {quote_literal(backup_file)} WITH CHECKSUM")
 
         if target_exists:
             cursor.execute(f"ALTER DATABASE {target_ref} SET SINGLE_USER WITH ROLLBACK IMMEDIATE")
@@ -162,9 +179,10 @@ def copy_database(
                 raise RuntimeError(f"Missing restore path for logical file '{item.LogicalName}'")
             moves.append(f"MOVE {quote_literal(item.LogicalName)} TO {quote_literal(matching_path)}")
 
-        cursor.execute(
+        execute_and_drain(
+            cursor,
             f"RESTORE DATABASE {target_ref} FROM DISK = {quote_literal(backup_file)} "
-            f"WITH {', '.join(moves)}, RECOVERY, CHECKSUM, STATS = 10"
+            f"WITH {', '.join(moves)}, RECOVERY, CHECKSUM, STATS = 10",
         )
         cursor.execute(f"ALTER DATABASE {target_ref} SET MULTI_USER")
         cursor.execute("SELECT [name], [state_desc], [user_access_desc] FROM sys.databases WHERE [name] = ?", target)
