@@ -5,6 +5,7 @@ from helper.password_helper import encrypt_password
 from helper.random_generators import random_generate_password, random_phone_candidate
 from helper.request_validation import validate_request_data_fields
 from helper.service_errors import not_method_access_return, service_exception_error_logging
+from helper.student_education import EDUCATION_FIELD_IDS, EDUCATION_LEVEL_IDS
 from helper.tracking import get_tracking_code
 from services.gateway_helpers import ACCESS_DENIED_MESSAGE, error_response, service_response
 
@@ -73,6 +74,12 @@ def add_student(request_data, user_info):
     method_type = "INSERT"
     if user_info["role"] not in ["ins", "sch", "ocon"]:
         return error_response(method_type, ACCESS_DENIED_MESSAGE)
+    education_level = request_data.get("education_level")
+    education_field = request_data.get("education_field")
+    if education_level not in EDUCATION_LEVEL_IDS:
+        return error_response(method_type, "دوره تحصیلی انتخاب‌شده معتبر نیست.")
+    if education_level == "second" and education_field not in EDUCATION_FIELD_IDS:
+        return error_response(method_type, "رشته تحصیلی انتخاب‌شده معتبر نیست.")
 
     try:
         password = random_generate_password()

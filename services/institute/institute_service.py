@@ -225,6 +225,8 @@ def change_student(request_data, user_info):
                 city=request_data["city"],
                 consultant_user_id=request_data["con_id"],
                 birth_date=request_data["birth_date"],
+                education_level=request_data["education_level"],
+                education_field=request_data.get("education_field"),
             )
         token = get_tracking_code()
         return token, None, "اطلاعات دانش‌آموز شما با موفقیت تغییر کرد."

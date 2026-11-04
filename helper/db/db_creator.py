@@ -91,6 +91,8 @@ TABLE_DEFINITIONS = {
             access VARCHAR(MAX) DEFAULT '{}',
             comment NVARCHAR(MAX),
             birth_date NVARCHAR(4),
+            education_level NVARCHAR(10),
+            education_field NVARCHAR(30),
             owner_user_id INT,
             consultant_user_id INT,
             adder_id INT,

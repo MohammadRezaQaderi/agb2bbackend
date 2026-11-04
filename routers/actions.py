@@ -39,7 +39,8 @@ async def export_api(request: Request):
             result = management_gateway.get_students(request_data, user_info)
             headers = [("نام کاربری", "phone"), ("نام", "first_name"), ("نام خانوادگی", "last_name"),
                        ("رمز عبور", "password"), ("مشاور", "con_name"), ("جنسیت", "sex"),
-                       ("شهر", "city"), ("سال تولد", "birth_date")]
+                       ("شهر", "city"), ("سال تولد", "birth_date"),
+                       ("دوره تحصیلی", "education_level"), ("رشته تحصیلی", "education_field")]
             file_name = "students.xlsx"
         elif export_type == "consultants":
             result = management_gateway.get_consultants(request_data, user_info)
@@ -71,7 +72,14 @@ async def export_api(request: Request):
             })
         rows = response_data or []
         if export_type == "students":
-            rows = [{**row, "sex": "مرد" if row.get("sex") == 0 else "زن",
+            rows = [{**row,
+                     "education_level": {"first": "اول", "second": "دوم"}.get(row.get("education_level"), ""),
+                     "education_field": {
+                         "experimental": "تجربی", "mathematics": "ریاضی", "humanities": "انسانی",
+                         "technical_vocational_work_knowledge": "فنی حرفه‌ای - کاردانش",
+                         "technical_vocational": "فنی حرفه‌ای", "work_knowledge": "کاردانش",
+                     }.get(row.get("education_field"), ""),
+                     "sex": "مرد" if row.get("sex") == 0 else "زن",
                      "city": (row.get("city") or "").split(",")[0]} for row in rows]
         elif export_type == "consultants":
             rows = [{**row, "sex": "زن" if row.get("sex") == 1 else "مرد"} for row in rows]

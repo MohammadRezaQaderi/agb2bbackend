@@ -109,8 +109,48 @@ def migration_ocon_logo(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run:
     print(f"APPLIED: added {schema_name}.{table_name}.{column_name}")
 
 
+def migration_student_education(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run: bool) -> None:
+    schema_name = get_table_schema(cursor, "stu")
+    table_ref = f"{quote_identifier(schema_name)}.[stu]"
+    for column_name, sql_type in (("education_level", "NVARCHAR(10)"), ("education_field", "NVARCHAR(30)")):
+        if column_exists(cursor, schema_name, "stu", column_name):
+            print(f"SKIP: {schema_name}.stu.{column_name} already exists")
+            continue
+        sql = f"ALTER TABLE {table_ref} ADD {quote_identifier(column_name)} {sql_type} NULL"
+        if dry_run:
+            print(f"DRY RUN: {sql}")
+        else:
+            cursor.execute(sql)
+
+    # Historical rows are assigned by the birth year cutoff. The field cannot
+    # be inferred from birth_date and intentionally remains NULL for existing rows.
+    cutoff = int(os.getenv("AG_STUDENT_SECOND_PERIOD_MAX_BIRTH_YEAR", "1390"))
+    if dry_run:
+        print(f"DRY RUN: backfill dbo.stu.education_level using birth_date cutoff {cutoff}")
+        return
+
+    cursor.execute(f"SELECT [user_id], [birth_date] FROM {table_ref} WHERE [education_level] IS NULL")
+    persian_digits = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+    updates = []
+    for row in cursor.fetchall():
+        try:
+            birth_year = int(str(row.birth_date).translate(persian_digits))
+        except (TypeError, ValueError):
+            continue
+        if 1000 <= birth_year <= 9999:
+            updates.append(("second" if birth_year <= cutoff else "first", row.user_id))
+    if updates:
+        cursor.executemany(
+            f"UPDATE {table_ref} SET [education_level] = ? WHERE [user_id] = ? AND [education_level] IS NULL",
+            updates,
+        )
+    conn.commit()
+    print(f"APPLIED: added education columns and backfilled {len(updates)} student rows")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration("2026_08_10_add_ocon_logo", migration_ocon_logo),
+    Migration("2026_11_03_add_student_education", migration_student_education),
 )
 
 

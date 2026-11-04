@@ -47,6 +47,8 @@ def student_list_statement(
             Student.sex.label("sex"),
             Student.city.label("city"),
             Student.birth_date.label("birth_date"),
+            Student.education_level.label("education_level"),
+            Student.education_field.label("education_field"),
             Student.access.label("access"),
             Student.comment.label("comment"),
             Student.owner_user_id.label("owner_user_id"),
@@ -534,6 +536,8 @@ def create_student_profile(
     sex: int,
     city: str,
     birth_date: str,
+    education_level: str | None = None,
+    education_field: str | None = None,
 ) -> None:
     session.add(
         Student(
@@ -546,6 +550,8 @@ def create_student_profile(
             sex=sex,
             city=city,
             birth_date=birth_date,
+            education_level=education_level,
+            education_field=education_field if education_level == "second" else None,
         )
     )
     session.flush()
@@ -561,6 +567,8 @@ def update_student_profile_for_owner(
     city: str,
     consultant_user_id: int,
     birth_date: str,
+    education_level: str | None = None,
+    education_field: str | None = None,
 ) -> int:
     student = session.get(Student, student_user_id)
     if not student:
@@ -572,6 +580,8 @@ def update_student_profile_for_owner(
     student.city = city
     student.consultant_user_id = consultant_user_id
     student.birth_date = birth_date
+    student.education_level = education_level
+    student.education_field = education_field if education_level == "second" else None
     student.editor_id = editor_id
     student.edited_time = datetime.now()
     session.flush()

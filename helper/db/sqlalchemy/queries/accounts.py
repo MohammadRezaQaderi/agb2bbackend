@@ -88,5 +88,7 @@ def create_student_account(
         sex=request_data["sex"],
         city=request_data["city"],
         birth_date=request_data["birth_date"],
+        education_level=request_data.get("education_level"),
+        education_field=request_data.get("education_field"),
     )
     return user_id

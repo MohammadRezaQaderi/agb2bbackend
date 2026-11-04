@@ -3,6 +3,7 @@ from helper.constants import PACKAGES_DATA
 from helper.request_validation import validate_request_data_fields
 from helper.service_errors import not_method_access_return
 from helper.validators import password_format_check
+from helper.student_education import EDUCATION_FIELD_IDS, EDUCATION_LEVEL_IDS
 import services.consultant.consultant_service as consultant_service
 import services.institute.institute_service as institute_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
@@ -222,6 +223,15 @@ def change_student(request_data, user_info):
     )
     if not is_valid:
         return validation_error
+
+    education_level = request_data.get("education_level")
+    education_field = request_data.get("education_field")
+    if education_level not in EDUCATION_LEVEL_IDS:
+        return error_response(method_type, "دوره تحصیلی انتخاب‌شده معتبر نیست.")
+    if education_level == "second" and education_field not in EDUCATION_FIELD_IDS:
+        return error_response(method_type, "رشته تحصیلی انتخاب‌شده معتبر نیست.")
+    if education_level == "first":
+        education_field = None
 
     result = role_handler(user_info, {
         "ins": lambda: institute_service.change_student(request_data=request_data, user_info=user_info),

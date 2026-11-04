@@ -97,6 +97,8 @@ class Student(Base, TimestampMixin):
     access: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     comment: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     birth_date: Mapped[str | None] = mapped_column(Unicode(4), nullable=True)
+    education_level: Mapped[str | None] = mapped_column(Unicode(10), nullable=True)
+    education_field: Mapped[str | None] = mapped_column(Unicode(30), nullable=True)
     owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.user_id"), nullable=True)
     consultant_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.user_id"), nullable=True)
     adder_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
