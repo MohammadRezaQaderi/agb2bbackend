@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -13,6 +14,8 @@ from helper.office.student_import_workbook import (
     build_student_import_workbook,
     parse_student_import_workbook,
 )
+
+FIXTURE_DIRECTORY = Path(__file__).parent / "fixtures" / "student_import"
 
 
 def test_student_import_template_has_dropdowns_and_hidden_options():
@@ -48,6 +51,25 @@ def test_student_import_example_parses_to_backend_values():
             "education_field": "experimental",
         }
     ]
+
+
+def test_student_import_fixture_files_cover_valid_and_invalid_uploads():
+    valid_rows = parse_student_import_workbook((FIXTURE_DIRECTORY / "student_import_valid.xlsx").read_bytes())
+    assert len(valid_rows) == 1
+    assert valid_rows[0]["consultant_phone"] == "09382858785"
+
+    with pytest.raises(StudentImportValidationError) as exc_info:
+        parse_student_import_workbook((FIXTURE_DIRECTORY / "student_import_invalid.xlsx").read_bytes())
+
+    fields = {error["field"] for error in exc_info.value.errors}
+    assert {
+        "نام",
+        "جنسیت",
+        "استان محل سکونت",
+        "شماره تلفن مشاور",
+        "سال تولد",
+        "رشته تحصیلی",
+    }.issubset(fields)
 
 
 def test_student_import_reports_all_invalid_cells_before_insert():
