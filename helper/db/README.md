@@ -9,8 +9,12 @@ For a copy of an existing AGB2B database:
    `python helper/db/copy_agb2b.py` to create `AGB2B_COPY`. The script makes a
    checksummed copy-only backup, verifies it, and refuses to overwrite an
    existing target unless `--replace-existing` is explicitly supplied. SQL
-   Server must be able to write to the source data directory. `copy_db.sql` is
-   the older manual alternative and contains a destructive target replacement.
+   Server writes the backup to its configured default backup directory. Use
+   `--backup-directory D:\ExistingSqlBackupFolder` or set
+   `AG_DB_BACKUP_DIRECTORY` when an explicit server-side path is required. The
+   directory must already exist on the SQL Server host and be writable by the
+   SQL Server service account. `copy_db.sql` is the older manual alternative
+   and contains a destructive target replacement.
 2. Set `AG_DB_DATABASE=AGB2B_COPY` and the other `AG_DB_*` connection variables
    for the shell running Python. Check this setting before every migration;
    the scripts use the configured database, which defaults to `AGB2B_COPY`.

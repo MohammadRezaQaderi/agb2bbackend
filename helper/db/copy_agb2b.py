@@ -12,7 +12,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ntpath
 import os
+import posixpath
 import re
 import sys
 from datetime import datetime
@@ -39,7 +41,34 @@ def master_connection_string(connection_string: str) -> str:
     return ";".join(parts)
 
 
-def copy_database(dry_run: bool = False, replace_existing: bool = False) -> None:
+def server_path_module(path: str):
+    return ntpath if re.match(r"^[A-Za-z]:[\\/]", path) or "\\" in path else posixpath
+
+
+def server_path_dirname(path: str) -> str:
+    return server_path_module(path).dirname(path)
+
+
+def server_path_join(directory: str, filename: str) -> str:
+    return server_path_module(directory).join(directory, filename)
+
+
+def resolve_backup_directory(cursor, source_data_directory: str, explicit_directory: str | None = None) -> str:
+    configured_directory = explicit_directory or os.getenv("AG_DB_BACKUP_DIRECTORY")
+    if configured_directory:
+        return configured_directory.rstrip("\\/")
+
+    cursor.execute("SELECT CONVERT(NVARCHAR(4000), SERVERPROPERTY('InstanceDefaultBackupPath'))")
+    row = cursor.fetchone()
+    default_directory = row[0] if row and row[0] else None
+    return str(default_directory or source_data_directory).rstrip("\\/")
+
+
+def copy_database(
+    dry_run: bool = False,
+    replace_existing: bool = False,
+    backup_directory: str | None = None,
+) -> None:
     source = os.getenv("AG_DB_SOURCE_DATABASE", "AGB2B")
     target = os.getenv("AG_DB_COPY_DATABASE", "AGB2B_COPY")
     source_ref = quote_identifier(source)
@@ -75,8 +104,9 @@ def copy_database(dry_run: bool = False, replace_existing: bool = False) -> None
         source_primary_path = next((row.physical_name for row in source_files if row.type_desc == "ROWS"), None)
         if not source_primary_path:
             raise RuntimeError("Could not find the source database data file")
-        data_directory = os.path.dirname(source_primary_path)
-        backup_file = os.path.join(data_directory, f"{target}_{timestamp}.bak")
+        data_directory = server_path_dirname(source_primary_path)
+        backup_directory = resolve_backup_directory(cursor, data_directory, backup_directory)
+        backup_file = server_path_join(backup_directory, f"{target}_{timestamp}.bak")
 
         cursor.execute("SELECT DB_ID(?)", target)
         target_exists = cursor.fetchone()[0] is not None
@@ -91,7 +121,7 @@ def copy_database(dry_run: bool = False, replace_existing: bool = False) -> None
             logical_name = row.name
             extension = ".ldf" if row.type_desc == "LOG" else (".mdf" if index == first_rows_file else ".ndf")
             safe_base = re.sub(r"[^A-Za-z0-9_-]", "_", logical_name)
-            target_path = os.path.join(data_directory, f"{target}_{timestamp}_{safe_base}{extension}")
+            target_path = server_path_join(data_directory, f"{target}_{timestamp}_{safe_base}{extension}")
             file_list.append((logical_name, target_path))
 
         plan = [
@@ -109,7 +139,14 @@ def copy_database(dry_run: bool = False, replace_existing: bool = False) -> None
             f"BACKUP DATABASE {source_ref} TO DISK = {quote_literal(backup_file)} "
             "WITH COPY_ONLY, INIT, COMPRESSION, CHECKSUM, STATS = 10"
         )
-        cursor.execute(backup_sql)
+        try:
+            cursor.execute(backup_sql)
+        except pyodbc.Error as exc:
+            raise RuntimeError(
+                f"SQL Server could not write backup file '{backup_file}'. "
+                "The directory must exist on the SQL Server host and its service account must have write access. "
+                "Set --backup-directory or AG_DB_BACKUP_DIRECTORY to a valid server-side backup directory."
+            ) from exc
         cursor.execute(f"RESTORE VERIFYONLY FROM DISK = {quote_literal(backup_file)} WITH CHECKSUM")
 
         if target_exists:
@@ -149,9 +186,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Drop and replace the existing *_COPY target database.",
     )
+    parser.add_argument(
+        "--backup-directory",
+        help="Existing directory on the SQL Server host used for the temporary backup file.",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    copy_database(dry_run=args.dry_run, replace_existing=args.replace_existing)
+    copy_database(
+        dry_run=args.dry_run,
+        replace_existing=args.replace_existing,
+        backup_directory=args.backup_directory,
+    )
