@@ -32,18 +32,18 @@ def _build_quiz_report(
         attempts = [attempt for attempt in quiz_attempts if attempt.get("quiz_kind") == package_name]
         total_quizzes = package_quiz_count.get(package_name, 0)
         completed_attempts = [attempt for attempt in attempts if attempt.get("state") == 2]
+        in_progress_attempts = [attempt for attempt in attempts if attempt.get("state") == 1]
 
         quiz_report[package_name] = {
             "finish_quiz": len(
-                {
-                    attempt.get("user_id")
-                    for attempt in completed_attempts
-                    if attempt.get("quiz_id") == total_quizzes
-                }
+                {attempt.get("user_id") for attempt in completed_attempts if attempt.get("quiz_id") == total_quizzes}
             ),
             "started_quiz": len({attempt.get("user_id") for attempt in attempts}),
             "c_quiz": len(completed_attempts),
-            "nc_quiz": len(attempts) - len(completed_attempts),
+            "nc_quiz": len(in_progress_attempts),
+            "completed_attempts": len(completed_attempts),
+            "in_progress_attempts": len(in_progress_attempts),
+            "total_attempts": len(completed_attempts) + len(in_progress_attempts),
         }
 
     return quiz_report
