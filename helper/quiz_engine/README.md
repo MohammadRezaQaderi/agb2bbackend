@@ -7,8 +7,12 @@ progress, and report queue behavior.
 ## Current providers
 
 `helper.quiz.quiz_data_extractor` registers the existing AG and SCL Python data
-as `StaticQuizPackageProvider` instances. Their current immutable content version
-is `legacy-v1`.
+from `quiz_packages/<package>/legacy_v1` as `StaticQuizPackageProvider`
+instances. Their current immutable content version is `legacy-v1`.
+
+Each version folder owns its question definitions, private scoring schema, and
+static report rules. The modules under `helper.quiz` remain compatibility imports
+for older callers and should not receive new package content.
 
 The compatibility functions in `quiz_data_extractor` preserve the public quiz
 shape while delegating lookup to `quiz_package_registry`; private fields are the
@@ -22,7 +26,8 @@ complete definition must use `get_private_quiz_info` explicitly.
 
 1. Define the full quiz list and the matching quiz-summary list.
 2. Give every quiz and summary the same positive integer ID.
-3. Register one `StaticQuizPackageProvider` during application bootstrap.
+3. Add a version-folder `create_provider` factory and include it in
+   `quiz_packages.builtin.BUILTIN_PACKAGE_FACTORIES`.
 4. Add scoring and report handlers separately before enabling the package for
    users.
 5. Add contract tests for quiz IDs, question IDs, payloads, scoring, and report

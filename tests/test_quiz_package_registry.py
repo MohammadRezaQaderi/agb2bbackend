@@ -1,5 +1,7 @@
 import pytest
 
+from helper.quiz import ag_answer_info, ag_quiz_data_info, bookmarks_info, report_info
+from helper.quiz import scl_answer_info, scl_quiz_data_info, scl_report_info
 from helper.quiz.quiz_data_extractor import (
     get_definition_version,
     get_last_question_id,
@@ -9,6 +11,13 @@ from helper.quiz.quiz_data_extractor import (
     get_quiz_table_info,
 )
 from helper.quiz_engine import QuizPackageRegistry, StaticQuizPackageProvider
+from quiz_packages.ag.legacy_v1 import questions as ag_questions
+from quiz_packages.ag.legacy_v1 import reports as ag_reports
+from quiz_packages.ag.legacy_v1 import scoring as ag_scoring
+from quiz_packages.scl.legacy_v1 import questions as scl_questions
+from quiz_packages.scl.legacy_v1 import report_bookmarks as scl_report_bookmarks
+from quiz_packages.scl.legacy_v1 import reports as scl_reports
+from quiz_packages.scl.legacy_v1 import scoring as scl_scoring
 
 
 def _provider(package_name="TEST"):
@@ -121,3 +130,13 @@ def test_unknown_package_does_not_expose_full_quiz_content():
     assert get_quiz_name(1, "UNKNOWN") is None
     assert get_last_question_id("UNKNOWN") is None
     assert get_definition_version("UNKNOWN") is None
+
+
+def test_legacy_quiz_module_paths_reexport_versioned_package_content():
+    assert ag_quiz_data_info.ag_quiz_info is ag_questions.ag_quiz_info
+    assert ag_answer_info.quiz_questions_answer_schema is ag_scoring.quiz_questions_answer_schema
+    assert report_info.catel_info is ag_reports.catel_info
+    assert scl_quiz_data_info.scl_quiz_info is scl_questions.scl_quiz_info
+    assert scl_answer_info.quiz_questions_answer_schema is scl_scoring.quiz_questions_answer_schema
+    assert scl_report_info.get_report_text is scl_reports.get_report_text
+    assert bookmarks_info.CALC_DATA is scl_report_bookmarks.CALC_DATA

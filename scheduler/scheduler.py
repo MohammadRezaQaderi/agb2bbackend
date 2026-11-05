@@ -22,10 +22,10 @@ from helper.db.sqlalchemy.queries.scheduler_reports import (
 from helper.quiz import answer_store
 from helper.office.excel_helper import LoadExcelSourceFile, compute_brain_info
 from helper.quiz.check_score import score_computation_scl
-from helper.quiz.report_info import *
-from helper.quiz.bookmarks_info import CALC_DATA, USER_TAGS_INFO, COLOR_TAGS
-from helper.quiz.scl_answer_info import bookmark_scl_object
-from helper.quiz.scl_report_info import get_statefast_value, get_interfast_value, get_report_text
+from quiz_packages.ag.legacy_v1.reports import *
+from quiz_packages.scl.legacy_v1.report_bookmarks import CALC_DATA, COLOR_TAGS, USER_TAGS_INFO
+from quiz_packages.scl.legacy_v1.reports import get_interfast_value, get_report_text, get_statefast_value
+from quiz_packages.scl.legacy_v1.scoring import bookmark_scl_object
 from helper.office.word_helper import (
     generate_first_report_documents,
     generate_second_report_documents,

@@ -5,13 +5,15 @@ from collections import Counter
 from contextlib import nullcontext
 from pathlib import Path
 
-from helper.quiz import check_score, report_info, scl_report_info
-from helper.quiz.ag_answer_info import quiz_labels as ag_labels
-from helper.quiz.ag_answer_info import quiz_questions_answer_schema as ag_schema
+from helper.quiz import check_score
 from helper.quiz.quiz_data_extractor import get_definition_version
-from helper.quiz.scl_answer_info import quiz_labels as scl_labels
-from helper.quiz.scl_answer_info import quiz_questions_answer_schema as scl_schema
 from helper.quiz_engine.registry import quiz_package_registry
+from quiz_packages.ag.legacy_v1 import reports as report_info
+from quiz_packages.ag.legacy_v1.scoring import quiz_labels as ag_labels
+from quiz_packages.ag.legacy_v1.scoring import quiz_questions_answer_schema as ag_schema
+from quiz_packages.scl.legacy_v1 import reports as scl_report_info
+from quiz_packages.scl.legacy_v1.scoring import quiz_labels as scl_labels
+from quiz_packages.scl.legacy_v1.scoring import quiz_questions_answer_schema as scl_schema
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -105,7 +107,7 @@ def _scl_scoring_snapshot():
 
 
 def _ag_report_snapshot():
-    report_path = PROJECT_ROOT / "helper" / "quiz" / "report_info.py"
+    report_path = PROJECT_ROOT / "quiz_packages" / "ag" / "legacy_v1" / "reports.py"
     report_tree = ast.parse(report_path.read_text())
     function_trees = [
         ast.dump(node, include_attributes=False)
