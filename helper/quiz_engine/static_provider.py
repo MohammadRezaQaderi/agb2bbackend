@@ -77,6 +77,10 @@ class StaticQuizPackageProvider:
         public_quiz = deepcopy(private_quiz)
         for section in public_quiz.get("sections", []):
             for question in section.get("questions", []):
+                example_answer = question.get("question_answer")
+                if isinstance(example_answer, list) and example_answer:
+                    question["is_example"] = True
+                    question["example_answer"] = list(example_answer)
                 for field in PRIVATE_QUESTION_FIELDS:
                     question.pop(field, None)
         return public_quiz

@@ -72,6 +72,8 @@ def test_public_quiz_is_isolated_and_omits_private_question_fields():
     public_quiz["description"] = "Customized"
 
     assert "question_answer" not in public_quiz["sections"][0]["questions"][0]
+    assert public_quiz["sections"][0]["questions"][0]["is_example"] is True
+    assert public_quiz["sections"][0]["questions"][0]["example_answer"] == [2]
     assert provider.get_quiz(1)["sections"][0]["questions"][0]["question_answer"] == [2]
     assert provider.get_quiz(1)["description"] == "Original"
 
@@ -127,6 +129,35 @@ def test_legacy_public_quizzes_do_not_expose_answer_keys():
                 for section in public_quiz["sections"]
                 for question in section["questions"]
             )
+
+
+def test_cattell_examples_expose_only_their_demonstrated_answers():
+    public_quiz = get_quiz_info(1, "AG")
+    private_quiz = get_private_quiz_info(1, "AG")
+
+    public_questions = {
+        question["question_id"]: question
+        for section in public_quiz["sections"]
+        for question in section["questions"]
+    }
+    private_examples = {
+        question["question_id"]: question["question_answer"]
+        for section in private_quiz["sections"]
+        for question in section["questions"]
+        if isinstance(question.get("question_answer"), list)
+        and question["question_answer"]
+    }
+
+    assert private_examples
+    for question_id, example_answer in private_examples.items():
+        assert public_questions[question_id]["is_example"] is True
+        assert public_questions[question_id]["example_answer"] == example_answer
+
+    assert all(
+        "example_answer" not in question
+        for question_id, question in public_questions.items()
+        if question_id not in private_examples
+    )
 
 
 def test_unknown_package_does_not_expose_full_quiz_content():
