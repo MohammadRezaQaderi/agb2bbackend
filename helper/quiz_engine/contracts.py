@@ -38,3 +38,29 @@ class QuizPackageProvider(Protocol):
 
     def get_last_question_id(self) -> int | None:
         """Return the final global question ID used to complete the package."""
+
+
+class QuizRuntimeProvider(Protocol):
+    """Versioned scoring and report behavior for one quiz package."""
+
+    @property
+    def package_name(self) -> str:
+        """Return the canonical package identifier."""
+
+    @property
+    def scoring_version(self) -> str:
+        """Return the immutable scoring implementation version."""
+
+    @property
+    def definition_versions(self) -> tuple[str, ...]:
+        """Return definition versions accepted by this runtime."""
+
+    @property
+    def required_quiz_count(self) -> int:
+        """Return the completed quiz count required for a report."""
+
+    def score_user(self, user_id: int) -> Any:
+        """Compute package-specific scores for one student."""
+
+    def generate_report(self, report_service: Any, user_id: str) -> None:
+        """Dispatch report generation through the package implementation."""

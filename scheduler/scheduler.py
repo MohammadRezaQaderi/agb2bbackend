@@ -11,17 +11,16 @@ from typing import List, Tuple, Dict, Any
 from helper.chart import bar, bidirection, gauge, bidirection_two_side, tube, scatter, horizontal
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.scheduler_reports import (
-    count_completed_quiz_attempts,
     get_scheduler_student_context,
+    list_completed_attempt_versions,
     update_redis_log_status,
     upsert_hedayat_fields,
     upsert_result_state,
     upsert_scl_score,
     upsert_score,
 )
-from helper.quiz import answer_store
+from helper.quiz.runtime_provider import resolve_attempt_runtime
 from helper.office.excel_helper import LoadExcelSourceFile, compute_brain_info
-from helper.quiz.check_score import score_computation_scl
 from quiz_packages.ag.legacy_v1.reports import *
 from quiz_packages.scl.legacy_v1.report_bookmarks import CALC_DATA, COLOR_TAGS, USER_TAGS_INFO
 from quiz_packages.scl.legacy_v1.reports import get_interfast_value, get_report_text, get_statefast_value
@@ -259,20 +258,20 @@ class AGReportScheduler:
             self._log_error(user_id, "AG", str(e))
             raise
 
-    def _validate_quiz_data(self, user_id: str, report_kind: str) -> None:
-        """Validate that user has sufficient quiz data."""
+    def _validate_quiz_data(self, user_id: str, report_kind: str):
+        """Resolve and validate the runtime recorded on completed attempts."""
         try:
             with session_scope() as session:
-                completed_count = count_completed_quiz_attempts(
+                attempt_versions = list_completed_attempt_versions(
                     session=session,
                     user_id=user_id,
                     report_kind=report_kind,
                 )
 
-            if report_kind == "AG" and completed_count < 7:
-                raise ValueError("Insufficient quiz data for report generation")
-            if report_kind == "SCL" and completed_count < 4:
-                raise ValueError("Insufficient quiz data for report generation")
+            return resolve_attempt_runtime(
+                report_kind,
+                attempt_versions,
+            )
         except Exception as e:
             logging.error(f"Error validating quiz data: {str(e)}")
             self._log_error(user_id, report_kind, str(e))
@@ -762,15 +761,10 @@ class AGReportScheduler:
 
         return fields_matched
 
-    def _compute_scl_scores(self, user_id: str) -> tuple[Dict, List[int]]:
+    def _compute_scl_scores(self, user_id: str, runtime_provider) -> tuple[Dict, List[int]]:
         """Compute SCL labels for a user based on quiz question answer rows."""
         try:
-            user_answers: Dict[str, Any] = answer_store.get_answers_for_user_kind(
-                int(user_id),
-                "SCL",
-            )
-
-            labels, missing_questions = score_computation_scl(user_answers)
+            labels, missing_questions = runtime_provider.score_user(int(user_id))
             return labels, missing_questions
         except Exception as e:
             logging.error(f"Error computing SCL scores for user {user_id}: {e}")
@@ -840,14 +834,17 @@ class AGReportScheduler:
 
         return scl_calc_data
 
-    def _handle_scl_report(self, user_id: str) -> None:
+    def _handle_scl_report(self, user_id: str, runtime_provider=None) -> None:
         """Handle SCL kind: compute labels and store result in redis_logs."""
         try:
             start_time = time.time()
             report_kind = "SCL"
 
             # Validate quiz data
-            self._validate_quiz_data(user_id, report_kind)
+            runtime_provider = runtime_provider or self._validate_quiz_data(
+                user_id,
+                report_kind,
+            )
 
             # Get student information
             student, student_name, phone, institute_name, consultant_name, logo_path = self._get_student_info(user_id)
@@ -875,7 +872,10 @@ class AGReportScheduler:
                     status=1,
                 )
 
-            labels, missing_questions = self._compute_scl_scores(user_id)
+            labels, missing_questions = self._compute_scl_scores(
+                user_id,
+                runtime_provider,
+            )
             scl_calc_data = self._calculate_scl_calc_data(labels)
 
             # Generate Report 3
@@ -1308,14 +1308,17 @@ class AGReportScheduler:
             self._log_error(user_id, "SCL", str(e))
             raise
 
-    def _handle_ag_report(self, user_id: str) -> None:
+    def _handle_ag_report(self, user_id: str, runtime_provider=None) -> None:
         """Main method to generate complete report for a user."""
         try:
             start_time = time.time()
             report_kind = "AG"
 
             # Validate quiz data
-            self._validate_quiz_data(user_id, report_kind)
+            runtime_provider = runtime_provider or self._validate_quiz_data(
+                user_id,
+                report_kind,
+            )
 
             # Get student information
             student, student_name, phone, institute_name, consultant_name, logo_path = self._get_student_info(user_id)
@@ -1339,7 +1342,8 @@ class AGReportScheduler:
                 user_id,
                 phone=phone,
                 master_file=master_file,
-                master_sheet=master_sheet
+                master_sheet=master_sheet,
+                scorer=runtime_provider.score_user,
             )
 
             quiz_score_json = json.dumps(
@@ -1486,14 +1490,8 @@ class AGReportScheduler:
 
                     logging.info(f"Processing user ID: {user_id} with kind: {kind}")
 
-                    if kind == "AG":
-                        self._handle_ag_report(user_id)
-                    elif kind == "SCL":
-                        self._handle_scl_report(user_id)
-                    else:
-                        logging.warning(
-                            "Unknown kind '%s' for user %s, skipping job.", kind, user_id
-                        )
+                    runtime_provider = self._validate_quiz_data(user_id, kind)
+                    runtime_provider.generate_report(self, user_id)
 
                     time.sleep(10)
 

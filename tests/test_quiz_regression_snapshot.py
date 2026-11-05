@@ -7,6 +7,7 @@ from pathlib import Path
 
 from helper.quiz import check_score
 from helper.quiz.quiz_data_extractor import get_definition_version
+from helper.quiz.runtime_provider import get_runtime_provider
 from helper.quiz_engine.registry import quiz_package_registry
 from quiz_packages.ag.legacy_v1 import reports as report_info
 from quiz_packages.ag.legacy_v1.scoring import quiz_labels as ag_labels
@@ -72,7 +73,7 @@ def _ag_scoring_snapshot(monkeypatch):
     monkeypatch.setattr(check_score.answer_store, "get_completed_count", lambda *args: 7)
     monkeypatch.setattr(check_score.answer_store, "get_answers_for_user_kind", lambda *args: answers)
 
-    result = check_score.ag_score_computation(user_id=1, user_age=14)
+    result = get_runtime_provider("AG", "legacy-v1").score_user(user_id=1)
     labels = result[0]
     return {
         "label_count": len(ag_labels),
@@ -89,8 +90,14 @@ def _ag_scoring_snapshot(monkeypatch):
     }
 
 
-def _scl_scoring_snapshot():
-    result = check_score.score_computation_scl(_first_valid_answers(scl_schema))
+def _scl_scoring_snapshot(monkeypatch):
+    answers = _first_valid_answers(scl_schema)
+    monkeypatch.setattr(
+        check_score.answer_store,
+        "get_answers_for_user_kind",
+        lambda *args: answers,
+    )
+    result = get_runtime_provider("SCL", "legacy-v1").score_user(user_id=1)
     labels = result[0]
     return {
         "label_count": len(scl_labels),
@@ -149,7 +156,7 @@ def test_published_legacy_v1_quiz_behavior_is_unchanged(monkeypatch):
         "packages": {kind: _package_snapshot(kind) for kind in ("AG", "SCL")},
         "scoring": {
             "AG": _ag_scoring_snapshot(monkeypatch),
-            "SCL": _scl_scoring_snapshot(),
+            "SCL": _scl_scoring_snapshot(monkeypatch),
         },
         "reports": {
             "AG": _ag_report_snapshot(),

@@ -77,6 +77,28 @@ def count_completed_quiz_attempts(session: Session, user_id: int | str, report_k
     return int(session.execute(statement).scalar_one() or 0)
 
 
+def list_completed_attempt_versions(
+    session: Session,
+    user_id: int | str,
+    report_kind: str,
+) -> list[dict]:
+    statement = (
+        select(
+            QuizAttempt.definition_version.label("definition_version"),
+            QuizAttempt.scoring_version.label("scoring_version"),
+            func.count().label("attempt_count"),
+        )
+        .where(
+            QuizAttempt.user_id == int(user_id),
+            QuizAttempt.quiz_kind == report_kind,
+            QuizAttempt.state == 2,
+        )
+        .group_by(QuizAttempt.definition_version, QuizAttempt.scoring_version)
+        .order_by(QuizAttempt.definition_version, QuizAttempt.scoring_version)
+    )
+    return [dict(row) for row in session.execute(statement).mappings().all()]
+
+
 def upsert_hedayat_fields(session: Session, user_id: int | str, suggested: str, other: str) -> None:
     record = session.execute(
         select(HedayatField).where(HedayatField.user_id == int(user_id)).limit(1)
