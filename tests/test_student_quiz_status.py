@@ -2,7 +2,6 @@ from unittest.mock import Mock
 
 from services.student import student_service
 
-
 QUIZZES = [
     {"id": 1, "quizName": "First"},
     {"id": 2, "quizName": "Second"},

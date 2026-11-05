@@ -1,7 +1,14 @@
 import pytest
 
-from helper.quiz import ag_answer_info, ag_quiz_data_info, bookmarks_info, report_info
-from helper.quiz import scl_answer_info, scl_quiz_data_info, scl_report_info
+from helper.quiz import (
+    ag_answer_info,
+    ag_quiz_data_info,
+    bookmarks_info,
+    report_info,
+    scl_answer_info,
+    scl_quiz_data_info,
+    scl_report_info,
+)
 from helper.quiz.quiz_data_extractor import (
     get_definition_version,
     get_last_question_id,
@@ -136,16 +143,13 @@ def test_cattell_examples_expose_only_their_demonstrated_answers():
     private_quiz = get_private_quiz_info(1, "AG")
 
     public_questions = {
-        question["question_id"]: question
-        for section in public_quiz["sections"]
-        for question in section["questions"]
+        question["question_id"]: question for section in public_quiz["sections"] for question in section["questions"]
     }
     private_examples = {
         question["question_id"]: question["question_answer"]
         for section in private_quiz["sections"]
         for question in section["questions"]
-        if isinstance(question.get("question_answer"), list)
-        and question["question_answer"]
+        if isinstance(question.get("question_answer"), list) and question["question_answer"]
     }
 
     assert private_examples

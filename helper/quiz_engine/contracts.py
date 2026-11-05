@@ -62,5 +62,8 @@ class QuizRuntimeProvider(Protocol):
     def score_user(self, user_id: int) -> Any:
         """Compute package-specific scores for one student."""
 
+    def calculate_report_data(self, scores: dict[str, Any]) -> Any:
+        """Calculate version-specific report data from package scores."""
+
     def generate_report(self, report_service: Any, user_id: str) -> None:
         """Dispatch report generation through the package implementation."""

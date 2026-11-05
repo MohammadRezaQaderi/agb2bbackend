@@ -10,6 +10,12 @@ def score_user(user_id: int):
     return ag_score_computation(user_id, user_age=14)
 
 
+def calculate_report_data(scores):
+    from quiz_packages.ag.legacy_v1.generated_brain import calculate
+
+    return calculate(scores)
+
+
 def create_runtime_provider():
     return StaticQuizRuntimeProvider(
         package_name=PACKAGE_NAME,
@@ -18,4 +24,5 @@ def create_runtime_provider():
         required_quiz_count=7,
         scorer=score_user,
         report_handler="_handle_ag_report",
+        report_calculator=calculate_report_data,
     )

@@ -50,6 +50,8 @@ def test_builtin_legacy_runtimes_are_registered():
     assert scl_runtime.required_quiz_count == 4
     assert ag_runtime.definition_versions == ("legacy-v1",)
     assert scl_runtime.definition_versions == ("legacy-v1",)
+    assert callable(ag_runtime.report_calculator)
+    assert scl_runtime.report_calculator is None
 
 
 def test_attempt_runtime_rejects_mixed_versions():

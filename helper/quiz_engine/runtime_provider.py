@@ -14,6 +14,7 @@ class StaticQuizRuntimeProvider:
     required_quiz_count: int
     scorer: Callable[[int], Any]
     report_handler: str
+    report_calculator: Callable[[dict[str, Any]], Any] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "package_name", normalize_package_name(self.package_name))
@@ -34,6 +35,13 @@ class StaticQuizRuntimeProvider:
 
     def score_user(self, user_id: int) -> Any:
         return self.scorer(int(user_id))
+
+    def calculate_report_data(self, scores: dict[str, Any]) -> Any:
+        if self.report_calculator is None:
+            raise RuntimeError(
+                f"report calculator is not available for {self.package_name} {self.scoring_version}"
+            )
+        return self.report_calculator(scores)
 
     def generate_report(self, report_service: Any, user_id: str) -> None:
         try:

@@ -26,6 +26,27 @@ setup.bat
 
 The setup script checks Node.js/PM2, creates `venv`, installs `requirements.txt`, and creates `logs/`.
 
+The report scheduler also requires LibreOffice. Install it on the worker and set
+`AG_LIBREOFFICE_PATH` to `soffice.exe`. PDF conversion uses a separate
+LibreOffice profile per job, so concurrent conversions do not share profile
+locks.
+
+## Brain Workbook
+
+Report generation does not open `Brain.xlsx` at runtime. Its constants and
+formulas are compiled into the versioned AG package. After changing the
+workbook, recalculate and save it in Excel or LibreOffice, then regenerate the
+module:
+
+```cmd
+venv\Scripts\python.exe scripts\compile_brain_workbook.py D:\path\to\Brain.xlsx
+```
+
+The compiler rejects unsupported formulas and compares every compiled report
+formula against the workbook's cached values before replacing
+`quiz_packages/ag/legacy_v1/generated_brain.py`. Commit the generated module
+with the workbook/version change.
+
 ## Instances
 
 Edit `instances.json` to change ports or workers. The checked-in layout is:

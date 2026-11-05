@@ -1,14 +1,15 @@
 import copy
 import os
 import shutil
+import subprocess
+import tempfile
+import time
 import uuid
 import zipfile
 from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
 
-import pythoncom
-import win32com.client as client
-from docx2pdf import convert
+import config
 from lxml import etree
 from config import REPORT1_TEMPLATE_PATH, REPORT2_TEMPLATE_PATH, REPORT3_TEMPLATE_PATH, REPORT5_TEMPLATE_PATH, \
     OCD_TEMPLATE_PATH, ANX_TEMPLATE_PATH, DEP_TEMPLATE_PATH
@@ -42,29 +43,110 @@ def get_xml_tag_without_ns(XMLTag: str) -> str:
 
 
 def convert_docx_to_pdf(source_file: Path | str, destination_file: Path | str) -> None:
-    """Convert a DOCX file to PDF, overwriting the destination when needed."""
-    src = Path(source_file)
-    dst = Path(destination_file)
-    dst.unlink(missing_ok=True)
-    convert(str(src), str(dst))
+    """Convert a DOCX file to PDF through LibreOffice."""
+    ok, message = convert_to_pdf(source_file, destination_file)
+    if not ok:
+        raise RuntimeError(f"Failed to convert Word report to PDF: {message}")
 
 
 def convert_word_to_pdf(source_file: Path | str, destination_file: Path | str) -> None:
-    """Convert a Word document to PDF via COM (Windows only)."""
-    src = Path(source_file)
-    dst = Path(destination_file)
-    dst.unlink(missing_ok=True)
+    """Backward-compatible alias for LibreOffice document conversion."""
+    convert_docx_to_pdf(source_file, destination_file)
 
-    pythoncom.CoInitialize()
-    word = client.DispatchEx("Word.Application")
-    word.Visible = False
+
+def _resolve_libreoffice_command() -> str:
+    candidates = [config.LIBREOFFICE_PATH]
+    if os.name == "nt":
+        candidates.extend(
+            [
+                r"C:\Program Files\LibreOffice\program\soffice.exe",
+                r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+                "soffice.exe",
+            ]
+        )
+    else:
+        candidates.extend(["soffice", "libreoffice"])
+
+    for candidate in candidates:
+        path = Path(candidate)
+        if path.is_absolute() and path.exists():
+            return str(path)
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    return config.LIBREOFFICE_PATH
+
+
+def _convert_to_pdf_once(input_file: Path, output_file: Path) -> tuple[bool, str]:
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    expected_output = output_file.parent / f"{input_file.stem}.pdf"
+    output_file.unlink(missing_ok=True)
+    if expected_output != output_file:
+        expected_output.unlink(missing_ok=True)
+
+    profile_dir = Path(tempfile.mkdtemp(prefix="agb2b-libreoffice-"))
+    command = [
+        _resolve_libreoffice_command(),
+        f"-env:UserInstallation={profile_dir.resolve().as_uri()}",
+        "--headless",
+        "--nologo",
+        "--nofirststartwizard",
+        "--norestore",
+        "--convert-to",
+        "pdf",
+        "--outdir",
+        str(output_file.parent),
+        str(input_file),
+    ]
     try:
-        doc = word.Documents.Open(str(src))
-        # https://learn.microsoft.com/en-us/office/vba/api/word.wdsaveformat
-        doc.SaveAs(str(dst), FileFormat=17)  # wdFormatPDF
-        doc.Close()
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=max(1, config.LIBREOFFICE_TIMEOUT_SECONDS),
+        )
+    except subprocess.TimeoutExpired as exc:
+        details = (exc.stderr or exc.stdout or "").strip()
+        message = f"timed out after {config.LIBREOFFICE_TIMEOUT_SECONDS}s"
+        if details:
+            message += f": {details}"
+        return False, message
+    except OSError as exc:
+        return False, str(exc)
     finally:
-        word.Quit()
+        shutil.rmtree(profile_dir, ignore_errors=True)
+
+    if result.returncode != 0:
+        error = (result.stderr or result.stdout or "LibreOffice conversion failed").strip()
+        return False, f"exit code {result.returncode}: {error}"
+    if not expected_output.exists():
+        return False, "Output PDF not generated"
+    if expected_output != output_file:
+        expected_output.replace(output_file)
+    return True, str(output_file)
+
+
+def convert_to_pdf(input_file: str | Path, output_file: str | Path) -> tuple[bool, str]:
+    """Convert a Word-compatible document to PDF with bounded retries."""
+    source = Path(input_file)
+    destination = Path(output_file)
+    attempts = max(1, config.LIBREOFFICE_CONVERSION_ATTEMPTS)
+    errors = []
+
+    for attempt in range(1, attempts + 1):
+        try:
+            ok, message = _convert_to_pdf_once(source, destination)
+        except Exception as exc:
+            ok, message = False, str(exc)
+        if ok:
+            return True, message
+        errors.append(f"attempt {attempt}/{attempts}: {message}")
+        if attempt < attempts:
+            delay = max(0, config.LIBREOFFICE_RETRY_DELAY_SECONDS) * attempt
+            print(f"LibreOffice conversion failed ({errors[-1]}); retrying in {delay:.1f}s")
+            time.sleep(delay)
+    return False, "; ".join(errors)
 
 
 def get_xml_tag_without_namespace(xml_tag: str) -> str:

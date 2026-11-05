@@ -20,7 +20,7 @@ from helper.db.sqlalchemy.queries.scheduler_reports import (
     upsert_score,
 )
 from helper.quiz.runtime_provider import resolve_attempt_runtime
-from helper.office.excel_helper import LoadExcelSourceFile, compute_brain_info
+from helper.office.excel_helper import compute_brain_info
 from quiz_packages.ag.legacy_v1.reports import *
 from quiz_packages.scl.legacy_v1.report_bookmarks import CALC_DATA, COLOR_TAGS, USER_TAGS_INFO
 from quiz_packages.scl.legacy_v1.reports import get_interfast_value, get_report_text, get_statefast_value
@@ -33,7 +33,6 @@ from helper.office.word_helper import (
     generate_fifth_report_documents,
 )
 from config import (
-    BRAIN_EXCEL_PATH,
     REPORTS_DIR,
     INS_PIC_DIR,
     PICS_WORD_SCL_DIR,
@@ -43,17 +42,6 @@ from config import (
     REDIS_PASSWORD,
     REDIS_DB,
 )
-
-master_file = None
-master_sheet = None
-
-
-def load_master_excel():
-    global master_file, master_sheet
-    if master_file is None or master_sheet is None:
-        master_file = LoadExcelSourceFile(str(BRAIN_EXCEL_PATH))
-        master_sheet = master_file.sheets["نسخه اصلی"]
-    return master_file, master_sheet
 
 # Logging configuration
 utf8_stream = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
@@ -1337,13 +1325,11 @@ class AGReportScheduler:
                 )
 
             # Compute brain info
-            master_file, master_sheet = load_master_excel()
             data, fields, categories, branches, correct, wrong, unanswered = compute_brain_info(
                 user_id,
                 phone=phone,
-                master_file=master_file,
-                master_sheet=master_sheet,
                 scorer=runtime_provider.score_user,
+                calculator=runtime_provider.calculate_report_data,
             )
 
             quiz_score_json = json.dumps(

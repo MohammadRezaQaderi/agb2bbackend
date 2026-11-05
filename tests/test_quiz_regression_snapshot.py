@@ -16,7 +16,6 @@ from quiz_packages.scl.legacy_v1 import reports as scl_report_info
 from quiz_packages.scl.legacy_v1.scoring import quiz_labels as scl_labels
 from quiz_packages.scl.legacy_v1.scoring import quiz_questions_answer_schema as scl_schema
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_PATH = PROJECT_ROOT / "tests" / "fixtures" / "quiz_regression" / "legacy_v1.json"
 
@@ -44,9 +43,7 @@ def _package_snapshot(kind):
         "question_id_min": min(question["question_id"] for question in questions),
         "question_id_max": max(question["question_id"] for question in questions),
         "quiz_question_counts": {
-            str(quiz["quiz_id"]): sum(
-                len(section.get("questions", [])) for section in quiz.get("sections", [])
-            )
+            str(quiz["quiz_id"]): sum(len(section.get("questions", [])) for section in quiz.get("sections", []))
             for quiz in quizzes
         },
         "definition_sha256": _digest(quizzes),
@@ -83,8 +80,7 @@ def _ag_scoring_snapshot(monkeypatch):
         "schema_sha256": _digest(ag_schema),
         "all_first_answers_result_sha256": _digest(result),
         "selected_result": {
-            key: labels[key]
-            for key in ("CATEL", "IQ_Number", "CATEL_Brain", "Realistic", "Linguistic_verbal")
+            key: labels[key] for key in ("CATEL", "IQ_Number", "CATEL_Brain", "Realistic", "Linguistic_verbal")
         },
         "answer_stats": list(result[1:]),
     }
@@ -106,9 +102,7 @@ def _scl_scoring_snapshot(monkeypatch):
         "labels_sha256": _digest(scl_labels),
         "schema_sha256": _digest(scl_schema),
         "all_first_answers_result_sha256": _digest(result),
-        "selected_result": {
-            key: labels[key] for key in ("generalSE", "aggSCL90", "anSCL90", "OCD")
-        },
+        "selected_result": {key: labels[key] for key in ("generalSE", "aggSCL90", "anSCL90", "OCD")},
         "missing_count": len(result[1]),
     }
 
@@ -122,8 +116,7 @@ def _ag_report_snapshot():
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     ]
     iq_boundaries = {
-        str(score): report_info.catel_info(score)
-        for score in (35, 52, 68, 90, 100, 110, 120, 132, 148, 164)
+        str(score): report_info.catel_info(score) for score in (35, 52, 68, 90, 100, 110, 120, 132, 148, 164)
     }
     return {
         "static_data_sha256": _digest(
@@ -139,9 +132,7 @@ def _scl_report_snapshot():
     for label, ranges in scl_report_info._REPORT_DATA.items():
         for range_text in ranges:
             low, high = (float(part) for part in range_text.split("-", 1))
-            range_results[f"{label}:{range_text}"] = scl_report_info.get_report_text(
-                label, (low + high) / 2
-            )
+            range_results[f"{label}:{range_text}"] = scl_report_info.get_report_text(label, (low + high) / 2)
     return {
         "report_data_count": len(scl_report_info._REPORT_DATA),
         "report_data_sha256": _digest(scl_report_info._REPORT_DATA),
