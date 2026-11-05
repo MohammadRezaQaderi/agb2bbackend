@@ -32,6 +32,8 @@ def student_list_statement(
     scope: StudentScope,
     user_id: int,
     filters: StudentFilters | None = None,
+    sort_by: str | None = None,
+    sort_direction: str | None = None,
 ) -> Select:
     consultant = aliased(Consultant)
     filters = filters or StudentFilters()
@@ -59,7 +61,6 @@ def student_list_statement(
         )
         .join(User, User.user_id == Student.user_id)
         .outerjoin(consultant, consultant.user_id == Student.consultant_user_id)
-        .order_by(Student.created_time.desc(), Student.user_id.desc())
     )
 
     if scope == "owner":
@@ -70,14 +71,36 @@ def student_list_statement(
         raise ValueError(f"Unsupported student scope: {scope}")
 
     if filters.search:
-        pattern = f"%{filters.search}%"
         statement = statement.where(
-            or_(
-                Student.first_name.like(pattern),
-                Student.last_name.like(pattern),
-                User.phone.like(pattern),
+            _student_search_condition(
+                filters.search,
+                Student.first_name,
+                Student.last_name,
+                User.phone,
+                consultant.first_name,
+                consultant.last_name,
+                Student.education_level,
+                Student.education_field,
             )
         )
+
+    if filters.name:
+        statement = statement.where(_word_search_condition(filters.name, Student.first_name, Student.last_name))
+
+    if filters.phone:
+        statement = statement.where(User.phone.ilike(f"%{filters.phone}%"))
+
+    if filters.consultant_name:
+        statement = statement.where(
+            _word_search_condition(
+                filters.consultant_name,
+                consultant.first_name,
+                consultant.last_name,
+            )
+        )
+
+    if filters.education:
+        statement = statement.where(_education_condition(filters.education))
 
     if filters.sex is not None:
         statement = statement.where(Student.sex == filters.sex)
@@ -93,13 +116,83 @@ def student_list_statement(
         if filters.access_permission is not None:
             access_conditions.append(StudentPackageAccess.permission == filters.access_permission)
 
-        statement = statement.where(
-            select(StudentPackageAccess.id)
-            .where(and_(*access_conditions))
-            .exists()
-        )
+        statement = statement.where(select(StudentPackageAccess.id).where(and_(*access_conditions)).exists())
 
-    return statement
+    return _apply_student_sorting(
+        statement,
+        consultant=consultant,
+        sort_by=sort_by,
+        sort_direction=sort_direction,
+    )
+
+
+def _word_search_condition(value: str, *columns):
+    words = value.split()
+    return and_(*(or_(*(column.ilike(f"%{word}%") for column in columns)) for word in words))
+
+
+def _student_search_condition(value: str, *columns):
+    words = value.split()
+    return and_(
+        *(
+            or_(
+                *(column.ilike(f"%{word}%") for column in columns),
+                _education_condition(word),
+            )
+            for word in words
+        )
+    )
+
+
+def _education_condition(value: str):
+    normalized = value.replace("‌", " ").strip().lower()
+    if "ثبت نشده" in normalized or normalized in {"ثبت", "نشده"}:
+        return Student.education_level.is_(None)
+
+    conditions = []
+    label_values = {
+        "اول": (Student.education_level, "first"),
+        "دوم": (Student.education_level, "second"),
+        "تجربی": (Student.education_field, "experimental"),
+        "ریاضی": (Student.education_field, "mathematics"),
+        "انسانی": (Student.education_field, "humanities"),
+        "فنی": (Student.education_field, "technical_vocational_work_knowledge"),
+        "کاردانش": (Student.education_field, "technical_vocational_work_knowledge"),
+    }
+    for label, (column, stored_value) in label_values.items():
+        if label in normalized:
+            conditions.append(column == stored_value)
+
+    if conditions:
+        return and_(*conditions)
+
+    if normalized == "دوره":
+        return Student.education_level.is_not(None)
+
+    pattern = f"%{normalized}%"
+    return or_(Student.education_level.ilike(pattern), Student.education_field.ilike(pattern))
+
+
+def _apply_student_sorting(
+    statement: Select,
+    consultant,
+    sort_by: str | None,
+    sort_direction: str | None,
+) -> Select:
+    sort_columns = {
+        "full_name": (Student.first_name, Student.last_name),
+        "phone": (User.phone,),
+        "con_name": (consultant.first_name, consultant.last_name),
+        "education": (Student.education_level, Student.education_field),
+        "created_time": (Student.created_time,),
+    }
+    columns = sort_columns.get(str(sort_by or ""))
+    if not columns:
+        return statement.order_by(Student.created_time.desc(), Student.user_id.desc())
+
+    descending = str(sort_direction or "asc").lower() == "desc"
+    ordering = [column.desc() if descending else column.asc() for column in columns]
+    return statement.order_by(*ordering, Student.user_id.desc())
 
 
 def list_students(
@@ -107,8 +200,16 @@ def list_students(
     scope: StudentScope,
     user_id: int,
     filters: StudentFilters | None = None,
+    sort_by: str | None = None,
+    sort_direction: str | None = None,
 ) -> list[dict]:
-    statement = student_list_statement(scope=scope, user_id=user_id, filters=filters)
+    statement = student_list_statement(
+        scope=scope,
+        user_id=user_id,
+        filters=filters,
+        sort_by=sort_by,
+        sort_direction=sort_direction,
+    )
     return [dict(row) for row in session.execute(statement).mappings().all()]
 
 
@@ -119,8 +220,16 @@ def paginate_students(
     filters: StudentFilters | None = None,
     page: int | str | None = None,
     page_size: int | str | None = None,
+    sort_by: str | None = None,
+    sort_direction: str | None = None,
 ) -> Page:
-    statement = student_list_statement(scope=scope, user_id=user_id, filters=filters)
+    statement = student_list_statement(
+        scope=scope,
+        user_id=user_id,
+        filters=filters,
+        sort_by=sort_by,
+        sort_direction=sort_direction,
+    )
     return paginate_mappings(session, statement, page=page, page_size=page_size)
 
 

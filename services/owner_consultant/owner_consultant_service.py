@@ -1,7 +1,7 @@
 import config
 from helper.constants import PACKAGES_DATA
 from helper.db.sqlalchemy import session_scope
-from helper.db.sqlalchemy.filters import StudentFilters
+from helper.db.sqlalchemy.listing import fetch_students_for_request, with_page_metadata
 from helper.db.sqlalchemy.queries.consultants import (
     update_student_comment_by_consultant,
     update_student_profile_by_consultant,
@@ -20,10 +20,7 @@ from helper.db.sqlalchemy.queries.owner_consultants import (
 )
 from helper.db.sqlalchemy.queries.reports import list_quiz_attempts_for_users
 from helper.db.sqlalchemy.queries.settings import upsert_setting
-from helper.db.sqlalchemy.queries.students import (
-    list_students_for_consultant,
-    list_students_without_package_access,
-)
+from helper.db.sqlalchemy.queries.students import list_students_without_package_access
 from helper.image_storage import save_base64_image
 from helper.quiz_metadata import get_quiz_name
 from helper.response import (
@@ -55,8 +52,7 @@ def get_info(user_id):
         }
         return token, user_info, ""
     except Exception as e:
-        service_exception_error_logging("ag_api/ocon", "get_info", str(e), {},
-                                        {"user_id": user_id})
+        service_exception_error_logging("ag_api/ocon", "get_info", str(e), {}, {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 
 
@@ -93,8 +89,7 @@ def get_dashboard(request_data, user_info):
         return token, {"dashboard_info": cons_info, "notifications": notifications}, ""
 
     except Exception as e:
-        service_exception_error_logging("ag_api/ocon", "get_dashboard", str(e), request_data,
-                                        user_info)
+        service_exception_error_logging("ag_api/ocon", "get_dashboard", str(e), request_data, user_info)
         return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
@@ -140,12 +135,15 @@ def get_students_without_product_access(package_name, user_info):
 
 def get_report(request_data, user_info):
     try:
-        filters = StudentFilters.from_request(request_data)
         with session_scope() as session:
-            students = list_students_for_consultant(
-                session=session, consultant_user_id=user_info["user_id"], filters=filters
+            students, page = fetch_students_for_request(
+                session=session,
+                scope="consultant",
+                user_id=user_info["user_id"],
+                request_data=request_data,
             )
         report_info = build_student_report_response(students)
+        report_info = with_page_metadata(page, report_info)
         token = get_tracking_code()
         return token, report_info, ""
     except Exception as e:
@@ -155,10 +153,12 @@ def get_report(request_data, user_info):
 
 def get_management_report(request_data, user_info):
     try:
-        filters = StudentFilters.from_request(request_data)
         with session_scope() as session:
-            students = list_students_for_consultant(
-                session=session, consultant_user_id=user_info["user_id"], filters=filters
+            students, page = fetch_students_for_request(
+                session=session,
+                scope="consultant",
+                user_id=user_info["user_id"],
+                request_data=request_data,
             )
             quiz_attempts = list_quiz_attempts_for_users(
                 session=session,
@@ -170,11 +170,11 @@ def get_management_report(request_data, user_info):
             packages_data=PACKAGES_DATA,
             get_quiz_name=get_quiz_name,
         )
+        report_info = with_page_metadata(page, report_info)
         token = get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        service_exception_error_logging("ag_api/ocon", "get_management_report", str(e),
-                                        request_data, user_info)
+        service_exception_error_logging("ag_api/ocon", "get_management_report", str(e), request_data, user_info)
         return None, None, "مشکل در دریافت گزارش مدیریتی رخ داده است."
 
 
@@ -237,8 +237,7 @@ def change_user_info(request_data, user_info):
             response["pic"] = pic
         return token, response, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        service_exception_error_logging("ag_api/ocon", "change_user_info", str(e), request_data,
-                                        user_info)
+        service_exception_error_logging("ag_api/ocon", "change_user_info", str(e), request_data, user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
 
@@ -246,11 +245,11 @@ def get_students(request_data, user_info):
     try:
         with session_scope() as session:
             res_con = get_owner_consultant_profile(session=session, user_id=user_info["user_id"])
-            filters = StudentFilters.from_request(request_data)
-            students = list_students_for_consultant(
+            students, page = fetch_students_for_request(
                 session=session,
-                consultant_user_id=user_info["user_id"],
-                filters=filters,
+                scope="consultant",
+                user_id=user_info["user_id"],
+                request_data=request_data,
             )
         con_name = ""
         if res_con:
@@ -260,6 +259,7 @@ def get_students(request_data, user_info):
             default_con_name=con_name,
             default_con_id=user_info["user_id"],
         )
+        stu_info = with_page_metadata(page, stu_info)
         token = get_tracking_code()
         return token, stu_info, ""
     except Exception as e:
@@ -282,8 +282,7 @@ def change_user_voice(request_data, user_info):
             )
         return token, None, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        service_exception_error_logging("ag_api/ocon", "change_user_voice", str(e), request_data,
-                                        user_info)
+        service_exception_error_logging("ag_api/ocon", "change_user_voice", str(e), request_data, user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
 
@@ -325,8 +324,7 @@ def verify_user(user_id):
         }
         return token, user_info, ""
     except Exception as e:
-        service_exception_error_logging("ag_api/ocon", "verify_user", str(e), None,
-                                        {"user_id": user_id})
+        service_exception_error_logging("ag_api/ocon", "verify_user", str(e), None, {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 
 
@@ -341,5 +339,5 @@ def change_student_access(request_data, user_info):
         user_info=user_info,
         role_type="ocon",
         id_field="consultant_user_id",
-        end_point="ag_api/ocon"
+        end_point="ag_api/ocon",
     )

@@ -1,11 +1,12 @@
 import config
 from helper.constants import PACKAGES_DATA
 from helper.db.sqlalchemy import session_scope
-from helper.db.sqlalchemy.filters import ConsultantFilters, StudentFilters
-from helper.db.sqlalchemy.queries.consultants import (
-    list_consultants_for_owner,
-    update_consultant_profile_for_owner,
+from helper.db.sqlalchemy.listing import (
+    fetch_consultants_for_request,
+    fetch_students_for_request,
+    with_page_metadata,
 )
+from helper.db.sqlalchemy.queries.consultants import update_consultant_profile_for_owner
 from helper.db.sqlalchemy.queries.dashboard import (
     count_consultants_for_owner,
     count_student_packages_for_scope,
@@ -21,11 +22,7 @@ from helper.db.sqlalchemy.queries.schools import (
     verify_school,
 )
 from helper.db.sqlalchemy.queries.settings import upsert_setting
-from helper.db.sqlalchemy.queries.students import (
-    list_students_for_owner,
-    list_students_without_package_access,
-    update_student_profile_for_owner,
-)
+from helper.db.sqlalchemy.queries.students import list_students_without_package_access, update_student_profile_for_owner
 from helper.image_storage import save_base64_image
 from helper.quiz_metadata import get_quiz_name
 from helper.response import (
@@ -57,8 +54,7 @@ def get_info(user_id):
         }
         return token, info_response, ""
     except Exception as e:
-        service_exception_error_logging("ag_api/sch", "get_info", str(e), None,
-                                        {"user_id": user_id})
+        service_exception_error_logging("ag_api/sch", "get_info", str(e), None, {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 
 
@@ -140,12 +136,15 @@ def get_students_without_product_access(package_name, user_info):
 
 def get_report(request_data, user_info):
     try:
-        filters = StudentFilters.from_request(request_data)
         with session_scope() as session:
-            students = list_students_for_owner(
-                session=session, owner_user_id=user_info["user_id"], filters=filters
+            students, page = fetch_students_for_request(
+                session=session,
+                scope="owner",
+                user_id=user_info["user_id"],
+                request_data=request_data,
             )
         report_info = build_student_report_response(students, include_consultant_name=True)
+        report_info = with_page_metadata(page, report_info)
         token = get_tracking_code()
         return token, report_info, ""
     except Exception as e:
@@ -155,10 +154,12 @@ def get_report(request_data, user_info):
 
 def get_management_report(request_data, user_info):
     try:
-        filters = StudentFilters.from_request(request_data)
         with session_scope() as session:
-            students = list_students_for_owner(
-                session=session, owner_user_id=user_info["user_id"], filters=filters
+            students, page = fetch_students_for_request(
+                session=session,
+                scope="owner",
+                user_id=user_info["user_id"],
+                request_data=request_data,
             )
             quiz_attempts = list_quiz_attempts_for_users(
                 session=session,
@@ -171,12 +172,11 @@ def get_management_report(request_data, user_info):
             get_quiz_name=get_quiz_name,
             include_consultant_name=True,
         )
+        report_info = with_page_metadata(page, report_info)
         token = get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        service_exception_error_logging("ag_api/sch", "get_management_report", str(e),
-                                        request_data,
-                                        user_info)
+        service_exception_error_logging("ag_api/sch", "get_management_report", str(e), request_data, user_info)
         return None, [], "مشکل در دریافت گزارش مدیریتی رخ داده است."
 
 
@@ -202,14 +202,14 @@ def change_consultant(request_data, user_info):
 # this function use for get consultant of sch for list of consultants and add students cons pick filed
 def get_consultants(request_data, user_info):
     try:
-        filters = ConsultantFilters.from_request(request_data)
         with session_scope() as session:
-            consultants = list_consultants_for_owner(
+            consultants, page = fetch_consultants_for_request(
                 session=session,
                 owner_user_id=user_info["user_id"],
-                filters=filters,
+                request_data=request_data,
             )
         cons_info = build_consultant_list_response(consultants)
+        cons_info = with_page_metadata(page, cons_info)
         token = get_tracking_code()
         return token, cons_info, ""
     except Exception as e:
@@ -244,14 +244,15 @@ def change_student(request_data, user_info):
 # this function use for get students of sch for list of students
 def get_students(request_data, user_info):
     try:
-        filters = StudentFilters.from_request(request_data)
         with session_scope() as session:
-            students = list_students_for_owner(
+            students, page = fetch_students_for_request(
                 session=session,
-                owner_user_id=user_info["user_id"],
-                filters=filters,
+                scope="owner",
+                user_id=user_info["user_id"],
+                request_data=request_data,
             )
         stu_info = build_student_list_response(students)
+        stu_info = with_page_metadata(page, stu_info)
         token = get_tracking_code()
         return token, stu_info, ""
     except Exception as e:
@@ -279,8 +280,7 @@ def change_user_info(request_data, user_info):
             response["pic"] = pic
         return token, response, "اطلاعات شما با موفقیت تغییر یافت."
     except Exception as e:
-        service_exception_error_logging("ag_api/sch", "change_user_info", str(e), request_data,
-                                        user_info)
+        service_exception_error_logging("ag_api/sch", "change_user_info", str(e), request_data, user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
 
 
@@ -357,15 +357,14 @@ def verify_user(user_id):
         }
         return token, user_info, ""
     except Exception as e:
-        service_exception_error_logging("ag_api/sch", "verify_user", str(e), None,
-                                        {"user_id": user_id})
+        service_exception_error_logging("ag_api/sch", "verify_user", str(e), None, {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 
 
 def change_student_access(request_data, user_info):
     """
     Update student access permissions and manage capacity tracking for school.
-    
+
     Uses the reusable helper function update_student_access_and_capacity.
     """
     return update_student_access_and_capacity(
@@ -373,5 +372,5 @@ def change_student_access(request_data, user_info):
         user_info=user_info,
         role_type="sch",
         id_field="owner_user_id",
-        end_point="ag_api/sch"
+        end_point="ag_api/sch",
     )

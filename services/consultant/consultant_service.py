@@ -1,6 +1,6 @@
 from helper.constants import PACKAGES_DATA
 from helper.db.sqlalchemy import session_scope
-from helper.db.sqlalchemy.filters import StudentFilters
+from helper.db.sqlalchemy.listing import fetch_students_for_request, with_page_metadata
 from helper.db.sqlalchemy.queries.consultants import (
     get_consultant_profile,
     update_consultant_name,
@@ -16,10 +16,7 @@ from helper.db.sqlalchemy.queries.dashboard import (
     list_quiz_attempts_for_scope,
 )
 from helper.db.sqlalchemy.queries.reports import list_quiz_attempts_for_users
-from helper.db.sqlalchemy.queries.students import (
-    list_students_for_consultant,
-    list_students_without_package_access,
-)
+from helper.db.sqlalchemy.queries.students import list_students_without_package_access
 from helper.quiz_metadata import get_quiz_name
 from helper.response import (
     build_dashboard_info_response,
@@ -45,14 +42,21 @@ def get_info(user_id):
             owner_name = res.get("school_name")
             owner_logo = res.get("school_logo")
         token = get_tracking_code()
-        response_info = {"phone": res.get("phone"), "user_id": user_id, "id": res.get("con_id"),
-                         "first_name": res.get("first_name"), "last_name": res.get("last_name"), "role": 'con',
-                         "name": owner_name, "pic": owner_logo,
-                         "owner_user_id": res.get("owner_user_id"), "ins_id": res.get("owner_user_id")}
+        response_info = {
+            "phone": res.get("phone"),
+            "user_id": user_id,
+            "id": res.get("con_id"),
+            "first_name": res.get("first_name"),
+            "last_name": res.get("last_name"),
+            "role": "con",
+            "name": owner_name,
+            "pic": owner_logo,
+            "owner_user_id": res.get("owner_user_id"),
+            "ins_id": res.get("owner_user_id"),
+        }
         return token, response_info, ""
     except Exception as e:
-        service_exception_error_logging("ag_api/con", "get_info", str(e), {},
-                                        {"user_id": user_id})
+        service_exception_error_logging("ag_api/con", "get_info", str(e), {}, {"user_id": user_id})
         return None, None, "اطلاعات کاربر یافت نشد."
 
 
@@ -98,10 +102,13 @@ def get_capacity(package_names, user_info):
     request_data = {"package_names": package_names}
     try:
         with session_scope() as session:
-            owner_user_id = get_consultant_owner_user_id(
-                session=session,
-                consultant_user_id=user_info["user_id"],
-            ) or user_info["user_id"]
+            owner_user_id = (
+                get_consultant_owner_user_id(
+                    session=session,
+                    consultant_user_id=user_info["user_id"],
+                )
+                or user_info["user_id"]
+            )
             packages = list_capacity_packages_for_user(
                 session=session,
                 user_id=owner_user_id,
@@ -140,12 +147,15 @@ def get_students_without_product_access(package_name, user_info):
 
 def get_report(request_data, user_info):
     try:
-        filters = StudentFilters.from_request(request_data)
         with session_scope() as session:
-            students = list_students_for_consultant(
-                session=session, consultant_user_id=user_info["user_id"], filters=filters
+            students, page = fetch_students_for_request(
+                session=session,
+                scope="consultant",
+                user_id=user_info["user_id"],
+                request_data=request_data,
             )
         report_info = build_student_report_response(students)
+        report_info = with_page_metadata(page, report_info)
         token = get_tracking_code()
         return token, report_info, ""
     except Exception as e:
@@ -155,10 +165,12 @@ def get_report(request_data, user_info):
 
 def get_management_report(request_data, user_info):
     try:
-        filters = StudentFilters.from_request(request_data)
         with session_scope() as session:
-            students = list_students_for_consultant(
-                session=session, consultant_user_id=user_info["user_id"], filters=filters
+            students, page = fetch_students_for_request(
+                session=session,
+                scope="consultant",
+                user_id=user_info["user_id"],
+                request_data=request_data,
             )
             quiz_attempts = list_quiz_attempts_for_users(
                 session=session,
@@ -170,25 +182,26 @@ def get_management_report(request_data, user_info):
             packages_data=PACKAGES_DATA,
             get_quiz_name=get_quiz_name,
         )
+        report_info = with_page_metadata(page, report_info)
         token = get_tracking_code()
         return token, report_info, ""
     except Exception as e:
-        service_exception_error_logging("ag_api/con", "get_management_report", str(e),
-                                        request_data, user_info)
+        service_exception_error_logging("ag_api/con", "get_management_report", str(e), request_data, user_info)
         return None, None, "مشکل در دریافت گزارش مدیریتی رخ داده است."
 
 
 # this function use for get students of con for list of students
 def get_students(request_data, user_info):
     try:
-        filters = StudentFilters.from_request(request_data)
         with session_scope() as session:
-            students = list_students_for_consultant(
+            students, page = fetch_students_for_request(
                 session=session,
-                consultant_user_id=user_info["user_id"],
-                filters=filters,
+                scope="consultant",
+                user_id=user_info["user_id"],
+                request_data=request_data,
             )
         stu_info = build_student_list_response(students, default_con_id=user_info["user_id"])
+        stu_info = with_page_metadata(page, stu_info)
         token = get_tracking_code()
         return token, stu_info, ""
     except Exception as e:
@@ -245,8 +258,11 @@ def change_user_info(request_data, user_info):
                 last_name=request_data["last_name"],
             )
         token = get_tracking_code()
-        return token, {"first_name": request_data["first_name"], "last_name": request_data["last_name"]}, "اطلاعات شما با موفقیت تغییر یافت."
+        return (
+            token,
+            {"first_name": request_data["first_name"], "last_name": request_data["last_name"]},
+            "اطلاعات شما با موفقیت تغییر یافت.",
+        )
     except Exception as e:
-        service_exception_error_logging("ag_api/con", "change_user_info", str(e), request_data,
-                                        user_info)
+        service_exception_error_logging("ag_api/con", "change_user_info", str(e), request_data, user_info)
         return None, None, "اطلاعات شما با موفقیت تغییر نیافت."
