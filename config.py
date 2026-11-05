@@ -118,7 +118,7 @@ REDIS_CACHE_OTP = str(_env("AG_REDIS_CACHE_OTP", "verify_cache_AG"))
 OTP_TTL_SECONDS = _env_int("AG_OTP_TTL_SECONDS", 300)
 if OTP_TTL_SECONDS <= 0:
     raise RuntimeError("AG_OTP_TTL_SECONDS must be positive")
-REDIS_QUEUE_NAME = _env("AG_REDIS_QUEUE_NAME", "userAGB2BReport")
+REDIS_QUEUE_NAME = _env("AG_REDIS_QUEUE_NAME", "userAGB2BCOPYReport")
 
 # Database Configuration
 DB_DRIVER = _env("AG_DB_DRIVER", "ODBC Driver 17 for SQL Server")
