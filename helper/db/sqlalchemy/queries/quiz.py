@@ -28,12 +28,23 @@ def _attempt_to_dict(attempt: QuizAttempt) -> dict:
 
 
 def list_attempts_for_user_kind(session: Session, user_id: int, quiz_kind: str) -> list[dict]:
+    answer_count = (
+        select(func.count(QuizQuestionAnswer.id))
+        .where(QuizQuestionAnswer.attempt_id == QuizAttempt.id)
+        .correlate(QuizAttempt)
+        .scalar_subquery()
+    )
     statement = (
-        select(QuizAttempt)
+        select(QuizAttempt, answer_count.label("answer_count"))
         .where(QuizAttempt.user_id == user_id, QuizAttempt.quiz_kind == quiz_kind)
         .order_by(QuizAttempt.quiz_id.asc())
     )
-    return [_attempt_to_dict(attempt) for attempt in session.execute(statement).scalars().all()]
+    attempts = []
+    for attempt, saved_answer_count in session.execute(statement).all():
+        item = _attempt_to_dict(attempt)
+        item["answer_count"] = int(saved_answer_count or 0)
+        attempts.append(item)
+    return attempts
 
 
 def get_attempt_for_user_kind_quiz(

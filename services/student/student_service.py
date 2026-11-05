@@ -289,6 +289,8 @@ def select_stu_quiz_table_info(request_data, info):
             last_attempt = all_attempts[-1]
             last_quiz_id = last_attempt["quiz_id"]
             last_quiz_state = last_attempt["state"]
+            if last_quiz_state == 1 and last_attempt.get("answer_count", 0) == 0:
+                last_quiz_state = 0
 
             for q in quiz_info:
                 q_id = q["id"]
