@@ -36,3 +36,14 @@ definition version and validate/cache remote content before making it active.
 Scoring keys and private report rules must not be included in public quiz
 payloads. Splitting those fields from the legacy AG/SCL definitions is a separate
 migration because the current frontend payload contract must first be tested.
+
+## Regression baseline
+
+`tests/fixtures/quiz_regression/legacy_v1.json` records the published AG/SCL
+definition, scoring, and static report behavior. The snapshot test fingerprints
+semantic objects and representative scoring outputs, so formatting-only changes
+to the large data modules do not invalidate it.
+
+When quiz behavior intentionally changes, publish a new definition/scoring
+version and create a new reviewed fixture. Do not overwrite the `legacy-v1`
+baseline to make an unexpected test failure pass.
