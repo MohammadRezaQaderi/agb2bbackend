@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 
 
 def create_horizontal_chart(
-        categories,
-        values,
-        colors,
-        bar_height: float = 0.25,
-        path: str = "",
-        filename: str | bool = False,
+    categories,
+    values,
+    colors,
+    bar_height: float = 0.25,
+    path: str = "",
+    filename: str | bool = False,
 ):
     """Create and save a minimal horizontal bar chart."""
     path_to_save = os.path.join(path, filename)

@@ -1,32 +1,28 @@
 import os
 
-import arabic_reshaper
-import matplotlib
 import matplotlib.pyplot as plt
-from bidi.algorithm import get_display
 
-font = {"family": "B Nazanin"}
-matplotlib.rc("font", **font)
+from helper.diagram.style import configure_matplotlib, rtl, to_persian_digits
+
+FONT_FAMILY = configure_matplotlib()
 
 
 def create_bidirectional_two_side(
-        first_label,
-        second_label,
-        first_value,
-        second_value,
-        color,
-        path,
-        filename,
-        dpi: int = 100,
+    first_label,
+    second_label,
+    first_value,
+    second_value,
+    color,
+    path,
+    filename,
+    dpi: int = 100,
 ):
     """Create a two-sided horizontal bar chart comparing two labeled values."""
     fig_size_width = 1000 / dpi
     fig_size_height = 50 / dpi
 
-    reshaped_text = arabic_reshaper.reshape(first_label)
-    first_label = get_display(reshaped_text)
-    reshaped_text = arabic_reshaper.reshape(second_label)
-    second_label = get_display(reshaped_text)
+    first_label = rtl(first_label)
+    second_label = rtl(second_label)
 
     path_to_save = os.path.join(path, filename)
 
@@ -49,8 +45,8 @@ def create_bidirectional_two_side(
             ax.text(
                 width - 50,
                 y_center,
-                f"{abs(width)}K",
-                family="B Nazanin",
+                to_persian_digits(abs(width)),
+                family=FONT_FAMILY,
                 va="center",
                 ha="right",
                 color="white",
@@ -59,7 +55,7 @@ def create_bidirectional_two_side(
                 -max_val,
                 y_center,
                 first_label,
-                family="B Nazanin",
+                family=FONT_FAMILY,
                 va="center",
                 ha="right",
                 color="black",
@@ -68,8 +64,8 @@ def create_bidirectional_two_side(
             ax.text(
                 width + 50,
                 y_center,
-                f"{width}K",
-                family="B Nazanin",
+                to_persian_digits(width),
+                family=FONT_FAMILY,
                 va="center",
                 ha="left",
                 color="white",
@@ -78,7 +74,7 @@ def create_bidirectional_two_side(
                 max_val,
                 y_center,
                 second_label,
-                family="B Nazanin",
+                family=FONT_FAMILY,
                 va="center",
                 ha="left",
                 color="black",

@@ -24,6 +24,11 @@ ANX_TEMPLATE = Path(ANX_TEMPLATE_PATH)
 DEP_TEMPLATE = Path(DEP_TEMPLATE_PATH)
 DONT_REMOVE = ["Report1.pdf", "Report2.pdf", "Report3.pdf", "Report4.pdf", "Report5.pdf", "labels.json",
                "user_info.json", "report_text_replacements.json", "scl_calc_data.json"]
+FIRST_REPORT_GRAPHIC_EFFECTS = (
+    '<effectLst><outerShdw blurRad="107950" dist="12700" dir="5400000" algn="ctr"><srgbClr val="000000"/></outerShdw></effectLst>',
+    '<scene3d><camera prst="orthographicFront"><rot lat="0" lon="0" rev="0"/></camera><lightRig rig="soft" dir="t"><rot lat="0" lon="0" rev="0"/></lightRig></scene3d>',
+    '<sp3d contourW="44450" prstMaterial="matte"><bevelT w="63500" h="63500" prst="artDeco"/><contourClr><srgbClr val="FFFFFF"/></contourClr></sp3d>',
+)
 
 
 def get_xml_tag_without_ns(XMLTag: str) -> str:
@@ -74,7 +79,16 @@ def _resolve_libreoffice_command() -> str:
         resolved = shutil.which(candidate)
         if resolved:
             return resolved
-    return config.LIBREOFFICE_PATH
+    raise FileNotFoundError(
+        "LibreOffice executable was not found. Install LibreOffice or set "
+        "AG_LIBREOFFICE_PATH to the full path of soffice.exe "
+        f"(configured value: {config.LIBREOFFICE_PATH!r})."
+    )
+
+
+def require_libreoffice() -> str:
+    """Resolve LibreOffice or fail before the scheduler consumes queue jobs."""
+    return _resolve_libreoffice_command()
 
 
 def _convert_to_pdf_once(input_file: Path, output_file: Path) -> tuple[bool, str]:
@@ -694,11 +708,7 @@ def generate_first_report_documents(
             tree = change_graphic_effect(
                 tree,
                 ["effectLst", "scene3d", "sp3d"],
-                [
-                    '<effectLst><outerShdw blurRad="107950" dist="12700" dir="5400000" algn="ctr"><srgbClr val="000000"/></outerShdw></effectLst>',
-                    '<scene3d><camera prst="orthographicFront"><rot lat="0" lon="0" rev="0"/></camera><lightRig rig="soft" dir="t"><rot lat="0" lon="0" rev="0"/></lightRig></scene3d>',
-                    '<sp3d contourW="44450" prstMaterial="matte"><bevelT w="63500" h="63500" prst="artDeco"/><contourClr><srgbClr val="FFFFFF"/></srgbClr></contourClr></sp3d>',
-                ],
+                FIRST_REPORT_GRAPHIC_EFFECTS,
                 effect,
             )
 

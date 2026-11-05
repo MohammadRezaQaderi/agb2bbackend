@@ -2,7 +2,22 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+from lxml import etree
+
 from helper.office import word_helper
+
+
+def test_first_report_graphic_effects_are_valid_xml():
+    for effect_xml in word_helper.FIRST_REPORT_GRAPHIC_EFFECTS:
+        etree.fromstring(effect_xml.encode("utf-8"))
+
+
+def test_missing_libreoffice_has_actionable_configuration_error():
+    with patch.object(word_helper.config, "LIBREOFFICE_PATH", "missing-soffice.exe"):
+        with patch.object(word_helper.shutil, "which", return_value=None):
+            with pytest.raises(FileNotFoundError, match="AG_LIBREOFFICE_PATH"):
+                word_helper.require_libreoffice()
 
 
 def test_conversion_uses_unique_libreoffice_profile(tmp_path):

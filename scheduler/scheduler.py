@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from helper.chart import bar, bidirection, gauge, bidirection_two_side, tube, scatter, horizontal
+from helper.diagram import bar, bidirection, gauge, bidirection_two_side, horizontal, scatter, tube
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.scheduler_reports import (
     get_scheduler_student_context,
@@ -35,6 +35,7 @@ from helper.office.word_helper import (
     generate_third_report_documents,
     generate_forth_report_documents,
     generate_fifth_report_documents,
+    require_libreoffice,
 )
 from config import (
     REPORTS_DIR,
@@ -187,6 +188,8 @@ SCL_PIC_DICT = {"drug_addicion": [("image15.png", "drog4.png"), ("image16.png", 
 
 class AGReportScheduler:
     def __init__(self):
+        libreoffice_path = require_libreoffice()
+        logging.info("Using LibreOffice executable: %s", libreoffice_path)
         self.redis = redis.Redis(
             host=REDIS_HOST,
             port=REDIS_PORT,
