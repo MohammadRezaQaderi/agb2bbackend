@@ -21,9 +21,7 @@ from helper.db.sqlalchemy.queries.students import (
 )
 from helper.password_helper import encrypt_password
 from helper.quiz import answer_store
-from helper.quiz.ag_quiz_data_info import ag_quiz_info
-from helper.quiz.scl_quiz_data_info import scl_quiz_info
-from helper.quiz.quiz_data_extractor import get_quiz_table_info, get_quiz_info
+from helper.quiz.quiz_data_extractor import get_last_question_id, get_quiz_info, get_quiz_table_info
 from helper.service_errors import service_exception_error_logging
 from helper.tracking import get_tracking_code
 from config import REDIS_QUEUE_NAME, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB
@@ -396,22 +394,6 @@ def select_stu_quiz_info(request_data, info):
         return None, None, "آزمون مورد نظر شما در دسترس شما نیست."
 
 
-# Pre-compute the last AG question id once (used for Redis enqueue condition)
-AG_LAST_QUESTION_ID = max(
-    q.get("question_id", 0)
-    for quiz in ag_quiz_info
-    for section in quiz.get("sections", [])
-    for q in section.get("questions", [])
-)
-
-SCL_LAST_QUESTION_ID = max(
-    q.get("question_id", 0)
-    for quiz in scl_quiz_info
-    for section in quiz.get("sections", [])
-    for q in section.get("questions", [])
-)
-
-
 def _enqueue_result_generation(user_id, phone, kind: str):
     """
     Push user to Redis queue and log in redis_logs table.
@@ -518,21 +500,13 @@ def submit_quiz_answer(request_data, info):
 
         answer_store.upsert_question_answer(attempt, question_number, question_answer)
 
-        # After the whole product is finished, add user to Redis queue.
-        # For AG product, this happens when the very last question (global id) is answered.
-        if quiz_kind == "AG" and question_number == AG_LAST_QUESTION_ID:
+        # After the whole product is finished, add the user to the report queue.
+        package_last_question_id = get_last_question_id(quiz_kind)
+        if package_last_question_id is not None and question_number == package_last_question_id:
             _enqueue_result_generation(
                 user_id=info["user_id"],
                 phone=info.get("phone"),
-                kind="AG",
-            )
-            message = "کارنامه شما در حال تولید است ، لطفا کمی صبور باشید."
-
-        if quiz_kind == "SCL" and question_number == SCL_LAST_QUESTION_ID:
-            _enqueue_result_generation(
-                user_id=info["user_id"],
-                phone=info.get("phone"),
-                kind="SCL",
+                kind=quiz_kind,
             )
             message = "کارنامه شما در حال تولید است ، لطفا کمی صبور باشید."
 

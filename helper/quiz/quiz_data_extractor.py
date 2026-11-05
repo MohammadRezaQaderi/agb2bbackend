@@ -1,5 +1,6 @@
 from helper.quiz.ag_quiz_data_info import ag_quiz_info as ag_quiz_full_info
 from helper.quiz.scl_quiz_data_info import scl_quiz_info as scl_quiz_full_info
+from helper.quiz_engine import StaticQuizPackageProvider, quiz_package_registry
 
 # AG Pack Quiz Table Info (metadata used for quiz list / table)
 ag_quiz_table_info = [
@@ -111,6 +112,26 @@ def get_scl_quiz_table_info():
 quiz_table_info = ag_quiz_table_info
 
 
+def _register_static_packages():
+    static_packages = (
+        ("AG", ag_quiz_full_info, ag_quiz_table_info),
+        ("SCL", scl_quiz_full_info, scl_quiz_table_info),
+    )
+    for package_name, quizzes, summaries in static_packages:
+        if quiz_package_registry.get_optional(package_name) is None:
+            quiz_package_registry.register(
+                StaticQuizPackageProvider(
+                    package_name=package_name,
+                    definition_version="legacy-v1",
+                    quizzes=quizzes,
+                    quiz_summaries=summaries,
+                )
+            )
+
+
+_register_static_packages()
+
+
 def get_quiz_info(quiz_id, kind="AG"):
     """
     Return full quiz data (including sections and questions) for the given quiz_id and kind.
@@ -118,24 +139,28 @@ def get_quiz_info(quiz_id, kind="AG"):
       - AG:  quiz.ag_quiz_data_info.ag_quiz_info
       - SCL: quiz.scl_quiz_data_info.quiz_data_info
     """
-    kind_upper = (kind or "").upper()
-
-    if kind_upper == "AG":
-        for quiz in ag_quiz_full_info:
-            if quiz.get("quiz_id") == quiz_id:
-                return quiz
-    elif kind_upper == "SCL":
-        for quiz in scl_quiz_full_info:
-            if quiz.get("quiz_id") == quiz_id:
-                return quiz
-
-    return None
+    provider = quiz_package_registry.get_optional(kind)
+    return provider.get_quiz(quiz_id) if provider else None
 
 
 def get_quiz_table_info(kind="AG"):
-    kind_upper = (kind or "").upper()
-    if kind_upper == "AG":
-        return get_ag_quiz_table_info()
-    elif kind_upper == "SCL":
-        return get_scl_quiz_table_info()
-    return get_ag_quiz_table_info()
+    provider = quiz_package_registry.get_optional(kind)
+    if provider:
+        return provider.list_quiz_summaries()
+    # Preserve the legacy fallback until all callers validate package names.
+    return quiz_package_registry.get("AG").list_quiz_summaries()
+
+
+def get_quiz_name(quiz_id, kind="AG"):
+    provider = quiz_package_registry.get_optional(kind)
+    return provider.get_quiz_name(quiz_id) if provider else None
+
+
+def get_last_question_id(kind="AG"):
+    provider = quiz_package_registry.get_optional(kind)
+    return provider.get_last_question_id() if provider else None
+
+
+def get_definition_version(kind="AG"):
+    provider = quiz_package_registry.get_optional(kind)
+    return provider.definition_version if provider else None
