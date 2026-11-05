@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Identity, Integer, String, Text, Unicode, UnicodeText
+from sqlalchemy import (
+    DateTime,
+    Float,
+    ForeignKey,
+    Identity,
+    Integer,
+    String,
+    Text,
+    Unicode,
+    UnicodeText,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from helper.db.sqlalchemy.base import Base, TimestampMixin
@@ -162,9 +173,13 @@ class StudentPackageAccess(Base, TimestampMixin):
 
 class Setting(Base, TimestampMixin):
     __tablename__ = "setting"
+    __table_args__ = (
+        UniqueConstraint("user_id", "package_name", "quiz_id", name="uq_setting_user_package_quiz"),
+    )
 
     setting_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    package_name: Mapped[str] = mapped_column(String(25), nullable=False)
     description: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     voice: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     quiz_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -340,11 +355,16 @@ class NotificationRead(Base):
 
 class QuizAttempt(Base, TimestampMixin):
     __tablename__ = "quiz_attempt"
+    __table_args__ = (
+        UniqueConstraint("user_id", "quiz_kind", "quiz_id", name="uq_quiz_attempt_user_kind_quiz"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), nullable=False)
     quiz_kind: Mapped[str] = mapped_column(String(25), nullable=False)
     quiz_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    definition_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    scoring_version: Mapped[str] = mapped_column(String(50), nullable=False)
     state: Mapped[int] = mapped_column(Integer, nullable=False)
     remain_time: Mapped[int | None] = mapped_column(Integer, nullable=True)
     owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.user_id"), nullable=True)

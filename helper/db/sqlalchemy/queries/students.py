@@ -332,7 +332,12 @@ def list_student_notifications(session: Session, user_id: int, role: str, limit:
     return [dict(row) for row in session.execute(statement).mappings().all()]
 
 
-def get_quiz_setting(session: Session, owner_user_id: int | None, quiz_id: int) -> dict | None:
+def get_quiz_setting(
+    session: Session,
+    owner_user_id: int | None,
+    package_name: str,
+    quiz_id: int,
+) -> dict | None:
     if owner_user_id is None:
         return None
     statement = (
@@ -342,6 +347,7 @@ def get_quiz_setting(session: Session, owner_user_id: int | None, quiz_id: int) 
         )
         .where(
             Setting.user_id == owner_user_id,
+            Setting.package_name == package_name,
             Setting.quiz_id == quiz_id,
         )
         .limit(1)

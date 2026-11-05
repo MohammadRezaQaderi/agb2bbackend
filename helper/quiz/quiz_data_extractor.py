@@ -65,3 +65,8 @@ def get_last_question_id(kind="AG"):
 def get_definition_version(kind="AG"):
     provider = quiz_package_registry.get_optional(kind)
     return provider.definition_version if provider else None
+
+
+def get_scoring_version(kind="AG"):
+    provider = quiz_package_registry.get_optional(kind)
+    return provider.scoring_version if provider else None

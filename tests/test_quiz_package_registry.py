@@ -9,6 +9,7 @@ from helper.quiz.quiz_data_extractor import (
     get_quiz_info,
     get_quiz_name,
     get_quiz_table_info,
+    get_scoring_version,
 )
 from helper.quiz_engine import QuizPackageRegistry, StaticQuizPackageProvider
 from quiz_packages.ag.legacy_v1 import questions as ag_questions
@@ -41,6 +42,7 @@ def test_static_provider_exposes_versioned_quiz_content():
 
     assert provider.package_name == "NEW-PACKAGE"
     assert provider.definition_version == "v1"
+    assert provider.scoring_version == "v1"
     assert provider.get_quiz(1)["quiz_id"] == 1
     assert provider.get_quiz_name(1) == "Test quiz"
     assert provider.get_last_question_id() == 11
@@ -103,6 +105,8 @@ def test_legacy_packages_are_available_through_registry_boundary():
     assert get_last_question_id("SCL") is not None
     assert get_definition_version("AG") == "legacy-v1"
     assert get_definition_version("SCL") == "legacy-v1"
+    assert get_scoring_version("AG") == "legacy-v1"
+    assert get_scoring_version("SCL") == "legacy-v1"
 
 
 def test_legacy_public_quizzes_do_not_expose_answer_keys():
@@ -130,6 +134,7 @@ def test_unknown_package_does_not_expose_full_quiz_content():
     assert get_quiz_name(1, "UNKNOWN") is None
     assert get_last_question_id("UNKNOWN") is None
     assert get_definition_version("UNKNOWN") is None
+    assert get_scoring_version("UNKNOWN") is None
 
 
 def test_legacy_quiz_module_paths_reexport_versioned_package_content():

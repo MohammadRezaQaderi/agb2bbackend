@@ -6,12 +6,14 @@ from quiz_packages.ag.legacy_v1.questions import ag_quiz_info
 
 PACKAGE_NAME = "AG"
 DEFINITION_VERSION = "legacy-v1"
+SCORING_VERSION = "legacy-v1"
 
 
 def create_provider():
     return StaticQuizPackageProvider(
         package_name=PACKAGE_NAME,
         definition_version=DEFINITION_VERSION,
+        scoring_version=SCORING_VERSION,
         quizzes=ag_quiz_info,
         quiz_summaries=quiz_summaries,
     )

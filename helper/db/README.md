@@ -21,6 +21,11 @@ For a copy of an existing AGB2B database:
 3. Run `python helper/db/architecture_migration.py --dry-run`, review its
    output, then run `python helper/db/architecture_migration.py`. This is the
    one-time conversion of a legacy copy. It also adds `ocon.logo` when absent.
+   It assigns legacy quiz settings to `AG` because the old API had no package
+   identifier, and assigns `legacy-v1` definition/scoring versions to existing
+   quiz attempts. If duplicate settings prevent creation of
+   `ux_setting_user_package_quiz`, the migration warns and leaves those rows for
+   manual review.
    Do not use `--migrate-password-hash` with the current reversible-password
    application flow. `--drop-legacy-old-tables` is an explicit data deletion
    option and is not part of the normal upgrade.

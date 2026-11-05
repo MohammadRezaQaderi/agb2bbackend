@@ -17,6 +17,7 @@ class StaticQuizPackageProvider:
         *,
         package_name: str,
         definition_version: str,
+        scoring_version: str | None = None,
         quizzes: Sequence[QuizData],
         quiz_summaries: Sequence[QuizData],
     ) -> None:
@@ -24,6 +25,9 @@ class StaticQuizPackageProvider:
         self._definition_version = str(definition_version or "").strip()
         if not self._definition_version:
             raise ValueError("definition_version is required")
+        self._scoring_version = str(scoring_version or self._definition_version).strip()
+        if not self._scoring_version:
+            raise ValueError("scoring_version is required")
 
         self._quizzes = quizzes
         self._quiz_summaries = quiz_summaries
@@ -51,6 +55,10 @@ class StaticQuizPackageProvider:
     @property
     def definition_version(self) -> str:
         return self._definition_version
+
+    @property
+    def scoring_version(self) -> str:
+        return self._scoring_version
 
     def list_quizzes(self) -> Sequence[QuizData]:
         return self._quizzes

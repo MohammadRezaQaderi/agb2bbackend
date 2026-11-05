@@ -335,7 +335,12 @@ def select_stu_quiz_info(request_data, info):
         all_attempts = answer_store.get_attempts(info["user_id"], quiz_kind)
 
         with session_scope() as session:
-            res_quiz_setting = get_quiz_setting(session=session, owner_user_id=owner_user_id, quiz_id=quiz_id)
+            res_quiz_setting = get_quiz_setting(
+                session=session,
+                owner_user_id=owner_user_id,
+                package_name=quiz_kind,
+                quiz_id=quiz_id,
+            )
         # All attempts already limited to this product kind (AG, SCL, ...)
         quiz_ids_for_kind = {q["id"] for q in get_quiz_table_info(kind=quiz_kind)}
 

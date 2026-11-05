@@ -108,12 +108,14 @@ TABLE_DEFINITIONS = {
         CREATE TABLE setting (
             setting_id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
+            package_name VARCHAR(25) NOT NULL,
             description NVARCHAR(MAX),
             voice NVARCHAR(MAX),
             quiz_id INT,
             editor_id INT,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_setting_user_package_quiz UNIQUE (user_id, package_name, quiz_id)
         )
     """,
     "capacity": """
@@ -166,6 +168,8 @@ TABLE_DEFINITIONS = {
             user_id INT NOT NULL,
             quiz_kind VARCHAR(25) NOT NULL,
             quiz_id INT NOT NULL,
+            definition_version VARCHAR(50) NOT NULL DEFAULT 'legacy-v1',
+            scoring_version VARCHAR(50) NOT NULL DEFAULT 'legacy-v1',
             state INT NOT NULL DEFAULT 1,
             remain_time INT NULL,
             owner_user_id INT NULL,

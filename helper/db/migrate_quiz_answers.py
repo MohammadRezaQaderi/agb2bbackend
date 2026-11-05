@@ -26,7 +26,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 import pyodbc
 
 from config import DB_CONN_STRING
-from helper.db.architecture_migration import ensure_quiz_attempt_tables, table_exists
+from helper.db.architecture_migration import (
+    ensure_quiz_attempt_tables,
+    ensure_quiz_package_versioning,
+    table_exists,
+)
 
 
 def normalize_quiz_kind(value: Any) -> str:
@@ -91,9 +95,9 @@ def get_or_create_attempt(cursor, row, dry_run: bool) -> int | None:
     cursor.execute(
         """
         INSERT INTO quiz_attempt
-            ([user_id], [quiz_kind], [quiz_id], [state], [owner_user_id], [consultant_user_id], [created_time], [edited_time])
+            ([user_id], [quiz_kind], [quiz_id], [definition_version], [scoring_version], [state], [owner_user_id], [consultant_user_id], [created_time], [edited_time])
         OUTPUT INSERTED.id
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, 'legacy-v1', 'legacy-v1', ?, ?, ?, ?, ?)
         """,
         row.user_id,
         quiz_kind,
@@ -162,6 +166,7 @@ def migrate(dry_run: bool) -> None:
             return
 
         ensure_quiz_attempt_tables(conn, cursor, dry_run)
+        ensure_quiz_package_versioning(conn, cursor, dry_run)
         if dry_run:
             print("DRY RUN: table creation checked; no quiz data will be written")
 

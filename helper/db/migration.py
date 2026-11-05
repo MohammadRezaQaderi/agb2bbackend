@@ -116,12 +116,14 @@ TABLE_DEFINITIONS = {
         CREATE TABLE setting (
             setting_id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
+            package_name VARCHAR(25) NOT NULL DEFAULT 'AG',
             description NVARCHAR(MAX),
             voice NVARCHAR(MAX),
             quiz_id INT,
             editor_id INT,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_setting_user_package_quiz UNIQUE (user_id, package_name, quiz_id)
         )
     """,
     "capacity": """
@@ -164,6 +166,8 @@ TABLE_DEFINITIONS = {
             user_id INT NOT NULL,
             quiz_kind VARCHAR(25) NOT NULL,
             quiz_id INT NOT NULL,
+            definition_version VARCHAR(50) NOT NULL DEFAULT 'legacy-v1',
+            scoring_version VARCHAR(50) NOT NULL DEFAULT 'legacy-v1',
             state INT NOT NULL DEFAULT 1,
             remain_time INT NULL,
             owner_user_id INT NULL,
@@ -633,9 +637,9 @@ def migrate():
     for row in cursor.fetchall():
         quiz_kind = getattr(row, "quiz_kind", None) or "AG"
         cursor.execute("""
-                INSERT INTO quiz_attempt (user_id, quiz_id, quiz_kind, state, owner_user_id, consultant_user_id, created_time, edited_time)
+                INSERT INTO quiz_attempt (user_id, quiz_id, quiz_kind, definition_version, scoring_version, state, owner_user_id, consultant_user_id, created_time, edited_time)
                 OUTPUT INSERTED.id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, 'legacy-v1', 'legacy-v1', ?, ?, ?, ?, ?)
             """, (row.user_id, row.quiz_id, quiz_kind, row.state, row.ins_id, row.con_id,
                   row.DC_Created_Time, row.DC_Edited_Time))
         attempt_id = cursor.fetchone()[0]
@@ -680,7 +684,7 @@ def migrate():
 
             if table == "setting":
                 cursor.execute(
-                    f"INSERT INTO {table} ({id_col}, user_id, description, voice, quiz_id, editor_id, created_time, edited_time) VALUES (?,?,?,?,?,?,?,?)",
+                    f"INSERT INTO {table} ({id_col}, user_id, package_name, description, voice, quiz_id, editor_id, created_time, edited_time) VALUES (?,?,'AG',?,?,?,?,?,?)",
                     (data[id_col], data['user_id'], data['description'], data['voice'], data['quiz_id'],
                      data['editor_id'], c_time, e_time))
             elif table == "scores":

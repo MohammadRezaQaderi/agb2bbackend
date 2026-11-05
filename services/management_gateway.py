@@ -67,6 +67,16 @@ def change_setting(request_data, user_info):
     if user_info["role"] == "con":
         return error_response(method_type, ACCESS_DENIED_MESSAGE)
 
+    package_name = str(
+        request_data.get("package_name")
+        or request_data.get("quiz_kind")
+        or request_data.get("kind")
+        or "AG"
+    ).strip().upper()
+    if package_name not in PACKAGES_DATA:
+        return error_response(method_type, "A valid package_name is required.")
+    request_data = {**request_data, "package_name": package_name}
+
     result = role_handler(user_info, {
         "ins": lambda: institute_service.change_setting(request_data=request_data, user_info=user_info),
         "sch": lambda: school_service.change_setting(request_data=request_data, user_info=user_info),

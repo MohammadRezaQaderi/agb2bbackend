@@ -17,6 +17,10 @@ class QuizPackageProvider(Protocol):
     def definition_version(self) -> str:
         """Return the immutable content version exposed by this provider."""
 
+    @property
+    def scoring_version(self) -> str:
+        """Return the immutable scoring version used by this provider."""
+
     def list_quizzes(self) -> Sequence[QuizData]:
         """Return complete private quiz definitions for backend processing."""
 

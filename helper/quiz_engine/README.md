@@ -36,6 +36,10 @@ complete definition must use `get_private_quiz_info` explicitly.
 Use a new `definition_version` whenever published questions, choices, timing, or
 scoring references change. Do not edit a published version in place.
 
+Every new `quiz_attempt` stores both `definition_version` and
+`scoring_version`. Updating an attempt must preserve its original versions so a
+future scorer can reproduce the result that belonged to that attempt.
+
 ## Future API source
 
 An API-backed provider should implement `QuizPackageProvider` and be registered
