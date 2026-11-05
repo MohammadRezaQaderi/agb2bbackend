@@ -1,5 +1,6 @@
 """Provider for versioned quiz definitions stored in Python modules."""
 
+from copy import deepcopy
 from collections.abc import Sequence
 from typing import Any
 
@@ -7,6 +8,7 @@ from helper.quiz_engine.registry import normalize_package_name
 
 
 QuizData = dict[str, Any]
+PRIVATE_QUESTION_FIELDS = frozenset({"question_answer"})
 
 
 class StaticQuizPackageProvider:
@@ -58,6 +60,18 @@ class StaticQuizPackageProvider:
 
     def get_quiz(self, quiz_id: int) -> QuizData | None:
         return self._quiz_by_id.get(quiz_id)
+
+    def get_public_quiz(self, quiz_id: int) -> QuizData | None:
+        private_quiz = self.get_quiz(quiz_id)
+        if private_quiz is None:
+            return None
+
+        public_quiz = deepcopy(private_quiz)
+        for section in public_quiz.get("sections", []):
+            for question in section.get("questions", []):
+                for field in PRIVATE_QUESTION_FIELDS:
+                    question.pop(field, None)
+        return public_quiz
 
     def get_quiz_name(self, quiz_id: int) -> str | None:
         summary = self._summary_by_id.get(quiz_id)

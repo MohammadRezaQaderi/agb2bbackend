@@ -18,13 +18,16 @@ class QuizPackageProvider(Protocol):
         """Return the immutable content version exposed by this provider."""
 
     def list_quizzes(self) -> Sequence[QuizData]:
-        """Return complete quiz definitions for scoring and delivery."""
+        """Return complete private quiz definitions for backend processing."""
 
     def list_quiz_summaries(self) -> Sequence[QuizData]:
         """Return quiz list metadata used by the product UI."""
 
     def get_quiz(self, quiz_id: int) -> QuizData | None:
-        """Return one complete quiz definition."""
+        """Return one complete private quiz definition."""
+
+    def get_public_quiz(self, quiz_id: int) -> QuizData | None:
+        """Return an isolated quiz definition safe for an API response."""
 
     def get_quiz_name(self, quiz_id: int) -> str | None:
         """Return the display name of one quiz."""

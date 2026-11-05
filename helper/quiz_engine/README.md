@@ -10,8 +10,13 @@ progress, and report queue behavior.
 as `StaticQuizPackageProvider` instances. Their current immutable content version
 is `legacy-v1`.
 
-The compatibility functions in `quiz_data_extractor` keep the current API
-payloads unchanged while delegating lookup to `quiz_package_registry`.
+The compatibility functions in `quiz_data_extractor` preserve the public quiz
+shape while delegating lookup to `quiz_package_registry`; private fields are the
+only intentional omission.
+
+`get_quiz_info` returns a fresh public copy and removes private question fields
+such as `question_answer`. Trusted backend code that genuinely requires the
+complete definition must use `get_private_quiz_info` explicitly.
 
 ## Adding a static package
 
@@ -34,8 +39,8 @@ from Python, JSON, a database, or an API. The provider must return one immutable
 definition version and validate/cache remote content before making it active.
 
 Scoring keys and private report rules must not be included in public quiz
-payloads. Splitting those fields from the legacy AG/SCL definitions is a separate
-migration because the current frontend payload contract must first be tested.
+payloads. Legacy `question_answer` fields remain in the private source for
+compatibility but are removed by the public provider boundary.
 
 ## Regression baseline
 

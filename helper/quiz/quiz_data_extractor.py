@@ -134,11 +134,17 @@ _register_static_packages()
 
 def get_quiz_info(quiz_id, kind="AG"):
     """
-    Return full quiz data (including sections and questions) for the given quiz_id and kind.
+    Return API-safe quiz data for the given quiz_id and kind.
     Data is loaded from:
       - AG:  quiz.ag_quiz_data_info.ag_quiz_info
       - SCL: quiz.scl_quiz_data_info.quiz_data_info
     """
+    provider = quiz_package_registry.get_optional(kind)
+    return provider.get_public_quiz(quiz_id) if provider else None
+
+
+def get_private_quiz_info(quiz_id, kind="AG"):
+    """Return the complete static definition for trusted backend processing."""
     provider = quiz_package_registry.get_optional(kind)
     return provider.get_quiz(quiz_id) if provider else None
 
