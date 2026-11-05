@@ -8,6 +8,10 @@ import io
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from helper.chart import bar, bidirection, gauge, bidirection_two_side, tube, scatter, horizontal
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.scheduler_reports import (
