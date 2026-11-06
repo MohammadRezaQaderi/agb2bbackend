@@ -35,7 +35,12 @@ def create_signup_account(
     else:
         raise ValueError(f"Unsupported signup role: {role}")
 
-    create_capacity_with_packages(session=session, user_id=user_id, package_names=package_names)
+    create_capacity_with_packages(
+        session=session,
+        user_id=user_id,
+        package_names=package_names,
+        initial_allowed_packages={"AG", "SCL"},
+    )
     return user_id
 
 

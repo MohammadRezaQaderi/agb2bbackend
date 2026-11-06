@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from config import DB_CONN_STRING
+from quiz_packages.psy.generated_manifest import PACKAGE_NAMES as PSY_PACKAGE_NAMES
 
 if TYPE_CHECKING:
     import pyodbc
@@ -148,9 +149,58 @@ def migration_student_education(conn: pyodbc.Connection, cursor: pyodbc.Cursor, 
     print(f"APPLIED: added education columns and backfilled {len(updates)} student rows")
 
 
+def migration_psy_capacity_packages(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run: bool) -> None:
+    capacity_schema = get_table_schema(cursor, "capacity")
+    package_schema = get_table_schema(cursor, "capacity_package")
+    capacity_ref = f"{quote_identifier(capacity_schema)}.[capacity]"
+    package_ref = f"{quote_identifier(package_schema)}.[capacity_package]"
+    has_total_allowed = column_exists(
+        cursor,
+        package_schema,
+        "capacity_package",
+        "total_allowed",
+    )
+    package_values = ", ".join("(?)" for _ in PSY_PACKAGE_NAMES)
+    columns = "[capacity_id], [package_name], [user_id], [allowed], [used], [created_time], [edited_time]"
+    values = "c.[capacity_id], p.[package_name], c.[user_id], 0, 0, GETDATE(), GETDATE()"
+    if has_total_allowed:
+        columns = columns.replace("[allowed]", "[total_allowed], [allowed]")
+        values = values.replace("c.[user_id], 0", "c.[user_id], 0, 0", 1)
+
+    sql = f"""
+        INSERT INTO {package_ref} ({columns})
+        SELECT {values}
+        FROM (
+            SELECT [user_id], MIN([capacity_id]) AS [capacity_id]
+            FROM {capacity_ref}
+            WHERE [user_id] IS NOT NULL
+            GROUP BY [user_id]
+        ) AS c
+        CROSS JOIN (VALUES {package_values}) AS p([package_name])
+        WHERE NOT EXISTS (
+              SELECT 1
+              FROM {package_ref} AS existing
+              WHERE existing.[user_id] = c.[user_id]
+                AND existing.[package_name] = p.[package_name]
+          )
+    """
+
+    if dry_run:
+        print(
+            f"DRY RUN: add missing zero-capacity rows for {len(PSY_PACKAGE_NAMES)} PSY packages"
+        )
+        return
+
+    cursor.execute(sql, *PSY_PACKAGE_NAMES)
+    inserted_rows = cursor.rowcount
+    conn.commit()
+    print(f"APPLIED: added {inserted_rows} missing PSY capacity rows")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration("2026_08_10_add_ocon_logo", migration_ocon_logo),
     Migration("2026_11_03_add_student_education", migration_student_education),
+    Migration("2026_11_06_add_psy_capacity_packages", migration_psy_capacity_packages),
 )
 
 

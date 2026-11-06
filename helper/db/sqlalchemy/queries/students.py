@@ -492,19 +492,27 @@ def create_redis_log(session: Session, user_id: int, kind: str, result: str, pho
     return True
 
 
-def create_capacity_with_packages(session: Session, user_id: int, package_names: list[str]) -> int:
+def create_capacity_with_packages(
+        session: Session,
+        user_id: int,
+        package_names: list[str],
+        initial_allowed_packages: set[str] | None = None,
+) -> int:
     capacity = Capacity(user_id=user_id)
     session.add(capacity)
     session.flush()
 
+    if initial_allowed_packages is None:
+        initial_allowed_packages = set(package_names)
     for package_name in package_names:
+        initial_allowed = 1 if package_name in initial_allowed_packages else 0
         session.add(
             CapacityPackage(
                 capacity_id=capacity.capacity_id,
                 user_id=user_id,
                 package_name=package_name,
-                total_allowed=1,
-                allowed=1,
+                total_allowed=initial_allowed,
+                allowed=initial_allowed,
                 used=0,
             )
         )

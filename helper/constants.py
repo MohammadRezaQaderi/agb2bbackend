@@ -1,3 +1,6 @@
+from quiz_packages.psy.generated_manifest import PACKAGE_NAMES as PSY_PACKAGE_NAMES
+
+
 AG_QUIZ_NAME_TITLE = [
     "کتل", "گاردنر", "نئو", "کلیفتون", "هالند",
     "تعهد‌", "پرسشنامه"
@@ -6,6 +9,24 @@ AG_QUIZ_NAME_TITLE = [
 SCL_QUIZ_NAME_TITLE = [
     "زندگی شخصی", "زندگی روانشناختی", "زندگی تحصیلی", "زندگی اجتماعی"
 ]
+
+PSY_PACKAGE_TITLES = {
+    "PSY_ANX": "اضطراب",
+    "PSY_DEP": "افسردگی",
+    "PSY_INTERNET": "وابستگی به اینترنت",
+    "PSY_MBTI": "تیپ‌شناسی MBTI",
+    "PSY_MOTIVATION": "انگیزش تحصیلی",
+    "PSY_NEEDS": "نیازهای اساسی",
+    "PSY_SOCIAL": "مهارت‌های اجتماعی",
+    "PSY_NEO": "شخصیت‌شناسی نئو",
+    "PSY_COPING_STRATEGIES": "راهبردهای مقابله‌ای",
+    "PSY_OCD": "وسواس و کمال‌گرایی",
+    "PSY_EQ_IQ": "هوش هیجانی و ریون",
+    "PSY_GARDNER": "هوش‌های چندگانه گاردنر",
+    "PSY_SCL90": "علائم روانی SCL-90",
+    "PSY_STUDY_SKILLS": "مهارت‌های مطالعه",
+}
+
 
 PACKAGES_DATA = {
     "AG": {
@@ -21,7 +42,8 @@ PACKAGES_DATA = {
         50: 5800000,
         100: 9600000,
         101: 99999999
-    }
+    },
+    **{package_name: {} for package_name in PSY_PACKAGE_NAMES},
 }
 
 PROVINCES = [
@@ -184,8 +206,11 @@ PROVINCES = [
 
 
 def get_kind_name(kind: str) -> str:
-    if kind.upper() == "SCL":
+    normalized_kind = kind.upper()
+    if normalized_kind == "SCL":
         return "SCL دوپامین"
-    if kind.upper() == "AG":
+    if normalized_kind == "AG":
         return "AG استعدادسنجی"
+    if normalized_kind in PSY_PACKAGE_TITLES:
+        return f"PSY {PSY_PACKAGE_TITLES[normalized_kind]}"
     return kind
