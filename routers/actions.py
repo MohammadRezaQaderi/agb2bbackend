@@ -118,6 +118,7 @@ MANAGEMENT_INSERT_ACTIONS = {
 MANAGEMENT_SELECT_ACTIONS = {
     "ag_get_dashboard": management_gateway.get_dashboard,
     "ag_get_capacity": management_gateway.get_capacity,
+    "ag_get_psy_catalog": management_gateway.get_psy_catalog,
     "ag_get_students_without_product_access": management_gateway.get_students_without_product_access,
     "ag_get_consultants": management_gateway.get_consultants,
     "ag_get_students": management_gateway.get_students,

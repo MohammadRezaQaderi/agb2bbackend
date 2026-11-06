@@ -1,6 +1,7 @@
 from helper.account_passwords import update_user_and_role_password
 from helper.constants import PACKAGES_DATA
 from helper.request_validation import validate_request_data_fields
+from helper.psy_catalog import build_psy_catalog
 from helper.service_errors import not_method_access_return
 from helper.student_access import update_student_accesses_and_capacity
 from helper.validators import password_format_check
@@ -156,6 +157,27 @@ def get_dashboard(request_data, user_info):
 
     tracking_token, response_data, response_message = result
     return service_response(method_type, tracking_token, response_data, response_message)
+
+
+def get_psy_catalog(request_data, user_info):
+    method_type = "SELECT"
+    result = role_handler(user_info, {
+        "ins": lambda: institute_service.get_dashboard(request_data=request_data, user_info=user_info),
+        "sch": lambda: school_service.get_dashboard(request_data=request_data, user_info=user_info),
+        "ocon": lambda: owner_consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
+        "con": lambda: consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
+    })
+    if result is None:
+        return not_method_access_return()
+
+    tracking_token, response_data, response_message = result
+    dashboard_info = (response_data or {}).get("dashboard_info") or {}
+    return service_response(
+        method_type,
+        tracking_token,
+        build_psy_catalog(dashboard_info),
+        response_message,
+    )
 
 
 def get_capacity(request_data, user_info):

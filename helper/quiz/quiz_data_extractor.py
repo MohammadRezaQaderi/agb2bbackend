@@ -52,6 +52,15 @@ def get_quiz_table_info(kind="AG"):
     return quiz_package_registry.get("AG").list_quiz_summaries()
 
 
+def get_package_quiz_counts(package_names=None):
+    names = package_names or quiz_package_registry.package_names()
+    return {
+        package_name: len(get_quiz_table_info(package_name))
+        for package_name in names
+        if quiz_package_registry.get_optional(package_name)
+    }
+
+
 def get_quiz_name(quiz_id, kind="AG"):
     provider = quiz_package_registry.get_optional(kind)
     return provider.get_quiz_name(quiz_id) if provider else None

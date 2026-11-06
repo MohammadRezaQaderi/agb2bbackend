@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from helper.quiz.quiz_data_extractor import get_package_quiz_counts
+
 
 def _build_capacity_info(capacity_packages: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {
@@ -25,7 +27,7 @@ def _build_quiz_report(
     packages_data: dict[str, Any],
     package_quiz_count: dict[str, int] | None = None,
 ) -> dict[str, dict[str, int]]:
-    package_quiz_count = package_quiz_count or {"AG": 7, "SCL": 4}
+    package_quiz_count = package_quiz_count or get_package_quiz_counts(packages_data.keys())
     quiz_report = {}
 
     for package_name in packages_data.keys():

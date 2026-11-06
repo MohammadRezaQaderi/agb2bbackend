@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from helper.response.password_response import build_display_password
+from helper.quiz.quiz_data_extractor import get_package_quiz_counts
 
 
 def _safe_access(raw_access: Any) -> dict[str, Any]:
@@ -73,7 +74,7 @@ def build_student_management_report_response(
     include_consultant_name: bool = False,
     package_quiz_count: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
-    package_quiz_count = package_quiz_count or {"AG": 7, "SCL": 4}
+    package_quiz_count = package_quiz_count or get_package_quiz_counts(packages_data.keys())
     latest_attempts = _latest_attempts_by_student_package(quiz_attempts)
     responses = []
 
