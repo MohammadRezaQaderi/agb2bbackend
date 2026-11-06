@@ -123,3 +123,24 @@ def test_advisor_catalog_includes_private_scl_report():
     ]
     assert scl["reports"][2]["status"] == "ready"
     assert scl["reports"][2]["can_download"] is True
+
+
+def test_report_catalog_can_be_scoped_to_one_product():
+    catalog = build_student_report_catalog(
+        access={
+            "AG": {"permission": 1, "limit": 1},
+            "SCL": {"permission": 1, "limit": 1},
+            "PSY_ANX": {"permission": 1, "limit": 1},
+        },
+        quiz_counts={"AG": 1, "SCL": 1, "PSY_ANX": 1},
+        attempts_by_package={
+            "AG": _attempts(1),
+            "SCL": _attempts(1),
+            "PSY_ANX": _attempts(1),
+        },
+        queue_statuses={"AG": 2, "SCL": 2, "PSY_ANX": 2},
+        file_available=lambda _package, _filename: False,
+        product_filter="ag",
+    )
+
+    assert [product["code"] for product in catalog["products"]] == ["AG"]

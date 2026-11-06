@@ -72,7 +72,7 @@ def get_student_report_catalog(request_data, user_info):
     method_type = "SELECT"
     is_valid, validation_error = validate_request_data_fields(
         request_data=request_data,
-        required_fields=["student_id"],
+        required_fields=["student_id", "package_name"],
         method_type=method_type,
     )
     if not is_valid:

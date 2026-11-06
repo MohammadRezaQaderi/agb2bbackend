@@ -36,8 +36,10 @@ def load_student_report_catalog(
     raw_access: Any,
     *,
     include_advisor_reports: bool = False,
+    package_name: str | None = None,
 ) -> dict[str, Any]:
     access = _parse_access(raw_access)
+    requested_package = str(package_name or "").strip().upper()
 
     with session_scope() as session:
         normalized_access = list_student_package_access_for_users(
@@ -46,17 +48,28 @@ def load_student_report_catalog(
         ).get(user_id, {})
         access.update(normalized_access)
 
-        package_names = ["AG", "SCL"] + [
+        psy_package_names = [
             package_name
             for package_name, package_access in access.items()
             if package_name.startswith("PSY_")
             and isinstance(package_access, dict)
             and int(package_access.get("permission") or 0) == 1
         ]
+        if requested_package in {"AG", "SCL"}:
+            package_names = [requested_package]
+        elif requested_package == "PSY":
+            package_names = psy_package_names
+        elif requested_package.startswith("PSY_"):
+            package_names = [requested_package]
+        elif requested_package:
+            package_names = []
+        else:
+            package_names = ["AG", "SCL", *psy_package_names]
         package_names = list(dict.fromkeys(package_names))
         attempts = list_quiz_attempts_for_users(
             session=session,
             user_ids=[user_id],
+            package_names=package_names,
         )
         queue_statuses = {}
         for package_name in package_names:
@@ -93,4 +106,5 @@ def load_student_report_catalog(
         queue_statuses=queue_statuses,
         file_available=_file_available,
         include_advisor_reports=include_advisor_reports,
+        product_filter=requested_package,
     )

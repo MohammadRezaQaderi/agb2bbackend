@@ -154,10 +154,14 @@ def build_student_report_catalog(
     queue_statuses: dict[str, int | None],
     file_available: Callable[[str, str], bool],
     include_advisor_reports: bool = False,
+    product_filter: str | None = None,
 ) -> dict[str, Any]:
     products = []
+    requested_product = str(product_filter or "").strip().upper()
 
     for package_name, definition in CORE_REPORT_PRODUCTS.items():
+        if requested_product and requested_product != package_name:
+            continue
         permission, report_permission = _access_values(access, package_name)
         quiz_count = int(quiz_counts.get(package_name) or 0)
         completed_quizzes = sum(
@@ -216,6 +220,8 @@ def build_student_report_catalog(
     psy_permissions = []
     for package_name in sorted(access):
         if not package_name.startswith("PSY_"):
+            continue
+        if requested_product and requested_product not in {"PSY", package_name}:
             continue
         permission, report_permission = _access_values(access, package_name)
         if permission != 1:

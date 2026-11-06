@@ -143,7 +143,11 @@ def get_report(request_data, user_info):
                 user_id=user_info["user_id"],
                 request_data=request_data,
             )
-        report_info = build_student_report_response(students, include_consultant_name=True)
+        report_info = build_student_report_response(
+            students,
+            include_consultant_name=True,
+            package_name=request_data.get("package_name"),
+        )
         report_info = with_page_metadata(page, report_info)
         token = get_tracking_code()
         return token, report_info, ""
