@@ -22,6 +22,7 @@ from helper.db.sqlalchemy.queries.students import (
 from helper.password_helper import encrypt_password
 from helper.quiz import answer_store
 from helper.quiz.quiz_data_extractor import get_last_question_id, get_quiz_info, get_quiz_table_info
+from helper.psy_catalog import build_psy_catalog
 from helper.service_errors import service_exception_error_logging
 from helper.tracking import get_tracking_code
 from config import REDIS_QUEUE_NAME, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB
@@ -457,6 +458,11 @@ def submit_quiz_answer(request_data, info):
         if not quiz_kind:
             return None, None, "quiz_kind is required"
 
+        stu_access = _load_student_access(info["user_id"])
+        permission, _ = _package_permission(stu_access, quiz_kind)
+        if permission != 1:
+            return None, None, "شما به این محصول دسترسی ندارید."
+
         question_answer = answer_store.normalize_answer_value(request_data.get("question_Answer"))
 
         # If quiz has timed-out on client side, just mark state=2 and exit
@@ -543,3 +549,47 @@ def select_student_access_info(request_data, info):
         service_exception_error_logging("ags_api/stu", "select_student_access_info", str(e), request_data,
                                         info)
         return None, None, "اطلاعات دسترسی دانش‌آموز دریافت نشد."
+
+
+def select_student_psy_catalog(request_data, info):
+    try:
+        access = _load_student_access(info["user_id"])
+        package_names = [
+            package_name
+            for package_name, _package_access in access.items()
+            if package_name.startswith("PSY_") and _package_permission(access, package_name)[0] == 1
+        ]
+        catalog = build_psy_catalog({}, package_names=package_names)
+
+        for package in catalog["packages"]:
+            package_name = package["package_name"]
+            attempts = answer_store.get_attempts(info["user_id"], package_name)
+            completed_quizzes = sum(1 for attempt in attempts if int(attempt.get("state") or 0) == 2)
+            in_progress_quizzes = sum(1 for attempt in attempts if int(attempt.get("state") or 0) == 1)
+            quiz_count = int(package.get("quiz_count") or 0)
+            if quiz_count > 0 and completed_quizzes >= quiz_count:
+                state = "completed"
+            elif attempts:
+                state = "in-progress"
+            else:
+                state = "not-started"
+
+            package["student_progress"] = {
+                "state": state,
+                "completed_quizzes": completed_quizzes,
+                "in_progress_quizzes": in_progress_quizzes,
+                "total_quizzes": quiz_count,
+                "percentage": round((completed_quizzes / quiz_count) * 100 if quiz_count else 0),
+                "report_permission": _package_permission(access, package_name)[1],
+            }
+
+        return get_tracking_code(), catalog, ""
+    except Exception as e:
+        service_exception_error_logging(
+            "ags_api/stu",
+            "select_student_psy_catalog",
+            str(e),
+            request_data,
+            info,
+        )
+        return None, None, "اطلاعات آزمون‌های روان‌شناسی دریافت نشد."

@@ -14,14 +14,20 @@ from helper.quiz.quiz_data_extractor import (
 )
 
 
-def build_psy_catalog(dashboard_info: dict[str, Any] | None) -> dict[str, Any]:
+def build_psy_catalog(
+    dashboard_info: dict[str, Any] | None,
+    package_names: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
     dashboard_info = dashboard_info or {}
     capacities = dashboard_info.get("capacity") or {}
     access_counts = dashboard_info.get("stu") or {}
     quiz_reports = dashboard_info.get("quiz_report") or {}
     packages = []
 
-    for package_name in PSY_PACKAGE_NAMES:
+    selected_package_names = PSY_PACKAGE_NAMES if package_names is None else package_names
+    for package_name in selected_package_names:
+        if package_name not in PSY_PACKAGE_NAMES:
+            continue
         quizzes = get_quiz_table_info(package_name)
         capacity = capacities.get(package_name) or {}
         report = quiz_reports.get(package_name) or {}

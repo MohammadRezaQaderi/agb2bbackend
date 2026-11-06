@@ -125,3 +125,20 @@ def student_get_access_product(request_data, user_info):
         request_data=request_data, info=user_info
     )
     return service_response(method_type, tracking_token, response_data, response_message)
+
+
+def student_get_psy_catalog(request_data, user_info):
+    method_type = "SELECT"
+    if user_info["role"] != "stu":
+        return not_method_access_return()
+
+    tracking_token, response_data, response_message = student_service.select_student_psy_catalog(
+        request_data=request_data,
+        info=user_info,
+    )
+    return service_response(
+        method_type,
+        tracking_token,
+        response_data,
+        response_message,
+    )

@@ -48,3 +48,32 @@ def test_attempt_with_saved_answers_is_reported_as_in_progress(monkeypatch):
 
     assert quizzes[0]["status"] == 1
     assert quizzes[0]["can_start"] == 1
+
+
+def test_submit_quiz_answer_rejects_package_without_access(monkeypatch):
+    monkeypatch.setattr(
+        student_service,
+        "_load_student_access",
+        lambda _user_id: {"PSY_ANX": {"permission": 0, "limit": 0}},
+    )
+    save_answer = Mock()
+    monkeypatch.setattr(
+        student_service.answer_store,
+        "upsert_question_answer",
+        save_answer,
+    )
+
+    token, data, message = student_service.submit_quiz_answer(
+        {
+            "quiz_id": 1,
+            "quiz_kind": "PSY_ANX",
+            "question_Number": 1,
+            "question_Answer": [1],
+        },
+        {"user_id": 42},
+    )
+
+    assert token is None
+    assert data is None
+    assert message == "شما به این محصول دسترسی ندارید."
+    save_answer.assert_not_called()
