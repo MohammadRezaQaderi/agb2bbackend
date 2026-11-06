@@ -73,6 +73,19 @@ CORE_REPORT_PRODUCTS = {
     },
 }
 
+ADVISOR_REPORTS = {
+    "SCL": [
+        {
+            "id": "scl-third-report",
+            "title": "اجمالی (ویژه مشاور)",
+            "icon": "advisor",
+            "download_action": "get_scl_third_pdf",
+            "file_name": "Report5.pdf",
+            "download_name": "اجمالی.pdf",
+        }
+    ],
+}
+
 
 def _access_values(access: dict[str, Any], package_name: str) -> tuple[int, int]:
     package_access = access.get(package_name, {})
@@ -140,6 +153,7 @@ def build_student_report_catalog(
     attempts_by_package: dict[str, list[dict[str, Any]]],
     queue_statuses: dict[str, int | None],
     file_available: Callable[[str, str], bool],
+    include_advisor_reports: bool = False,
 ) -> dict[str, Any]:
     products = []
 
@@ -157,7 +171,11 @@ def build_student_report_catalog(
             queue_statuses.get(package_name),
         )
         reports = []
-        for report_definition in definition["reports"]:
+        report_definitions = list(definition["reports"])
+        if include_advisor_reports:
+            report_definitions.extend(ADVISOR_REPORTS.get(package_name, []))
+
+        for report_definition in report_definitions:
             report_status = base_status
             if (
                 permission == 1

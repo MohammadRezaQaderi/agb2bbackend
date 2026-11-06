@@ -556,7 +556,9 @@ def get_student_access_for_relation(session: Session, stu_user_id: int) -> dict 
             Student.owner_user_id.label("owner_user_id"),
             Student.consultant_user_id.label("consultant_user_id"),
             Student.access.label("access"),
+            User.phone.label("phone"),
         )
+        .join(User, User.user_id == Student.user_id)
         .where(Student.user_id == stu_user_id)
         .limit(1)
     )

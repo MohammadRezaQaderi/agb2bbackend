@@ -131,6 +131,7 @@ MANAGEMENT_SELECT_ACTIONS = {
     "ag_apply_discount": other_gateway.apply_discount,
     "ag_get_transactions": other_gateway.get_transactions,
     "ag_get_report_data": other_gateway.get_report_data,
+    "ag_get_student_report_catalog": other_gateway.get_student_report_catalog,
 }
 
 MANAGEMENT_UPDATE_ACTIONS = {

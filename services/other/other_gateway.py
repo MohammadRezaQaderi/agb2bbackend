@@ -68,6 +68,38 @@ def get_report_data(request_data, user_info):
     )
 
 
+def get_student_report_catalog(request_data, user_info):
+    method_type = "SELECT"
+    is_valid, validation_error = validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["student_id"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return validation_error
+
+    if user_info["role"] not in ["ins", "sch", "con", "ocon"]:
+        return not_method_access_return()
+
+    student_id = request_data.get("student_id")
+    if not check_student_access(student_user_id=student_id, user_info=user_info):
+        return error_response(method_type, "شما به این دانش‌آموز دسترسی ندارید.")
+
+    tracking_token, response_data, response_message = (
+        other_service.get_student_report_catalog(
+            request_data=request_data,
+            user_info=user_info,
+        )
+    )
+    return service_response(
+        method_type,
+        tracking_token,
+        response_data,
+        response_message,
+        error_message="خطا در دریافت وضعیت کارنامه‌ها.",
+    )
+
+
 def get_transactions(request_data, user_info):
     method_type = "SELECT"
     if user_info["role"] in ["ocon", "ins", "sch"]:

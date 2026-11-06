@@ -96,3 +96,30 @@ def test_report_download_access_requires_report_permission():
         {"AG": {"permission": 1, "limit": 0}},
         "AG",
     ) == (1, 0)
+
+
+def test_advisor_catalog_includes_private_scl_report():
+    catalog = build_student_report_catalog(
+        access={
+            "AG": {"permission": 0, "limit": 0},
+            "SCL": {"permission": 1, "limit": 1},
+        },
+        quiz_counts={"AG": 7, "SCL": 4},
+        attempts_by_package={"AG": [], "SCL": _attempts(4)},
+        queue_statuses={"AG": None, "SCL": 2},
+        file_available=lambda package, filename: (
+            package,
+            filename,
+        )
+        == ("SCL", "Report5.pdf"),
+        include_advisor_reports=True,
+    )
+
+    scl = catalog["products"][1]
+    assert [report["id"] for report in scl["reports"]] == [
+        "scl-first-report",
+        "scl-second-report",
+        "scl-third-report",
+    ]
+    assert scl["reports"][2]["status"] == "ready"
+    assert scl["reports"][2]["can_download"] is True

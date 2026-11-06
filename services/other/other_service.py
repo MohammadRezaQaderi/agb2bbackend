@@ -15,13 +15,44 @@ from helper.db.sqlalchemy.queries.other import (
     mark_notification_read_if_allowed,
     record_discount_usage,
 )
+from helper.db.sqlalchemy.queries.students import get_student_access_for_relation
 from helper.payments import calculate_discounted_amount, get_price_payment
 from helper.response import build_comment_list_response, build_transaction_list_response
 from helper.service_errors import service_exception_error_logging
 from helper.tracking import get_tracking_code
+from services.report_catalog_service import load_student_report_catalog
 
 
 logger = logging.getLogger(__name__)
+
+
+def get_student_report_catalog(request_data, user_info):
+    try:
+        student_id = int(request_data["student_id"])
+        with session_scope() as session:
+            student = get_student_access_for_relation(
+                session=session,
+                stu_user_id=student_id,
+            )
+        if not student:
+            return None, None, "دانش‌آموز یافت نشد."
+
+        catalog = load_student_report_catalog(
+            user_id=student_id,
+            phone=student.get("phone") or "",
+            raw_access=student.get("access"),
+            include_advisor_reports=True,
+        )
+        return get_tracking_code(), catalog, ""
+    except Exception as e:
+        service_exception_error_logging(
+            "ag_api/other",
+            "get_student_report_catalog",
+            str(e),
+            request_data,
+            user_info,
+        )
+        return None, None, "اطلاعات کارنامه‌ها دریافت نشد."
 
 
 def _get_active_discount(code, missing_message):
