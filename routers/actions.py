@@ -95,6 +95,7 @@ STUDENT_SELECT_ACTIONS = {
     "ags_get_quiz_setting": quiz_gateway.student_get_quiz_setting,
     "ags_get_access_product": student_gateway.student_get_access_product,
     "ags_get_psy_catalog": student_gateway.student_get_psy_catalog,
+    "ags_get_report_catalog": student_gateway.student_get_report_catalog,
     "ags_get_quiz_table_info": student_gateway.student_get_quiz_table_info,
     "ags_get_quiz_info": student_gateway.student_get_quiz_info,
 }

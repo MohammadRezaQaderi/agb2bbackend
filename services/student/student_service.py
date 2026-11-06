@@ -1,9 +1,13 @@
 import json
 import logging
+import os
 
 import redis
 
+import helper.file_helper as file_helper
+from config import REDIS_DB, REDIS_HOST, REDIS_PASSWORD, REDIS_PORT, REDIS_QUEUE_NAME, REPORTS_DIR
 from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.report_downloads import get_latest_report_queue_status
 from helper.db.sqlalchemy.queries.students import (
     create_redis_log,
     get_latest_ag_score_summary,
@@ -23,9 +27,9 @@ from helper.password_helper import encrypt_password
 from helper.quiz import answer_store
 from helper.quiz.quiz_data_extractor import get_last_question_id, get_quiz_info, get_quiz_table_info
 from helper.psy_catalog import build_psy_catalog
+from helper.report_catalog import build_student_report_catalog
 from helper.service_errors import service_exception_error_logging
 from helper.tracking import get_tracking_code
-from config import REDIS_QUEUE_NAME, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB
 
 AG_REPORT_INFO = {
     "t_state": {"name": "تجربی", "title": "t_state"},
@@ -549,6 +553,74 @@ def select_student_access_info(request_data, info):
         service_exception_error_logging("ags_api/stu", "select_student_access_info", str(e), request_data,
                                         info)
         return None, None, "اطلاعات دسترسی دانش‌آموز دریافت نشد."
+
+
+def select_student_report_catalog(request_data, info):
+    try:
+        access = _load_student_access(info["user_id"])
+        package_names = ["AG", "SCL"] + [
+            package_name
+            for package_name, package_access in access.items()
+            if package_name.startswith("PSY_")
+            and _package_permission(access, package_name)[0] == 1
+        ]
+        quiz_counts = {
+            package_name: len(get_quiz_table_info(package_name) or [])
+            for package_name in package_names
+        }
+        attempts_by_package = {
+            package_name: answer_store.get_attempts(info["user_id"], package_name)
+            for package_name in package_names
+        }
+
+        with session_scope() as session:
+            queue_statuses = {}
+            for package_name in package_names:
+                queue_info = get_latest_report_queue_status(
+                    session=session,
+                    user_id=info["user_id"],
+                    kind=package_name,
+                )
+                queue_statuses[package_name] = (
+                    queue_info.get("status") if queue_info else None
+                )
+            comment_row = get_student_access_comment(
+                session=session,
+                user_id=info["user_id"],
+            )
+
+        phone = file_helper.normalize_storage_filename(info.get("phone") or "")
+        report_directory = file_helper.safe_storage_path(REPORTS_DIR, phone)
+
+        def _file_available(_package_name, file_name):
+            try:
+                return os.path.isfile(
+                    file_helper.safe_storage_path(
+                        report_directory,
+                        file_name,
+                    )
+                )
+            except file_helper.FileValidationError:
+                return False
+
+        catalog = build_student_report_catalog(
+            access=access,
+            quiz_counts=quiz_counts,
+            attempts_by_package=attempts_by_package,
+            queue_statuses=queue_statuses,
+            file_available=_file_available,
+        )
+        catalog["comment"] = comment_row.get("comment") if comment_row else None
+        return get_tracking_code(), catalog, ""
+    except Exception as e:
+        service_exception_error_logging(
+            "ags_api/stu",
+            "select_student_report_catalog",
+            str(e),
+            request_data,
+            info,
+        )
+        return None, None, "اطلاعات کارنامه‌ها دریافت نشد."
 
 
 def select_student_psy_catalog(request_data, info):
