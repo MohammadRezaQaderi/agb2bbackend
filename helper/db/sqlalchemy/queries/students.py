@@ -310,6 +310,36 @@ def list_student_package_access(session: Session, user_id: int) -> list[dict]:
     return [dict(row) for row in session.execute(statement).mappings().all()]
 
 
+def list_student_package_access_for_users(
+    session: Session,
+    user_ids: list[int],
+) -> dict[int, dict[str, dict[str, int]]]:
+    if not user_ids:
+        return {}
+
+    statement = (
+        select(
+            StudentPackageAccess.stu_user_id.label("stu_user_id"),
+            StudentPackageAccess.package_name.label("package_name"),
+            StudentPackageAccess.permission.label("permission"),
+            StudentPackageAccess.limit.label("limit"),
+        )
+        .where(StudentPackageAccess.stu_user_id.in_(user_ids))
+        .order_by(StudentPackageAccess.stu_user_id, StudentPackageAccess.package_name)
+    )
+    access_by_user: dict[int, dict[str, dict[str, int]]] = {}
+    for row in session.execute(statement).mappings().all():
+        stu_user_id = int(row["stu_user_id"])
+        package_name = str(row["package_name"] or "").upper()
+        if not package_name:
+            continue
+        access_by_user.setdefault(stu_user_id, {})[package_name] = {
+            "permission": int(row["permission"] or 0),
+            "limit": int(row["limit"] or 0),
+        }
+    return access_by_user
+
+
 def get_student_legacy_access(session: Session, user_id: int) -> str | None:
     statement = select(Student.access).where(Student.user_id == user_id)
     return session.execute(statement).scalar_one_or_none()

@@ -2,6 +2,7 @@ from helper.account_passwords import update_user_and_role_password
 from helper.constants import PACKAGES_DATA
 from helper.request_validation import validate_request_data_fields
 from helper.service_errors import not_method_access_return
+from helper.student_access import update_student_accesses_and_capacity
 from helper.validators import password_format_check
 from helper.student_education import EDUCATION_FIELD_IDS, EDUCATION_LEVEL_IDS
 import services.consultant.consultant_service as consultant_service
@@ -110,6 +111,31 @@ def change_student_access(request_data, user_info):
         return not_method_access_return()
 
     tracking_token, response_data, response_message = result
+    return service_response(method_type, tracking_token, response_data, response_message)
+
+
+def change_student_access_batch(request_data, user_info):
+    method_type = "UPDATE"
+    if user_info["role"] == "con":
+        return error_response(method_type, ACCESS_DENIED_MESSAGE)
+
+    role_config = {
+        "ins": ("ins", "owner_user_id", "ag_api/ins"),
+        "sch": ("sch", "owner_user_id", "ag_api/sch"),
+        "ocon": ("ocon", "consultant_user_id", "ag_api/ocon"),
+    }
+    config = role_config.get(user_info.get("role"))
+    if config is None:
+        return not_method_access_return()
+
+    role_type, id_field, end_point = config
+    tracking_token, response_data, response_message = update_student_accesses_and_capacity(
+        request_data=request_data,
+        user_info=user_info,
+        role_type=role_type,
+        id_field=id_field,
+        end_point=end_point,
+    )
     return service_response(method_type, tracking_token, response_data, response_message)
 
 

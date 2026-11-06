@@ -139,6 +139,7 @@ MANAGEMENT_UPDATE_ACTIONS = {
     "ag_change_comment": management_gateway.change_comment,
     "ag_change_user_quiz_setting": management_gateway.change_user_quiz_setting,
     "ag_change_student_access": management_gateway.change_student_access,
+    "ag_change_student_access_batch": management_gateway.change_student_access_batch,
 }
 
 MANAGEMENT_DELETE_ACTIONS = {

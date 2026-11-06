@@ -53,6 +53,7 @@ def test_pagination_request_and_payload_are_backward_compatible():
 
 def test_student_listing_only_paginates_when_requested(monkeypatch):
     monkeypatch.setattr(listing, "list_students", lambda **_kwargs: [{"user_id": 1}])
+    monkeypatch.setattr(listing, "list_student_package_access_for_users", lambda **_kwargs: {})
     monkeypatch.setattr(
         listing,
         "paginate_students",
@@ -72,6 +73,28 @@ def test_student_listing_only_paginates_when_requested(monkeypatch):
     assert rows == [{"user_id": 2}]
     assert page is not None
     assert page.total == 21
+
+
+def test_student_listing_merges_normalized_package_access(monkeypatch):
+    monkeypatch.setattr(
+        listing,
+        "list_student_package_access_for_users",
+        lambda **_kwargs: {
+            30: {
+                "PSY_ANX": {"permission": 1, "limit": 0},
+                "PSY_MBTI": {"permission": 1, "limit": 1},
+            }
+        },
+    )
+    students = [{"user_id": 30, "access": '{"AG": {"permission": 1, "limit": 1}}'}]
+
+    result = listing.attach_normalized_student_access(object(), students)
+
+    assert result[0]["access"] == {
+        "AG": {"permission": 1, "limit": 1},
+        "PSY_ANX": {"permission": 1, "limit": 0},
+        "PSY_MBTI": {"permission": 1, "limit": 1},
+    }
 
 
 def test_student_pagination_applies_scope_product_filters_and_sorting():
