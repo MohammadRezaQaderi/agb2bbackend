@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from helper.db.sqlalchemy.filters import StudentFilters
@@ -13,6 +13,7 @@ from helper.db.sqlalchemy.models import (
     Consultant,
     Institute,
     Notification,
+    NotificationRead,
     OwnerConsultant,
     RedisLog,
     ResultState,
@@ -454,8 +455,22 @@ def get_result_state(session: Session, user_id: int) -> dict | None:
 
 
 def list_student_notifications(session: Session, user_id: int, role: str, limit: int = 10) -> list[dict]:
+    read_exists = exists().where(
+        NotificationRead.notification_id == Notification.id,
+        NotificationRead.user_id == user_id,
+    )
+    role_terms = {
+        "stu": ["stu", "student"],
+    }.get(role, [role])
+    role_conditions = [
+        Notification.roles.like(f"%{role_term}%")
+        for role_term in role_terms
+        if role_term
+    ]
+
     statement = (
         select(
+            Notification.id.label("id"),
             Notification.title.label("title"),
             Notification.description.label("description"),
             Notification.added_by.label("added_by"),
@@ -463,12 +478,22 @@ def list_student_notifications(session: Session, user_id: int, role: str, limit:
             Notification.persian_date.label("persian_date"),
             Notification.full_text.label("fullText"),
             Notification.created_time.label("created_time"),
+            case((read_exists, 1), else_=0).label("is_read"),
         )
-        .where(or_(Notification.user_id == user_id, Notification.roles.like(f"%{role}%")))
+        .where(
+            or_(
+                Notification.user_id == user_id,
+                Notification.roles.like("%all%"),
+                *role_conditions,
+            )
+        )
         .order_by(Notification.created_time.desc())
         .limit(limit)
     )
-    return [dict(row) for row in session.execute(statement).mappings().all()]
+    return [
+        {**dict(row), "is_read": int(row["is_read"] or 0)}
+        for row in session.execute(statement).mappings().all()
+    ]
 
 
 def get_quiz_setting(

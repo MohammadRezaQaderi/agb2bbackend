@@ -100,6 +100,10 @@ STUDENT_SELECT_ACTIONS = {
     "ags_get_quiz_info": student_gateway.student_get_quiz_info,
 }
 
+STUDENT_INSERT_ACTIONS = {
+    "ags_mark_notification_read": other_gateway.mark_notification_read,
+}
+
 STUDENT_UPDATE_ACTIONS = {
     "ags_change_user_info": student_gateway.student_change_user_info,
     "ags_change_password": student_gateway.student_change_password,
@@ -205,6 +209,21 @@ async def student_update_api(request: Request):
             request,
             "UPDATE",
             STUDENT_UPDATE_ACTIONS,
+        ),
+    )
+
+
+@router.post("/ags_api/insert_request")
+@api_metrics.monitor_endpoint("ags_api/insert_request")
+async def student_insert_api(request: Request):
+    return await run_endpoint(
+        "ags_api/insert_request",
+        "student_insert_api",
+        "INSERT",
+        lambda: dispatch_authenticated_action(
+            request,
+            "INSERT",
+            STUDENT_INSERT_ACTIONS,
         ),
     )
 
