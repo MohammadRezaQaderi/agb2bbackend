@@ -91,6 +91,32 @@ def test_report_catalog_requires_separate_report_permission():
     assert all(report["can_download"] is False for report in ag["reports"])
 
 
+def test_organization_catalog_does_not_require_report_limit():
+    catalog = build_student_report_catalog(
+        access={
+            "AG": {"permission": 1, "limit": 0},
+            "SCL": {"permission": 0, "limit": 0},
+        },
+        quiz_counts={"AG": 1, "SCL": 1},
+        attempts_by_package={"AG": _attempts(1), "SCL": []},
+        queue_statuses={"AG": 2, "SCL": None},
+        file_available=lambda package, filename: (
+            package,
+            filename,
+        )
+        == ("AG", "Report1.pdf"),
+        require_report_permission=False,
+    )
+
+    ag = catalog["products"][0]
+    assert ag["report_permission"] == 1
+    assert [report["status"] for report in ag["reports"]] == [
+        "ready",
+        "preparing",
+    ]
+    assert ag["reports"][0]["can_download"] is True
+
+
 def test_report_download_access_requires_report_permission():
     assert report_download_access_values(
         {"AG": {"permission": 1, "limit": 0}},

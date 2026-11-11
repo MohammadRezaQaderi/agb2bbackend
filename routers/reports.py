@@ -1,6 +1,6 @@
 import os
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 import helper.file_helper as file_helper
@@ -22,6 +22,7 @@ def _report_error(status_code: int, message: str) -> JSONResponse:
 
 
 async def _get_report_pdf(
+    request: Request,
     phone: str,
     kind: str,
     expected_kind: str,
@@ -41,6 +42,7 @@ async def _get_report_pdf(
                 phone=phone,
                 kind=kind,
                 expected_quiz_count=expected_quiz_count,
+                require_report_permission=request.url.path.startswith("/ags_api/"),
             )
 
         status = report_status["status"]
@@ -73,29 +75,74 @@ async def _get_report_pdf(
 
 @router.get("/ags_api/get_ag_first_pdf/{phone}/{kind}")
 @router.get("/ag_api/get_ag_first_pdf/{phone}/{kind}")
-async def get_ag_first_pdf(phone: str, kind: str):
-    return await _get_report_pdf(phone, kind, "AG", 7, "Report1.pdf", "ag_api/get_report1", "get_report1")
+async def get_ag_first_pdf(request: Request, phone: str, kind: str):
+    return await _get_report_pdf(
+        request,
+        phone,
+        kind,
+        "AG",
+        7,
+        "Report1.pdf",
+        "ag_api/get_report1",
+        "get_report1",
+    )
 
 
 @router.get("/ags_api/get_ag_second_pdf/{phone}/{kind}")
 @router.get("/ag_api/get_ag_second_pdf/{phone}/{kind}")
-async def get_ag_second_pdf(phone: str, kind: str):
-    return await _get_report_pdf(phone, kind, "AG", 7, "Report2.pdf", "ag_api/get_report2", "get_report2")
+async def get_ag_second_pdf(request: Request, phone: str, kind: str):
+    return await _get_report_pdf(
+        request,
+        phone,
+        kind,
+        "AG",
+        7,
+        "Report2.pdf",
+        "ag_api/get_report2",
+        "get_report2",
+    )
 
 
 @router.get("/ags_api/get_scl_first_pdf/{phone}/{kind}")
 @router.get("/ag_api/get_scl_first_pdf/{phone}/{kind}")
-async def get_scl_first_pdf(phone: str, kind: str):
-    return await _get_report_pdf(phone, kind, "SCL", 4, "Report3.pdf", "ag_api/get_report3", "get_report3")
+async def get_scl_first_pdf(request: Request, phone: str, kind: str):
+    return await _get_report_pdf(
+        request,
+        phone,
+        kind,
+        "SCL",
+        4,
+        "Report3.pdf",
+        "ag_api/get_report3",
+        "get_report3",
+    )
 
 
 @router.get("/ags_api/get_scl_second_pdf/{phone}/{kind}")
 @router.get("/ag_api/get_scl_second_pdf/{phone}/{kind}")
-async def get_scl_second_pdf(phone: str, kind: str):
-    return await _get_report_pdf(phone, kind, "SCL", 4, "Report4.pdf", "ag_api/get_report4", "get_report4")
+async def get_scl_second_pdf(request: Request, phone: str, kind: str):
+    return await _get_report_pdf(
+        request,
+        phone,
+        kind,
+        "SCL",
+        4,
+        "Report4.pdf",
+        "ag_api/get_report4",
+        "get_report4",
+    )
 
 
 @router.get("/ags_api/get_scl_third_pdf/{phone}/{kind}")
 @router.get("/ag_api/get_scl_third_pdf/{phone}/{kind}")
-async def get_scl_third_pdf(phone: str, kind: str):
-    return await _get_report_pdf(phone, kind, "SCL", 4, "Report5.pdf", "ag_api/get_report4", "get_report4")
+async def get_scl_third_pdf(request: Request, phone: str, kind: str):
+    return await _get_report_pdf(
+        request,
+        phone,
+        kind,
+        "SCL",
+        4,
+        "Report5.pdf",
+        "ag_api/get_report4",
+        "get_report4",
+    )

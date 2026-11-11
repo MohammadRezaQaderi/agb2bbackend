@@ -37,6 +37,7 @@ def load_student_report_catalog(
     *,
     include_advisor_reports: bool = False,
     package_name: str | None = None,
+    require_report_permission: bool = True,
 ) -> dict[str, Any]:
     access = _parse_access(raw_access)
     requested_package = str(package_name or "").strip().upper()
@@ -107,4 +108,5 @@ def load_student_report_catalog(
         file_available=_file_available,
         include_advisor_reports=include_advisor_reports,
         product_filter=requested_package,
+        require_report_permission=require_report_permission,
     )

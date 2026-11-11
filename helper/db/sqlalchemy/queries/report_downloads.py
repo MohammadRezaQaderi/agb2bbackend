@@ -58,7 +58,14 @@ def get_latest_report_queue_status(
     return dict(row) if row else None
 
 
-def get_report_download_status(session: Session, phone: str, kind: str, expected_quiz_count: int) -> dict:
+def get_report_download_status(
+    session: Session,
+    phone: str,
+    kind: str,
+    expected_quiz_count: int,
+    *,
+    require_report_permission: bool = True,
+) -> dict:
     student = (
         session.execute(
             select(
@@ -101,7 +108,7 @@ def get_report_download_status(session: Session, phone: str, kind: str, expected
     else:
         permission, report_permission = _access_values(access_data, kind)
 
-    if permission != 1 or report_permission != 1:
+    if permission != 1 or (require_report_permission and report_permission != 1):
         return {"status": "access_denied", "user_id": student["user_id"]}
 
     attempts = (

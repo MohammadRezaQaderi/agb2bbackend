@@ -155,6 +155,7 @@ def build_student_report_catalog(
     file_available: Callable[[str, str], bool],
     include_advisor_reports: bool = False,
     product_filter: str | None = None,
+    require_report_permission: bool = True,
 ) -> dict[str, Any]:
     products = []
     requested_product = str(product_filter or "").strip().upper()
@@ -162,7 +163,10 @@ def build_student_report_catalog(
     for package_name, definition in CORE_REPORT_PRODUCTS.items():
         if requested_product and requested_product != package_name:
             continue
-        permission, report_permission = _access_values(access, package_name)
+        permission, stored_report_permission = _access_values(access, package_name)
+        report_permission = (
+            stored_report_permission if require_report_permission else 1
+        )
         quiz_count = int(quiz_counts.get(package_name) or 0)
         completed_quizzes = sum(
             1 for attempt in attempts_by_package.get(package_name, []) if int(attempt.get("state") or 0) == 2
@@ -223,7 +227,10 @@ def build_student_report_catalog(
             continue
         if requested_product and requested_product not in {"PSY", package_name}:
             continue
-        permission, report_permission = _access_values(access, package_name)
+        permission, stored_report_permission = _access_values(access, package_name)
+        report_permission = (
+            stored_report_permission if require_report_permission else 1
+        )
         if permission != 1:
             continue
         psy_permissions.append(report_permission)

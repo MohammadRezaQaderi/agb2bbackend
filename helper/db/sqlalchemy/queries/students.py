@@ -18,6 +18,7 @@ from helper.db.sqlalchemy.models import (
     RedisLog,
     ResultState,
     School,
+    SclScore,
     Score,
     Setting,
     Student,
@@ -250,6 +251,32 @@ def list_students_for_consultant(
     return list_students(session, scope="consultant", user_id=consultant_user_id, filters=filters)
 
 
+def list_student_options(
+    session: Session,
+    scope: StudentScope,
+    user_id: int,
+) -> list[dict]:
+    if scope == "owner":
+        scope_column = Student.owner_user_id
+    elif scope == "consultant":
+        scope_column = Student.consultant_user_id
+    else:
+        raise ValueError(f"Unsupported student scope: {scope}")
+
+    statement = (
+        select(
+            Student.user_id.label("user_id"),
+            Student.first_name.label("first_name"),
+            Student.last_name.label("last_name"),
+            User.phone.label("phone"),
+        )
+        .join(User, User.user_id == Student.user_id)
+        .where(scope_column == user_id)
+        .order_by(Student.first_name.asc(), Student.last_name.asc(), Student.user_id.asc())
+    )
+    return [dict(row) for row in session.execute(statement).mappings().all()]
+
+
 def list_students_without_package_access(
     session: Session,
     scope: StudentScope,
@@ -396,6 +423,8 @@ def get_student_profile(session: Session, user_id: int) -> dict | None:
             Student.owner_user_id.label("owner_user_id"),
             Student.consultant_user_id.label("consultant_user_id"),
             Student.birth_date.label("birth_date"),
+            Student.education_level.label("education_level"),
+            Student.education_field.label("education_field"),
             owner.role.label("owner_role"),
             Institute.name.label("institute_name"),
             Institute.logo.label("institute_logo"),
@@ -429,6 +458,17 @@ def get_latest_ag_score_summary(session: Session, user_id: int) -> dict | None:
         )
         .where(Score.user_id == user_id)
         .order_by(Score.edited_time.desc())
+        .limit(1)
+    )
+    row = session.execute(statement).mappings().first()
+    return dict(row) if row else None
+
+
+def get_latest_scl_score_summary(session: Session, user_id: int) -> dict | None:
+    statement = (
+        select(SclScore.scl_date.label("scl_date"))
+        .where(SclScore.user_id == user_id)
+        .order_by(SclScore.edited_time.desc())
         .limit(1)
     )
     row = session.execute(statement).mappings().first()

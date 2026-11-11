@@ -138,6 +138,9 @@ def test_report_permission_denied_before_file_lookup(monkeypatch, prefix):
     assert response.status_code == 403
     assert response.json()["status"] == 403
     status_lookup.assert_called_once()
+    assert status_lookup.call_args.kwargs["require_report_permission"] is (
+        prefix == "ags_api"
+    )
     file_lookup.assert_not_called()
 
 

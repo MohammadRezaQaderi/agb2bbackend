@@ -43,6 +43,7 @@ def get_student_report_catalog(request_data, user_info):
             raw_access=student.get("access"),
             include_advisor_reports=True,
             package_name=request_data.get("package_name"),
+            require_report_permission=False,
         )
         return get_tracking_code(), catalog, ""
     except Exception as e:

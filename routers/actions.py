@@ -128,6 +128,8 @@ MANAGEMENT_SELECT_ACTIONS = {
     "ag_get_students_without_product_access": management_gateway.get_students_without_product_access,
     "ag_get_consultants": management_gateway.get_consultants,
     "ag_get_students": management_gateway.get_students,
+    "ag_get_student_options": management_gateway.get_student_options,
+    "ag_get_student_management": management_gateway.get_student_management,
     "ag_get_report": management_gateway.get_report,
     "ag_get_management_report": management_gateway.get_management_report,
     "ag_get_quiz_setting": quiz_gateway.get_quiz_setting,

@@ -10,6 +10,7 @@ import services.consultant.consultant_service as consultant_service
 import services.institute.institute_service as institute_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
+import services.student_management_service as student_management_service
 from services.gateway_helpers import ACCESS_DENIED_MESSAGE, error_response, role_handler, service_response
 
 
@@ -267,6 +268,51 @@ def get_students(request_data, user_info):
 
     tracking_token, response_data, response_message = result
     return service_response(method_type, tracking_token, response_data, response_message)
+
+
+def get_student_options(request_data, user_info):
+    method_type = "SELECT"
+    if user_info.get("role") not in {"ins", "sch", "con", "ocon"}:
+        return not_method_access_return()
+
+    tracking_token, response_data, response_message = (
+        student_management_service.get_student_options(
+            request_data=request_data,
+            user_info=user_info,
+        )
+    )
+    return service_response(
+        method_type,
+        tracking_token,
+        response_data,
+        response_message,
+    )
+
+
+def get_student_management(request_data, user_info):
+    method_type = "SELECT"
+    is_valid, validation_error = validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["student_id"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return validation_error
+    if user_info.get("role") not in {"ins", "sch", "con", "ocon"}:
+        return not_method_access_return()
+
+    tracking_token, response_data, response_message = (
+        student_management_service.get_student_management(
+            request_data=request_data,
+            user_info=user_info,
+        )
+    )
+    return service_response(
+        method_type,
+        tracking_token,
+        response_data,
+        response_message,
+    )
 
 
 def change_student(request_data, user_info):
