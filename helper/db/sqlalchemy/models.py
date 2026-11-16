@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -110,6 +111,14 @@ class Student(Base, TimestampMixin):
     birth_date: Mapped[str | None] = mapped_column(Unicode(4), nullable=True)
     education_level: Mapped[str | None] = mapped_column(Unicode(10), nullable=True)
     education_field: Mapped[str | None] = mapped_column(Unicode(30), nullable=True)
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    archived_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.user_id"), nullable=True)
     consultant_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.user_id"), nullable=True)
     adder_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

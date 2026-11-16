@@ -14,6 +14,7 @@ class StudentFilters:
     city: str | None = None
     package_name: str | None = None
     access_permission: int | None = None
+    archived: bool = False
 
     @classmethod
     def from_request(cls, request_data: dict | None) -> "StudentFilters":
@@ -40,6 +41,7 @@ class StudentFilters:
             city=_clean_string(value("city")),
             package_name=_clean_string(value("package_name")),
             access_permission=_clean_int(value("access_permission")),
+            archived=_clean_bool(value("archived", "is_archived")) is True,
         )
 
 
@@ -87,3 +89,17 @@ def _clean_int(value: object) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _clean_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in {0, 1}:
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no", ""}:
+            return False
+    return None

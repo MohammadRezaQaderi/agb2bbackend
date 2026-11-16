@@ -53,6 +53,9 @@ def student_list_statement(
             Student.birth_date.label("birth_date"),
             Student.education_level.label("education_level"),
             Student.education_field.label("education_field"),
+            Student.is_archived.label("is_archived"),
+            Student.archived_at.label("archived_at"),
+            Student.archived_by.label("archived_by"),
             Student.access.label("access"),
             Student.comment.label("comment"),
             Student.owner_user_id.label("owner_user_id"),
@@ -63,6 +66,7 @@ def student_list_statement(
         )
         .join(User, User.user_id == Student.user_id)
         .outerjoin(consultant, consultant.user_id == Student.consultant_user_id)
+        .where(Student.is_archived == filters.archived)
     )
 
     if scope == "owner":
@@ -119,6 +123,9 @@ def student_list_statement(
             access_conditions.append(StudentPackageAccess.permission == filters.access_permission)
 
         statement = statement.where(select(StudentPackageAccess.id).where(and_(*access_conditions)).exists())
+
+    if filters.archived and not sort_by:
+        return statement.order_by(Student.archived_at.desc(), Student.user_id.desc())
 
     return _apply_student_sorting(
         statement,
@@ -271,7 +278,7 @@ def list_student_options(
             User.phone.label("phone"),
         )
         .join(User, User.user_id == Student.user_id)
-        .where(scope_column == user_id)
+        .where(scope_column == user_id, Student.is_archived == 0)
         .order_by(Student.first_name.asc(), Student.last_name.asc(), Student.user_id.asc())
     )
     return [dict(row) for row in session.execute(statement).mappings().all()]
@@ -306,6 +313,7 @@ def list_students_without_package_access(
         )
         .join(User, User.user_id == Student.user_id)
         .where(scope_column == user_id)
+        .where(Student.is_archived == 0)
         .where(~has_package_access)
         .order_by(Student.created_time.desc(), Student.user_id.desc())
     )
@@ -620,6 +628,7 @@ def get_student_access_for_relation(session: Session, stu_user_id: int) -> dict 
         select(
             Student.owner_user_id.label("owner_user_id"),
             Student.consultant_user_id.label("consultant_user_id"),
+            Student.is_archived.label("is_archived"),
             Student.access.label("access"),
             User.phone.label("phone"),
         )
@@ -806,3 +815,43 @@ def update_student_profile_for_owner(
     student.edited_time = datetime.now()
     session.flush()
     return 1
+
+
+def set_student_archive_state(
+    session: Session,
+    student_user_id: int,
+    scope: StudentScope,
+    actor_user_id: int,
+    archived: bool,
+) -> dict | None:
+    if scope == "owner":
+        scope_column = Student.owner_user_id
+    elif scope == "consultant":
+        scope_column = Student.consultant_user_id
+    else:
+        raise ValueError(f"Unsupported student scope: {scope}")
+
+    statement = select(Student).where(
+        Student.user_id == student_user_id,
+        scope_column == actor_user_id,
+    )
+    student = session.execute(statement).scalar_one_or_none()
+    if student is None:
+        return None
+
+    desired_state = bool(archived)
+    changed = bool(student.is_archived) != desired_state
+    if changed:
+        student.is_archived = desired_state
+        student.archived_at = datetime.now() if desired_state else None
+        student.archived_by = actor_user_id if desired_state else None
+        student.edited_time = datetime.now()
+        session.flush()
+
+    return {
+        "student_id": student.user_id,
+        "is_archived": bool(student.is_archived),
+        "archived_at": student.archived_at,
+        "archived_by": student.archived_by,
+        "changed": changed,
+    }

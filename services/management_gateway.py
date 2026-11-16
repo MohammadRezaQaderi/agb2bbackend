@@ -257,6 +257,25 @@ def change_consultant(request_data, user_info):
 
 def get_students(request_data, user_info):
     method_type = "SELECT"
+    column_filters = request_data.get("filters")
+    column_filters = column_filters if isinstance(column_filters, dict) else {}
+    archived_value = next(
+        (
+            source[key]
+            for key in ("archived", "is_archived")
+            for source in (request_data, column_filters)
+            if key in source
+        ),
+        None,
+    )
+    archived_requested = archived_value is True or str(archived_value).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if archived_requested and user_info.get("role") not in {"ins", "ocon"}:
+        return error_response(method_type, ACCESS_DENIED_MESSAGE)
+
     result = role_handler(user_info, {
         "ins": lambda: institute_service.get_students(request_data=request_data, user_info=user_info),
         "sch": lambda: school_service.get_students(request_data=request_data, user_info=user_info),
@@ -268,6 +287,43 @@ def get_students(request_data, user_info):
 
     tracking_token, response_data, response_message = result
     return service_response(method_type, tracking_token, response_data, response_message)
+
+
+def _change_student_archive_state(request_data, user_info, restore=False):
+    method_type = "UPDATE"
+    is_valid, validation_error = validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["student_id"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return validation_error
+    if user_info.get("role") not in {"ins", "ocon"}:
+        return error_response(method_type, ACCESS_DENIED_MESSAGE)
+
+    handler = (
+        student_management_service.restore_student
+        if restore
+        else student_management_service.archive_student
+    )
+    tracking_token, response_data, response_message = handler(
+        request_data=request_data,
+        user_info=user_info,
+    )
+    return service_response(
+        method_type,
+        tracking_token,
+        response_data,
+        response_message,
+    )
+
+
+def archive_student(request_data, user_info):
+    return _change_student_archive_state(request_data, user_info)
+
+
+def restore_student(request_data, user_info):
+    return _change_student_archive_state(request_data, user_info, restore=True)
 
 
 def get_student_options(request_data, user_info):

@@ -2,6 +2,7 @@ from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.students import (
     get_student_access_for_relation,
     list_student_options,
+    set_student_archive_state,
 )
 from helper.service_errors import service_exception_error_logging
 from helper.tracking import get_tracking_code
@@ -11,6 +12,14 @@ def _scope_for_role(role):
     if role in {"ins", "sch"}:
         return "owner"
     if role in {"con", "ocon"}:
+        return "consultant"
+    return None
+
+
+def _archive_scope_for_role(role):
+    if role == "ins":
+        return "owner"
+    if role == "ocon":
         return "consultant"
     return None
 
@@ -50,6 +59,8 @@ def get_student_management(request_data, user_info):
 
         if not relation:
             return None, None, "دانش‌آموز یافت نشد."
+        if relation.get("is_archived"):
+            return None, None, "این دانش‌آموز بایگانی شده است."
 
         role = user_info.get("role")
         current_user_id = int(user_info["user_id"])
@@ -78,3 +89,51 @@ def get_student_management(request_data, user_info):
             user_info,
         )
         return None, None, "اطلاعات مدیریتی دانش‌آموز دریافت نشد."
+
+
+def _change_student_archive_state(request_data, user_info, archived):
+    action_name = "archive_student" if archived else "restore_student"
+    try:
+        scope = _archive_scope_for_role(user_info.get("role"))
+        if not scope:
+            return None, None, "شما به این عملیات دسترسی ندارید."
+
+        student_id = int(request_data["student_id"])
+        actor_user_id = int(user_info["user_id"])
+        with session_scope() as session:
+            result = set_student_archive_state(
+                session=session,
+                student_user_id=student_id,
+                scope=scope,
+                actor_user_id=actor_user_id,
+                archived=archived,
+            )
+
+        if result is None:
+            return None, None, "دانش‌آموز یافت نشد یا به او دسترسی ندارید."
+
+        message = (
+            "دانش‌آموز با موفقیت بایگانی شد."
+            if archived
+            else "دانش‌آموز با موفقیت بازیابی شد."
+        )
+        return get_tracking_code(), result, message
+    except (TypeError, ValueError):
+        return None, None, "شناسه دانش‌آموز معتبر نیست."
+    except Exception as exc:
+        service_exception_error_logging(
+            "ag_api/management",
+            action_name,
+            str(exc),
+            request_data,
+            user_info,
+        )
+        return None, None, "تغییر وضعیت دانش‌آموز انجام نشد."
+
+
+def archive_student(request_data, user_info):
+    return _change_student_archive_state(request_data, user_info, archived=True)
+
+
+def restore_student(request_data, user_info):
+    return _change_student_archive_state(request_data, user_info, archived=False)

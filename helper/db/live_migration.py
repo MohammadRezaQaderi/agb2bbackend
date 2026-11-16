@@ -149,6 +149,33 @@ def migration_student_education(conn: pyodbc.Connection, cursor: pyodbc.Cursor, 
     print(f"APPLIED: added education columns and backfilled {len(updates)} student rows")
 
 
+def migration_student_archiving(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run: bool) -> None:
+    schema_name = get_table_schema(cursor, "stu")
+    table_ref = f"{quote_identifier(schema_name)}.[stu]"
+    columns = (
+        ("is_archived", "BIT NOT NULL DEFAULT 0"),
+        ("archived_at", "DATETIME NULL"),
+        ("archived_by", "INT NULL"),
+    )
+
+    changed = False
+    for column_name, sql_type in columns:
+        if column_exists(cursor, schema_name, "stu", column_name):
+            print(f"SKIP: {schema_name}.stu.{column_name} already exists")
+            continue
+
+        sql = f"ALTER TABLE {table_ref} ADD {quote_identifier(column_name)} {sql_type}"
+        if dry_run:
+            print(f"DRY RUN: {sql}")
+        else:
+            cursor.execute(sql)
+            changed = True
+
+    if not dry_run and changed:
+        conn.commit()
+        print("APPLIED: student archiving columns")
+
+
 def migration_psy_capacity_packages(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run: bool) -> None:
     capacity_schema = get_table_schema(cursor, "capacity")
     package_schema = get_table_schema(cursor, "capacity_package")
@@ -201,6 +228,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration("2026_08_10_add_ocon_logo", migration_ocon_logo),
     Migration("2026_11_03_add_student_education", migration_student_education),
     Migration("2026_11_06_add_psy_capacity_packages", migration_psy_capacity_packages),
+    Migration("2026_11_16_add_student_archiving", migration_student_archiving),
 )
 
 

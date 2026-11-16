@@ -62,7 +62,11 @@ def list_capacity_packages_for_user(
 
 
 def count_students_for_scope(session: Session, scope: StudentScope, user_id: int) -> int:
-    statement = select(func.count()).select_from(Student).where(_student_scope_column(scope) == user_id)
+    statement = (
+        select(func.count())
+        .select_from(Student)
+        .where(_student_scope_column(scope) == user_id, Student.is_archived == 0)
+    )
     return int(session.execute(statement).scalar_one() or 0)
 
 
@@ -77,7 +81,9 @@ def count_student_packages_for_scope(session: Session, scope: StudentScope, user
             StudentPackageAccess.package_name.label("package_name"),
             func.count().label("total"),
         )
+        .join(Student, Student.user_id == StudentPackageAccess.stu_user_id)
         .where(_package_access_scope_column(scope) == user_id)
+        .where(Student.is_archived == 0)
         .where(StudentPackageAccess.permission == 1)
         .group_by(StudentPackageAccess.package_name)
     )
@@ -96,7 +102,9 @@ def list_quiz_attempts_for_scope(session: Session, scope: StudentScope, user_id:
             QuizAttempt.quiz_id.label("quiz_id"),
             QuizAttempt.state.label("state"),
         )
+        .join(Student, Student.user_id == QuizAttempt.user_id)
         .where(_quiz_scope_column(scope) == user_id)
+        .where(Student.is_archived == 0)
         .order_by(QuizAttempt.user_id.asc(), QuizAttempt.quiz_kind.asc(), QuizAttempt.quiz_id.asc())
     )
     return [dict(row) for row in session.execute(statement).mappings().all()]
