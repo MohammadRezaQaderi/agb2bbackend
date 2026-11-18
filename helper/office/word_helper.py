@@ -11,6 +11,7 @@ from typing import Iterable, List, Sequence, Tuple
 
 import config
 from lxml import etree
+from PIL import Image
 from config import REPORT1_TEMPLATE_PATH, REPORT2_TEMPLATE_PATH, REPORT3_TEMPLATE_PATH, REPORT5_TEMPLATE_PATH, \
     OCD_TEMPLATE_PATH, ANX_TEMPLATE_PATH, DEP_TEMPLATE_PATH
 
@@ -244,6 +245,53 @@ def replace_texts(xml_tree: etree.ElementTree, old_texts: Sequence[str], new_tex
     return xml_tree
 
 
+def replace_texts_across_runs(
+        xml_tree: etree.ElementTree,
+        replacements: dict[str, str],
+) -> etree.ElementTree:
+    """Replace paragraph text even when a Word token is split across styled runs."""
+    if xml_tree is None:
+        return xml_tree
+
+    ordered = sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)
+    for paragraph in (node for node in xml_tree.iter() if get_xml_tag_without_ns(node.tag) == "p"):
+        text_nodes = [node for node in paragraph.iter() if get_xml_tag_without_ns(node.tag) == "t"]
+        for old, replacement in ordered:
+            replacement = str(replacement).replace("\t", " ").replace("\r", " ").replace("\n", " ")
+            while text_nodes:
+                combined = "".join(node.text or "" for node in text_nodes)
+                start = combined.find(old)
+                if start < 0:
+                    break
+                end = start + len(old)
+                cursor = 0
+                start_index = end_index = 0
+                start_offset = end_offset = 0
+                for index, node in enumerate(text_nodes):
+                    node_text = node.text or ""
+                    node_end = cursor + len(node_text)
+                    if cursor <= start < node_end or (start == cursor and not node_text):
+                        start_index = index
+                        start_offset = start - cursor
+                    if cursor < end <= node_end:
+                        end_index = index
+                        end_offset = end - cursor
+                        break
+                    cursor = node_end
+
+                first_text = text_nodes[start_index].text or ""
+                if start_index == end_index:
+                    text_nodes[start_index].text = first_text[:start_offset] + replacement + first_text[end_offset:]
+                    continue
+
+                last_text = text_nodes[end_index].text or ""
+                text_nodes[start_index].text = first_text[:start_offset] + replacement
+                for index in range(start_index + 1, end_index):
+                    text_nodes[index].text = ""
+                text_nodes[end_index].text = last_text[end_offset:]
+    return xml_tree
+
+
 def remove_labeled_texts(xml_tree: etree.ElementTree, labels: list[str], excepts: list[str]):
     if xml_tree is None:
         return xml_tree
@@ -294,12 +342,14 @@ def remove_labeled_texts(xml_tree: etree.ElementTree, labels: list[str], excepts
 def replace_image_in_word_folder(source_folder: Path | str, old_image_file: str, new_image_file: Path | str) -> None:
     """Replace a single image inside the docx media folder."""
     old_file = Path(source_folder) / "word" / "media" / old_image_file
-    with open(new_image_file, "rb") as file:
-        data = file.read()
-    with open(old_file, "rb+") as file:
-        file.seek(0)
-        file.write(data)
-        file.truncate()
+    if not old_file.is_file():
+        raise FileNotFoundError(f"DOCX media target does not exist: {old_image_file}")
+    source = Path(new_image_file)
+    if old_file.suffix.lower() in {".jpg", ".jpeg"} and source.suffix.lower() not in {".jpg", ".jpeg"}:
+        with Image.open(source) as image:
+            image.convert("RGB").save(old_file, format="JPEG", quality=95)
+        return
+    shutil.copyfile(source, old_file)
 
 
 def replace_images_in_word_folder(
@@ -691,34 +741,37 @@ def generate_first_report_documents(
 ) -> None:
     """Generate first report docx/pdf with provided data and assets."""
     try:
-        folder_word = Path(user_directory) / "Tree"
-        unzip_word_file(REPORT1_TEMPLATE, folder_word)
-        tree_path = folder_word / "word"
-        tree = load_xml_file(tree_path / "document.xml")
+        del effects, color_handle_tags, color_handle_colors
+        replacements = dict(zip(tag_names, user_report_info))
+        with tempfile.TemporaryDirectory(prefix="ag-report1-", dir=user_directory) as temporary:
+            folder_word = Path(temporary) / "docx"
+            unzip_word_file(REPORT1_TEMPLATE, folder_word)
+            replace_images_in_word_folder(folder_word, image_names, user_report_pictures)
 
-        replace_texts_in_headers(
-            folder_word, ["#name", "#inst_name", "#con_name"], user_report_info[:3]
-        )
-        replace_images_in_word_folder(folder_word, image_names, user_report_pictures)
-        tree = replace_texts(tree, tag_names, user_report_info)
+            xml_parts = [folder_word / "word" / "document.xml"]
+            xml_parts.extend((folder_word / "word").glob("header*.xml"))
+            xml_parts.extend((folder_word / "word").glob("footer*.xml"))
+            for xml_part in xml_parts:
+                tree = load_xml_file(xml_part)
+                tree = replace_texts_across_runs(tree, replacements)
+                unresolved = []
+                for paragraph in (node for node in tree.iter() if get_xml_tag_without_ns(node.tag) == "p"):
+                    text = "".join(
+                        node.text or "" for node in paragraph.iter() if get_xml_tag_without_ns(node.tag) == "t"
+                    )
+                    if "#" in text or "سلا" in text:
+                        unresolved.append(text)
+                if unresolved:
+                    raise ValueError(f"Unresolved AG Report 1 template tokens in {xml_part.name}: {unresolved[:3]}")
+                save_xml_to_file(tree, xml_part)
 
-        # for tag, color in zip(color_handle_tags, color_handle_colors):
-        #     tree = change_graphic_background_color(tree, color, tag, None)
-        for effect in effects:
-            tree = change_graphic_effect(
-                tree,
-                ["effectLst", "scene3d", "sp3d"],
-                FIRST_REPORT_GRAPHIC_EFFECTS,
-                effect,
-            )
-
-        save_xml_to_file(tree, tree_path / "document.xml")
-
-        destination_docx = Path(user_directory) / f"Report1{phone}.docx"
-        destination_pdf = Path(user_directory) / "Report1.pdf"
-        zip_word_folder(folder_word, destination_docx)
-        convert_docx_to_pdf(destination_docx, destination_pdf)
-        remove_unneeded_files(user_directory, DONT_REMOVE)
+            destination_docx = Path(user_directory) / f"Report1{phone}.docx"
+            destination_pdf = Path(user_directory) / "Report1.pdf"
+            zip_word_folder(folder_word, destination_docx, remove_folder=False)
+            convert_docx_to_pdf(destination_docx, destination_pdf)
+            if not destination_pdf.is_file() or destination_pdf.stat().st_size == 0:
+                raise RuntimeError("AG Report 1 PDF was not created or is empty")
+        remove_unneeded_files(user_directory, [*DONT_REMOVE, destination_docx.name])
     except Exception as exc:
         raise RuntimeError("Failed to generate first report documents") from exc
 

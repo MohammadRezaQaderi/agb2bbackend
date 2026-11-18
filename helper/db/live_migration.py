@@ -176,6 +176,47 @@ def migration_student_archiving(conn: pyodbc.Connection, cursor: pyodbc.Cursor, 
         print("APPLIED: student archiving columns")
 
 
+def migration_quiz_labels(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run: bool) -> None:
+    try:
+        existing_schema = get_table_schema(cursor, "quiz_labels")
+    except RuntimeError:
+        existing_schema = None
+    if existing_schema:
+        print(f"SKIP: {existing_schema}.quiz_labels already exists")
+        return
+
+    schema_name = get_table_schema(cursor, "users")
+    table_ref = f"{quote_identifier(schema_name)}.[quiz_labels]"
+    user_ref = f"{quote_identifier(schema_name)}.[users]"
+    sql = f"""
+        CREATE TABLE {table_ref} (
+            [id] INT IDENTITY(1, 1) PRIMARY KEY,
+            [user_id] INT NOT NULL,
+            [quiz_kind] VARCHAR(50) NOT NULL,
+            [labels_json] NVARCHAR(MAX) NOT NULL,
+            [metadata_json] NVARCHAR(MAX) NULL,
+            [definition_version] VARCHAR(50) NOT NULL,
+            [scoring_version] VARCHAR(50) NOT NULL,
+            [created_time] DATETIME DEFAULT GETDATE(),
+            [edited_time] DATETIME DEFAULT GETDATE(),
+            CONSTRAINT [uq_quiz_labels_user_kind] UNIQUE ([user_id], [quiz_kind]),
+            CONSTRAINT [fk_quiz_labels_user]
+                FOREIGN KEY ([user_id]) REFERENCES {user_ref}([user_id]),
+            CONSTRAINT [ck_quiz_labels_json] CHECK (ISJSON([labels_json]) = 1),
+            CONSTRAINT [ck_quiz_labels_metadata_json]
+                CHECK ([metadata_json] IS NULL OR ISJSON([metadata_json]) = 1)
+        )
+    """
+    if dry_run:
+        print(f"DRY RUN: create {schema_name}.quiz_labels")
+        print(sql.strip())
+        return
+
+    cursor.execute(sql)
+    conn.commit()
+    print(f"APPLIED: created {schema_name}.quiz_labels")
+
+
 def migration_psy_capacity_packages(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run: bool) -> None:
     capacity_schema = get_table_schema(cursor, "capacity")
     package_schema = get_table_schema(cursor, "capacity_package")
@@ -229,6 +270,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration("2026_11_03_add_student_education", migration_student_education),
     Migration("2026_11_06_add_psy_capacity_packages", migration_psy_capacity_packages),
     Migration("2026_11_16_add_student_archiving", migration_student_archiving),
+    Migration("2026_11_17_add_quiz_labels", migration_quiz_labels),
 )
 
 

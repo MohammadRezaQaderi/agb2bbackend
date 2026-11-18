@@ -571,6 +571,38 @@ def ensure_quiz_attempt_tables(conn: Any, cursor: Any, dry_run: bool) -> None:
         print("SKIP: quiz_question_answer already exists")
 
 
+def ensure_quiz_labels(conn: Any, cursor: Any, dry_run: bool) -> None:
+    if table_exists(cursor, "quiz_labels"):
+        print("SKIP: quiz_labels already exists")
+        return
+
+    run_sql(
+        conn,
+        cursor,
+        """
+        CREATE TABLE [quiz_labels] (
+            [id] INT IDENTITY(1, 1) PRIMARY KEY,
+            [user_id] INT NOT NULL,
+            [quiz_kind] VARCHAR(50) NOT NULL,
+            [labels_json] NVARCHAR(MAX) NOT NULL,
+            [metadata_json] NVARCHAR(MAX) NULL,
+            [definition_version] VARCHAR(50) NOT NULL,
+            [scoring_version] VARCHAR(50) NOT NULL,
+            [created_time] DATETIME DEFAULT GETDATE(),
+            [edited_time] DATETIME DEFAULT GETDATE(),
+            CONSTRAINT [uq_quiz_labels_user_kind] UNIQUE ([user_id], [quiz_kind]),
+            CONSTRAINT [fk_quiz_labels_user]
+                FOREIGN KEY ([user_id]) REFERENCES [users]([user_id]),
+            CONSTRAINT [ck_quiz_labels_json] CHECK (ISJSON([labels_json]) = 1),
+            CONSTRAINT [ck_quiz_labels_metadata_json]
+                CHECK ([metadata_json] IS NULL OR ISJSON([metadata_json]) = 1)
+        )
+        """,
+        dry_run,
+        "create quiz_labels",
+    )
+
+
 def ensure_quiz_package_versioning(conn: Any, cursor: Any, dry_run: bool) -> None:
     if table_exists(cursor, "setting"):
         setting_had_package_name = column_exists(cursor, "setting", "package_name")
@@ -873,6 +905,7 @@ def run_migration(
         ensure_notification_reads(conn, cursor, dry_run)
         ensure_admin_tables(conn, cursor, dry_run)
         ensure_quiz_attempt_tables(conn, cursor, dry_run)
+        ensure_quiz_labels(conn, cursor, dry_run)
         ensure_quiz_package_versioning(conn, cursor, dry_run)
         backfill_student_package_access(conn, cursor, dry_run)
         alter_text_columns(conn, cursor, dry_run)

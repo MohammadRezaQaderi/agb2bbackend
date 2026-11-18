@@ -392,6 +392,21 @@ class QuizQuestionAnswer(Base, TimestampMixin):
     answer_value: Mapped[str] = mapped_column(UnicodeText, nullable=False)
 
 
+class QuizLabel(Base, TimestampMixin):
+    __tablename__ = "quiz_labels"
+    __table_args__ = (
+        UniqueConstraint("user_id", "quiz_kind", name="uq_quiz_labels_user_kind"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), nullable=False)
+    quiz_kind: Mapped[str] = mapped_column(String(50), nullable=False)
+    labels_json: Mapped[str] = mapped_column(UnicodeText, nullable=False)
+    metadata_json: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    definition_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    scoring_version: Mapped[str] = mapped_column(String(50), nullable=False)
+
+
 class QuizMissingAnswer(Base, TimestampMixin):
     __tablename__ = "quiz_missing_answers"
 

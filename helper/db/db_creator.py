@@ -199,6 +199,25 @@ TABLE_DEFINITIONS = {
             CONSTRAINT fk_quiz_question_answer_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """,
+    "quiz_labels": """
+        CREATE TABLE quiz_labels (
+            id INT IDENTITY(1, 1) PRIMARY KEY,
+            user_id INT NOT NULL,
+            quiz_kind VARCHAR(50) NOT NULL,
+            labels_json NVARCHAR(MAX) NOT NULL,
+            metadata_json NVARCHAR(MAX) NULL,
+            definition_version VARCHAR(50) NOT NULL,
+            scoring_version VARCHAR(50) NOT NULL,
+            created_time DATETIME DEFAULT GETDATE(),
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_quiz_labels_user_kind UNIQUE (user_id, quiz_kind),
+            CONSTRAINT fk_quiz_labels_user FOREIGN KEY (user_id) REFERENCES users(user_id),
+            CONSTRAINT ck_quiz_labels_json CHECK (ISJSON(labels_json) = 1),
+            CONSTRAINT ck_quiz_labels_metadata_json CHECK (
+                metadata_json IS NULL OR ISJSON(metadata_json) = 1
+            )
+        )
+    """,
     "scores": """
         CREATE TABLE scores (
             scores_id INT IDENTITY(1, 1) PRIMARY KEY,

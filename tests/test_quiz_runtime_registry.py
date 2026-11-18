@@ -2,6 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from helper.quiz import answer_store
 from helper.quiz.runtime_provider import get_runtime_provider, resolve_attempt_runtime
 from helper.quiz_engine import QuizRuntimeRegistry, StaticQuizRuntimeProvider
 
@@ -52,6 +53,34 @@ def test_builtin_legacy_runtimes_are_registered():
     assert scl_runtime.definition_versions == ("legacy-v1",)
     assert callable(ag_runtime.report_calculator)
     assert scl_runtime.report_calculator is None
+
+
+def test_builtin_psy_runtime_scores_labels_without_pdf_handler():
+    runtime = get_runtime_provider("PSY_ANX", "v1")
+    report_service = Mock()
+    report_service._handle_psy_labels = Mock()
+
+    assert runtime.required_quiz_count == 5
+    assert runtime.definition_versions == ("v1",)
+    assert runtime.report_calculator is None
+
+    runtime.generate_report(report_service, "42")
+    report_service._handle_psy_labels.assert_called_once_with("42", runtime)
+
+
+def test_builtin_psy_runtime_scores_stored_answers(monkeypatch):
+    monkeypatch.setattr(
+        answer_store,
+        "get_answers_for_user_kind",
+        lambda user_id, package_name: {"1": [1], "2": [5]},
+    )
+    runtime = get_runtime_provider("PSY_ANX", "v1")
+
+    scores, missing = runtime.score_user(42)
+
+    assert scores["pen.worry"] == 10
+    assert 1 not in missing
+    assert 2 not in missing
 
 
 def test_attempt_runtime_rejects_mixed_versions():
