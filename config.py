@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+PROJECT_DIR = Path(__file__).resolve().parent
+
 """
 Central configuration for paths and tokens used across the backend.
 
@@ -52,8 +54,11 @@ DEFAULT_REPORT2_PATH = _env(
 
 # Report templates used by the background scheduler.
 REPORT1_TEMPLATE_PATH = Path(
-    _env("AG_REPORT1_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report1.docx"))
+    _env("AG_REPORT1_TEMPLATE_PATH", str(PROJECT_DIR / "report_templates" / "ag" / "Report1.docx"))
 )
+DEFAULT_REPORT_LOGO_PATH = Path(_env("AG_DEFAULT_REPORT_LOGO_PATH", "")) if _env(
+    "AG_DEFAULT_REPORT_LOGO_PATH", ""
+) else None
 REPORT2_TEMPLATE_PATH = Path(
     _env("AG_REPORT2_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report2.docx"))
 )
