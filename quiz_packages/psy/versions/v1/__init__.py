@@ -1,0 +1,1 @@
+"""Generated PSY package version."""

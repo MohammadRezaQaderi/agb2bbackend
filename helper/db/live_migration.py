@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from config import DB_CONN_STRING
+from quiz_packages.psy.generated_manifest import PACKAGE_NAMES as PSY_PACKAGE_NAMES
 
 if TYPE_CHECKING:
     import pyodbc
@@ -109,8 +110,167 @@ def migration_ocon_logo(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run:
     print(f"APPLIED: added {schema_name}.{table_name}.{column_name}")
 
 
+def migration_student_education(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run: bool) -> None:
+    schema_name = get_table_schema(cursor, "stu")
+    table_ref = f"{quote_identifier(schema_name)}.[stu]"
+    for column_name, sql_type in (("education_level", "NVARCHAR(10)"), ("education_field", "NVARCHAR(30)")):
+        if column_exists(cursor, schema_name, "stu", column_name):
+            print(f"SKIP: {schema_name}.stu.{column_name} already exists")
+            continue
+        sql = f"ALTER TABLE {table_ref} ADD {quote_identifier(column_name)} {sql_type} NULL"
+        if dry_run:
+            print(f"DRY RUN: {sql}")
+        else:
+            cursor.execute(sql)
+
+    # Historical rows are assigned by the birth year cutoff. The field cannot
+    # be inferred from birth_date and intentionally remains NULL for existing rows.
+    cutoff = int(os.getenv("AG_STUDENT_SECOND_PERIOD_MAX_BIRTH_YEAR", "1390"))
+    if dry_run:
+        print(f"DRY RUN: backfill dbo.stu.education_level using birth_date cutoff {cutoff}")
+        return
+
+    cursor.execute(f"SELECT [user_id], [birth_date] FROM {table_ref} WHERE [education_level] IS NULL")
+    persian_digits = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+    updates = []
+    for row in cursor.fetchall():
+        try:
+            birth_year = int(str(row.birth_date).translate(persian_digits))
+        except (TypeError, ValueError):
+            continue
+        if 1000 <= birth_year <= 9999:
+            updates.append(("second" if birth_year <= cutoff else "first", row.user_id))
+    if updates:
+        cursor.executemany(
+            f"UPDATE {table_ref} SET [education_level] = ? WHERE [user_id] = ? AND [education_level] IS NULL",
+            updates,
+        )
+    conn.commit()
+    print(f"APPLIED: added education columns and backfilled {len(updates)} student rows")
+
+
+def migration_student_archiving(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run: bool) -> None:
+    schema_name = get_table_schema(cursor, "stu")
+    table_ref = f"{quote_identifier(schema_name)}.[stu]"
+    columns = (
+        ("is_archived", "BIT NOT NULL DEFAULT 0"),
+        ("archived_at", "DATETIME NULL"),
+        ("archived_by", "INT NULL"),
+    )
+
+    changed = False
+    for column_name, sql_type in columns:
+        if column_exists(cursor, schema_name, "stu", column_name):
+            print(f"SKIP: {schema_name}.stu.{column_name} already exists")
+            continue
+
+        sql = f"ALTER TABLE {table_ref} ADD {quote_identifier(column_name)} {sql_type}"
+        if dry_run:
+            print(f"DRY RUN: {sql}")
+        else:
+            cursor.execute(sql)
+            changed = True
+
+    if not dry_run and changed:
+        conn.commit()
+        print("APPLIED: student archiving columns")
+
+
+def migration_quiz_labels(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run: bool) -> None:
+    try:
+        existing_schema = get_table_schema(cursor, "quiz_labels")
+    except RuntimeError:
+        existing_schema = None
+    if existing_schema:
+        print(f"SKIP: {existing_schema}.quiz_labels already exists")
+        return
+
+    schema_name = get_table_schema(cursor, "users")
+    table_ref = f"{quote_identifier(schema_name)}.[quiz_labels]"
+    user_ref = f"{quote_identifier(schema_name)}.[users]"
+    sql = f"""
+        CREATE TABLE {table_ref} (
+            [id] INT IDENTITY(1, 1) PRIMARY KEY,
+            [user_id] INT NOT NULL,
+            [quiz_kind] VARCHAR(50) NOT NULL,
+            [labels_json] NVARCHAR(MAX) NOT NULL,
+            [metadata_json] NVARCHAR(MAX) NULL,
+            [definition_version] VARCHAR(50) NOT NULL,
+            [scoring_version] VARCHAR(50) NOT NULL,
+            [created_time] DATETIME DEFAULT GETDATE(),
+            [edited_time] DATETIME DEFAULT GETDATE(),
+            CONSTRAINT [uq_quiz_labels_user_kind] UNIQUE ([user_id], [quiz_kind]),
+            CONSTRAINT [fk_quiz_labels_user]
+                FOREIGN KEY ([user_id]) REFERENCES {user_ref}([user_id]),
+            CONSTRAINT [ck_quiz_labels_json] CHECK (ISJSON([labels_json]) = 1),
+            CONSTRAINT [ck_quiz_labels_metadata_json]
+                CHECK ([metadata_json] IS NULL OR ISJSON([metadata_json]) = 1)
+        )
+    """
+    if dry_run:
+        print(f"DRY RUN: create {schema_name}.quiz_labels")
+        print(sql.strip())
+        return
+
+    cursor.execute(sql)
+    conn.commit()
+    print(f"APPLIED: created {schema_name}.quiz_labels")
+
+
+def migration_psy_capacity_packages(conn: pyodbc.Connection, cursor: pyodbc.Cursor, dry_run: bool) -> None:
+    capacity_schema = get_table_schema(cursor, "capacity")
+    package_schema = get_table_schema(cursor, "capacity_package")
+    capacity_ref = f"{quote_identifier(capacity_schema)}.[capacity]"
+    package_ref = f"{quote_identifier(package_schema)}.[capacity_package]"
+    has_total_allowed = column_exists(
+        cursor,
+        package_schema,
+        "capacity_package",
+        "total_allowed",
+    )
+    package_values = ", ".join("(?)" for _ in PSY_PACKAGE_NAMES)
+    columns = "[capacity_id], [package_name], [user_id], [allowed], [used], [created_time], [edited_time]"
+    values = "c.[capacity_id], p.[package_name], c.[user_id], 0, 0, GETDATE(), GETDATE()"
+    if has_total_allowed:
+        columns = columns.replace("[allowed]", "[total_allowed], [allowed]")
+        values = values.replace("c.[user_id], 0", "c.[user_id], 0, 0", 1)
+
+    sql = f"""
+        INSERT INTO {package_ref} ({columns})
+        SELECT {values}
+        FROM (
+            SELECT [user_id], MIN([capacity_id]) AS [capacity_id]
+            FROM {capacity_ref}
+            WHERE [user_id] IS NOT NULL
+            GROUP BY [user_id]
+        ) AS c
+        CROSS JOIN (VALUES {package_values}) AS p([package_name])
+        WHERE NOT EXISTS (
+              SELECT 1
+              FROM {package_ref} AS existing
+              WHERE existing.[user_id] = c.[user_id]
+                AND existing.[package_name] = p.[package_name]
+          )
+    """
+
+    if dry_run:
+        print(
+            f"DRY RUN: add missing zero-capacity rows for {len(PSY_PACKAGE_NAMES)} PSY packages"
+        )
+        return
+
+    cursor.execute(sql, *PSY_PACKAGE_NAMES)
+    inserted_rows = cursor.rowcount
+    conn.commit()
+    print(f"APPLIED: added {inserted_rows} missing PSY capacity rows")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration("2026_08_10_add_ocon_logo", migration_ocon_logo),
+    Migration("2026_11_03_add_student_education", migration_student_education),
+    Migration("2026_11_06_add_psy_capacity_packages", migration_psy_capacity_packages),
+    Migration("2026_11_16_add_student_archiving", migration_student_archiving),
+    Migration("2026_11_17_add_quiz_labels", migration_quiz_labels),
 )
 
 

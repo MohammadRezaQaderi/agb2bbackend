@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+PROJECT_DIR = Path(__file__).resolve().parent
+
 """
 Central configuration for paths and tokens used across the backend.
 
@@ -52,8 +54,11 @@ DEFAULT_REPORT2_PATH = _env(
 
 # Report templates used by the background scheduler.
 REPORT1_TEMPLATE_PATH = Path(
-    _env("AG_REPORT1_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report1.docx"))
+    _env("AG_REPORT1_TEMPLATE_PATH", str(PROJECT_DIR / "report_templates" / "ag" / "Report1.docx"))
 )
+DEFAULT_REPORT_LOGO_PATH = Path(_env("AG_DEFAULT_REPORT_LOGO_PATH", "")) if _env(
+    "AG_DEFAULT_REPORT_LOGO_PATH", ""
+) else None
 REPORT2_TEMPLATE_PATH = Path(
     _env("AG_REPORT2_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report2.docx"))
 )
@@ -76,12 +81,20 @@ BRAIN_EXCEL_PATH = Path(
     _env("AG_BRAIN_EXCEL_PATH", str(Path(BASE_PATH) / "FileAG" / "Brain.xlsx"))
 )
 
+LIBREOFFICE_PATH = _env(
+    "AG_LIBREOFFICE_PATH",
+    r"C:\Program Files\LibreOffice\program\soffice.exe" if os.name == "nt" else "soffice",
+)
+LIBREOFFICE_TIMEOUT_SECONDS = _env_int("AG_LIBREOFFICE_TIMEOUT_SECONDS", 180)
+LIBREOFFICE_CONVERSION_ATTEMPTS = _env_int("AG_LIBREOFFICE_CONVERSION_ATTEMPTS", 2)
+LIBREOFFICE_RETRY_DELAY_SECONDS = float(_env("AG_LIBREOFFICE_RETRY_DELAY_SECONDS", "1"))
+
 #! Security-sensitive configuration
 
 # Kavenegar SMS API configuration
 KAVENEGAR_API_KEY = _env(
     "AG_KAVENEGAR_API_KEY",
-    "",
+    "5345574F44473868686938596E4744536C4E335232506B72687A376C6C743949666335584E727A653938343D",
     required_in_prod=True,
 )
 KAVENEGAR_OTP_TEMPLATE = _env("AG_KAVENEGAR_OTP_TEMPLATE", "AGOTP")
@@ -110,14 +123,14 @@ REDIS_CACHE_OTP = str(_env("AG_REDIS_CACHE_OTP", "verify_cache_AG"))
 OTP_TTL_SECONDS = _env_int("AG_OTP_TTL_SECONDS", 300)
 if OTP_TTL_SECONDS <= 0:
     raise RuntimeError("AG_OTP_TTL_SECONDS must be positive")
-REDIS_QUEUE_NAME = _env("AG_REDIS_QUEUE_NAME", "userAGB2BReport")
+REDIS_QUEUE_NAME = _env("AG_REDIS_QUEUE_NAME", "userAGB2BCOPYReport")
 
 # Database Configuration
 DB_DRIVER = _env("AG_DB_DRIVER", "ODBC Driver 17 for SQL Server")
 DB_SERVER = _env("AG_DB_SERVER", "localhost,1433")
 DB_DATABASE = _env("AG_DB_DATABASE", "AGB2B_COPY")
-DB_UID = _env("AG_DB_UID", "", required_in_prod=True)
-DB_PWD = _env("AG_DB_PWD", "", required_in_prod=True)
+DB_UID = _env("AG_DB_UID", "mgh27", required_in_prod=True)
+DB_PWD = _env("AG_DB_PWD", "m2711gH9985", required_in_prod=True)
 DB_TRUST_CERT = _env("AG_DB_TRUST_CERT", "yes")
 
 # Database Connection String

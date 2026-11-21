@@ -91,6 +91,11 @@ TABLE_DEFINITIONS = {
             access VARCHAR(MAX) DEFAULT '{}',
             comment NVARCHAR(MAX),
             birth_date NVARCHAR(4),
+            education_level NVARCHAR(10),
+            education_field NVARCHAR(30),
+            is_archived BIT NOT NULL DEFAULT 0,
+            archived_at DATETIME,
+            archived_by INT,
             owner_user_id INT,
             consultant_user_id INT,
             adder_id INT,
@@ -106,12 +111,14 @@ TABLE_DEFINITIONS = {
         CREATE TABLE setting (
             setting_id INT IDENTITY(1, 1) PRIMARY KEY,
             user_id INT,
+            package_name VARCHAR(25) NOT NULL,
             description NVARCHAR(MAX),
             voice NVARCHAR(MAX),
             quiz_id INT,
             editor_id INT,
             created_time DATETIME DEFAULT GETDATE(),
-            edited_time DATETIME DEFAULT GETDATE()
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_setting_user_package_quiz UNIQUE (user_id, package_name, quiz_id)
         )
     """,
     "capacity": """
@@ -164,6 +171,8 @@ TABLE_DEFINITIONS = {
             user_id INT NOT NULL,
             quiz_kind VARCHAR(25) NOT NULL,
             quiz_id INT NOT NULL,
+            definition_version VARCHAR(50) NOT NULL DEFAULT 'legacy-v1',
+            scoring_version VARCHAR(50) NOT NULL DEFAULT 'legacy-v1',
             state INT NOT NULL DEFAULT 1,
             remain_time INT NULL,
             owner_user_id INT NULL,
@@ -188,6 +197,25 @@ TABLE_DEFINITIONS = {
             CONSTRAINT uq_quiz_question_answer_attempt_question UNIQUE (attempt_id, question_id),
             CONSTRAINT fk_quiz_question_answer_attempt FOREIGN KEY (attempt_id) REFERENCES quiz_attempt(id),
             CONSTRAINT fk_quiz_question_answer_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    """,
+    "quiz_labels": """
+        CREATE TABLE quiz_labels (
+            id INT IDENTITY(1, 1) PRIMARY KEY,
+            user_id INT NOT NULL,
+            quiz_kind VARCHAR(50) NOT NULL,
+            labels_json NVARCHAR(MAX) NOT NULL,
+            metadata_json NVARCHAR(MAX) NULL,
+            definition_version VARCHAR(50) NOT NULL,
+            scoring_version VARCHAR(50) NOT NULL,
+            created_time DATETIME DEFAULT GETDATE(),
+            edited_time DATETIME DEFAULT GETDATE(),
+            CONSTRAINT uq_quiz_labels_user_kind UNIQUE (user_id, quiz_kind),
+            CONSTRAINT fk_quiz_labels_user FOREIGN KEY (user_id) REFERENCES users(user_id),
+            CONSTRAINT ck_quiz_labels_json CHECK (ISJSON(labels_json) = 1),
+            CONSTRAINT ck_quiz_labels_metadata_json CHECK (
+                metadata_json IS NULL OR ISJSON(metadata_json) = 1
+            )
         )
     """,
     "scores": """

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from helper.quiz.quiz_data_extractor import get_package_quiz_counts
+
 
 def _build_capacity_info(capacity_packages: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {
@@ -25,25 +27,25 @@ def _build_quiz_report(
     packages_data: dict[str, Any],
     package_quiz_count: dict[str, int] | None = None,
 ) -> dict[str, dict[str, int]]:
-    package_quiz_count = package_quiz_count or {"AG": 7, "SCL": 4}
+    package_quiz_count = package_quiz_count or get_package_quiz_counts(packages_data.keys())
     quiz_report = {}
 
     for package_name in packages_data.keys():
         attempts = [attempt for attempt in quiz_attempts if attempt.get("quiz_kind") == package_name]
         total_quizzes = package_quiz_count.get(package_name, 0)
         completed_attempts = [attempt for attempt in attempts if attempt.get("state") == 2]
+        in_progress_attempts = [attempt for attempt in attempts if attempt.get("state") == 1]
 
         quiz_report[package_name] = {
             "finish_quiz": len(
-                {
-                    attempt.get("user_id")
-                    for attempt in completed_attempts
-                    if attempt.get("quiz_id") == total_quizzes
-                }
+                {attempt.get("user_id") for attempt in completed_attempts if attempt.get("quiz_id") == total_quizzes}
             ),
             "started_quiz": len({attempt.get("user_id") for attempt in attempts}),
             "c_quiz": len(completed_attempts),
-            "nc_quiz": len(attempts) - len(completed_attempts),
+            "nc_quiz": len(in_progress_attempts),
+            "completed_attempts": len(completed_attempts),
+            "in_progress_attempts": len(in_progress_attempts),
+            "total_attempts": len(completed_attempts) + len(in_progress_attempts),
         }
 
     return quiz_report

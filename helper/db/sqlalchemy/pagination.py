@@ -26,6 +26,25 @@ class Page:
         return (self.total + self.page_size - 1) // self.page_size
 
 
+def is_paginated_request(request_data: dict | None) -> bool:
+    if not request_data:
+        return False
+    value = request_data.get("paginated", False)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def page_payload(page: Page, items: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "items": items,
+        "page": page.page,
+        "page_size": page.page_size,
+        "total": page.total,
+        "pages": page.pages,
+    }
+
+
 def normalize_page(page: int | str | None, page_size: int | str | None) -> tuple[int, int]:
     try:
         normalized_page = int(page or DEFAULT_PAGE)
@@ -51,10 +70,15 @@ def paginate_mappings(
     normalized_page, normalized_page_size = normalize_page(page, page_size)
     count_statement = select(func.count()).select_from(statement.order_by(None).subquery())
     total = int(session.execute(count_statement).scalar_one() or 0)
+    total_pages = (total + normalized_page_size - 1) // normalized_page_size
+    if total_pages > 0:
+        normalized_page = min(normalized_page, total_pages)
 
-    rows = session.execute(
-        statement.offset((normalized_page - 1) * normalized_page_size).limit(normalized_page_size)
-    ).mappings().all()
+    rows = (
+        session.execute(statement.offset((normalized_page - 1) * normalized_page_size).limit(normalized_page_size))
+        .mappings()
+        .all()
+    )
 
     return Page(
         items=[dict(row) for row in rows],

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 import helper.health as health_helper
 import routers.action_helpers as action_helpers
 import routers.reports as reports
+import routers.actions as actions
 from routers.health import router as health_router
 
 
@@ -56,6 +57,36 @@ def test_rejected_auth_does_not_call_action(action_client, monkeypatch):
     assert response.json()["error"] == "session expired"
     handler.assert_not_called()
     authorizer.assert_awaited_once()
+
+
+def test_student_notification_read_endpoint_dispatches(monkeypatch):
+    handler = Mock(return_value={"status": 200, "tracking_code": "tracked"})
+    authorizer = AsyncMock(
+        return_value=(True, "", {"user_id": 42, "role": "stu"})
+    )
+    monkeypatch.setitem(
+        actions.STUDENT_INSERT_ACTIONS,
+        "ags_mark_notification_read",
+        handler,
+    )
+    monkeypatch.setattr(action_helpers.auth_context, "authorizer", authorizer)
+    client = TestClient(FastAPI())
+    client.app.include_router(actions.router)
+
+    response = client.post(
+        "/ags_api/insert_request",
+        json={
+            "action_type": "ags_mark_notification_read",
+            "request_data": {"notification_id": 7, "user_id": 42, "token": "ok"},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["tracking_code"] == "tracked"
+    handler.assert_called_once_with(
+        request_data={"notification_id": 7, "user_id": 42, "token": "ok"},
+        user_info={"user_id": 42, "role": "stu"},
+    )
 
 
 def test_liveness_never_uses_database(monkeypatch):
@@ -107,6 +138,9 @@ def test_report_permission_denied_before_file_lookup(monkeypatch, prefix):
     assert response.status_code == 403
     assert response.json()["status"] == 403
     status_lookup.assert_called_once()
+    assert status_lookup.call_args.kwargs["require_report_permission"] is (
+        prefix == "ags_api"
+    )
     file_lookup.assert_not_called()
 
 

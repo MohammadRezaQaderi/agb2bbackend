@@ -1,0 +1,103 @@
+{
+  "format_version": 1,
+  "packages": {
+    "AG": {
+      "answer_count": 2584,
+      "definition_sha256": "e7846b95f0d93ef5fb63f2009f69e0f6df76e9ec1b63e1ad8c418a03e2c4fea9",
+      "definition_version": "legacy-v1",
+      "question_count": 484,
+      "question_id_max": 484,
+      "question_id_min": 1,
+      "quiz_count": 7,
+      "quiz_ids": [1, 2, 3, 4, 5, 6, 7],
+      "quiz_question_counts": {
+        "1": 61,
+        "2": 80,
+        "3": 60,
+        "4": 177,
+        "5": 30,
+        "6": 56,
+        "7": 20
+      },
+      "section_count": 19,
+      "summary_sha256": "18efd60c676ddeaf9d1462c9a96884a16eb42b87b9b013983b3978da8303278d"
+    },
+    "SCL": {
+      "answer_count": 2900,
+      "definition_sha256": "9c50a4c6f8cb28d8443575d0bd335169837724c6d089f39ddff94cb8cf74394c",
+      "definition_version": "legacy-v1",
+      "question_count": 655,
+      "question_id_max": 655,
+      "question_id_min": 1,
+      "quiz_count": 4,
+      "quiz_ids": [1, 2, 3, 4],
+      "quiz_question_counts": {
+        "1": 143,
+        "2": 225,
+        "3": 145,
+        "4": 142
+      },
+      "section_count": 18,
+      "summary_sha256": "6c0b6b26e2124507f7d75aa7a515e915b66cd71269c628476384d5bba887a4ce"
+    }
+  },
+  "reports": {
+    "AG": {
+      "function_ast_sha256": "a6bdba83d59a31e4ed3d715b56e1ee602d191360d5101c003f04a2bda976733f",
+      "iq_boundaries_sha256": "9f58465c721b69fc5e85851613b2bdc766510c0c03700cf370df81a2b15473a2",
+      "static_data_sha256": "42b4f53535a84f6aaff0daf1ff8c413bf9e124a866719a442b6cb8d44fc3cec6"
+    },
+    "SCL": {
+      "range_results_sha256": "99fba8e3a604b4a1828aa33290f3b45f5e0cb33b947d8ccab8e0a3e6a87924ad",
+      "report_data_count": 32,
+      "report_data_sha256": "694683b6ff217e004852fcce9211289ba2572598e9c04ef611d61da4081d76a3"
+    }
+  },
+  "scoring": {
+    "AG": {
+      "all_first_answers_result_sha256": "1433d0b7c3d38188ea504351f52963ddc5ef098b68c29d53af809fd01cbac061",
+      "answer_stats": [50, 0, 11],
+      "kind_counts": {
+        "ca": 61,
+        "sw": 18,
+        "sw1": 12,
+        "ws": 393
+      },
+      "label_count": 61,
+      "labels_sha256": "e1b47b6f69d82eb138163c9df62e93289b120d0ab51079c00af04aeb03cbcafe",
+      "schema_count": 484,
+      "schema_sha256": "daf766c43532aede2d17939c229eb74a3390988992e561ce32d25681e6abd708",
+      "selected_result": {
+        "CATEL": 50,
+        "CATEL_Brain": 4,
+        "IQ_Number": 200,
+        "Linguistic_verbal": 10,
+        "Realistic": 5
+      }
+    },
+    "SCL": {
+      "all_first_answers_result_sha256": "508ac101df3d879a8d27d6d13b3e50b7ee5ec74c0765276f284c0a98ac8e57b5",
+      "kind_counts": {
+        "ocd": 30,
+        "ws": 625
+      },
+      "label_count": 79,
+      "labels_sha256": "f2a72c70c689857212adcb2cf53408109390658a714e5cf66a0fd074db2a6f96",
+      "missing_count": 0,
+      "schema_count": 655,
+      "schema_sha256": "0e6eca12c42f4e0dbda29deb33af93a74106791f9d56f0cce2ad64f20a1ad060",
+      "selected_result": {
+        "OCD": {
+          "ocd": 15,
+          "ocd1": 6,
+          "ocd2": 4,
+          "ocd3": 1,
+          "ocd4": 6
+        },
+        "aggSCL90": 6,
+        "anSCL90": 10,
+        "generalSE": 8
+      }
+    }
+  }
+}

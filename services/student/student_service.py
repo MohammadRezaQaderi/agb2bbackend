@@ -1,12 +1,18 @@
 import json
 import logging
+import os
 
 import redis
 
+import helper.file_helper as file_helper
+from config import REDIS_DB, REDIS_HOST, REDIS_PASSWORD, REDIS_PORT, REDIS_QUEUE_NAME, REPORTS_DIR
 from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.report_downloads import get_latest_report_queue_status
+from helper.db.sqlalchemy.queries.reports import list_quiz_attempts_for_users
 from helper.db.sqlalchemy.queries.students import (
     create_redis_log,
     get_latest_ag_score_summary,
+    get_latest_scl_score_summary,
     get_quiz_setting,
     get_result_state,
     get_student_access_comment,
@@ -21,12 +27,17 @@ from helper.db.sqlalchemy.queries.students import (
 )
 from helper.password_helper import encrypt_password
 from helper.quiz import answer_store
-from helper.quiz.ag_quiz_data_info import ag_quiz_info
-from helper.quiz.scl_quiz_data_info import scl_quiz_info
-from helper.quiz.quiz_data_extractor import get_quiz_table_info, get_quiz_info
+from helper.quiz.quiz_data_extractor import (
+    get_last_question_id,
+    get_package_quiz_counts,
+    get_quiz_info,
+    get_quiz_table_info,
+)
+from helper.quiz_metadata import get_quiz_name
+from helper.psy_catalog import build_psy_catalog
+from helper.report_catalog import build_student_report_catalog
 from helper.service_errors import service_exception_error_logging
 from helper.tracking import get_tracking_code
-from config import REDIS_QUEUE_NAME, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB
 
 AG_REPORT_INFO = {
     "t_state": {"name": "تجربی", "title": "t_state"},
@@ -54,6 +65,15 @@ def _load_access_from_json(raw_access):
     except (TypeError, json.JSONDecodeError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _safe_json_load(value):
+    if not value or not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return value
 
 
 def _load_student_access(user_id):
@@ -130,94 +150,202 @@ def select_student_info(user_id):
         return None, None, "اطلاعات دانش‌آموز یافت نشد."
 
 
-def select_stu_dashboard(request_data, info):
-    try:
-        user_id = info["user_id"]
+def load_student_dashboard_data(
+    user_id,
+    *,
+    notification_role="stu",
+    include_notifications=True,
+    include_student_info=False,
+):
+    user_id = int(user_id)
+    stu_access = _load_student_access(user_id)
+    active_packages = [
+        str(package_name).upper()
+        for package_name in stu_access
+        if _package_permission(stu_access, package_name)[0] == 1
+    ]
+    package_names = list(dict.fromkeys(["AG", "SCL", *active_packages]))
+    quiz_counts = get_package_quiz_counts(package_names)
 
-        def _safe_json_load(value):
-            try:
-                return json.loads(value) if value else value
-            except Exception:
-                return value
-
-        stu_access = _load_student_access(user_id)
-
-        # Helper function to check if a product kind has access (permission and limit both 1)
-        def _has_access(kind):
-            """Check if user has access to a product kind. Returns (has_permission, has_limit)"""
-            permission, limit = _package_permission(stu_access, kind)
-            return permission == 1, limit == 1
-
-        # Check access for AG and SCL
-        ag_has_permission, ag_has_limit = _has_access("AG")
-        scl_has_permission, scl_has_limit = _has_access("SCL")
-
-        # Quiz progress (completed vs remaining) - calculate for each product kind separately
-        quiz_progress = {}
-
-        if ag_has_permission:
-            ag_completed_count = answer_store.get_completed_count(user_id, "AG")
-            ag_total_quizzes = len(get_quiz_table_info(kind="AG"))
-            quiz_progress["AG"] = {
-                "completed": ag_completed_count,
-                "remaining": max(ag_total_quizzes - ag_completed_count, 0),
-                "total": ag_total_quizzes,
-            }
-
-        if scl_has_permission:
-            scl_completed_count = answer_store.get_completed_count(user_id, "SCL")
-            scl_total_quizzes = len(get_quiz_table_info(kind="SCL"))
-            quiz_progress["SCL"] = {
-                "completed": scl_completed_count,
-                "remaining": max(scl_total_quizzes - scl_completed_count, 0),
-                "total": scl_total_quizzes,
-            }
-
-        # Latest computed scores (if any) - only if AG permission and limit is 1
-        scores_info = None
-        if ag_has_permission and ag_has_limit:
-            with session_scope() as session:
-                score_row = get_latest_ag_score_summary(session=session, user_id=user_id)
-            if score_row:
-                scores_info = {
-                    "brain_categories": _safe_json_load(score_row.get("brain_categories")),
-                    "brain_branches": _safe_json_load(score_row.get("brain_branches")),
-                }
-
-        # Result state (single row per user) - only if AG permission and limit is 1
-        result_state_info = None
-        if ag_has_permission and ag_has_limit:
-            with session_scope() as session:
-                db_row = get_result_state(session=session, user_id=user_id)
-            if db_row:
-                result_state_info = {}
-                # Transform using AG_REPORT_INFO and add values from database
-                for state_key in AG_REPORT_INFO.keys():
-                    result_state_info[state_key] = {
-                        **AG_REPORT_INFO[state_key],
-                        "value": db_row.get(state_key)
-                    }
-                # Add edited_time separately
-                result_state_info["edited_time"] = db_row.get("edited_time")
-
-        # Notifications for the user or for the student role
-        with session_scope() as session:
-            notifications_res = list_student_notifications(
+    with session_scope() as session:
+        attempts = list_quiz_attempts_for_users(
+            session=session,
+            user_ids=[user_id],
+            package_names=active_packages,
+        )
+        ag_score_row = (
+            get_latest_ag_score_summary(session=session, user_id=user_id)
+            if _package_permission(stu_access, "AG")[0] == 1
+            else None
+        )
+        scl_score_row = (
+            get_latest_scl_score_summary(session=session, user_id=user_id)
+            if _package_permission(stu_access, "SCL")[0] == 1
+            else None
+        )
+        result_state_row = (
+            get_result_state(session=session, user_id=user_id)
+            if _package_permission(stu_access, "AG")[0] == 1
+            else None
+        )
+        notifications = (
+            list_student_notifications(
                 session=session,
                 user_id=user_id,
-                role=info.get("role", "stu"),
+                role=notification_role,
             )
+            if include_notifications
+            else []
+        )
+        student_profile = (
+            get_student_profile(session=session, user_id=user_id)
+            if include_student_info
+            else None
+        )
 
-        dashboard_info = {
-            "quiz": quiz_progress,
-            "scores": scores_info,
-            "result_state": result_state_info,
-            "notifications": notifications_res,
+    attempts_by_package = {package_name: [] for package_name in active_packages}
+    for attempt in attempts:
+        package_name = str(attempt.get("quiz_kind") or "").upper()
+        attempts_by_package.setdefault(package_name, []).append(attempt)
+
+    quiz_progress = {}
+    access_state = {}
+    for package_name in package_names:
+        permission, report_permission = _package_permission(stu_access, package_name)
+        package_attempts = attempts_by_package.get(package_name, [])
+        completed = sum(
+            1 for attempt in package_attempts if int(attempt.get("state") or 0) == 2
+        )
+        total = int(quiz_counts.get(package_name) or 0)
+        latest_attempt = max(
+            package_attempts,
+            key=lambda attempt: int(attempt.get("quiz_id") or 0),
+            default=None,
+        )
+
+        if permission != 1:
+            state = "no-access"
+        elif total > 0 and completed >= total:
+            state = "completed"
+        elif package_attempts:
+            state = "in-progress"
+        else:
+            state = "not-started"
+
+        access_state[package_name] = {
+            "permission": permission,
+            "report_permission": report_permission,
+            "state": state,
+            "current_quiz_name": (
+                get_quiz_name(package_name, latest_attempt.get("quiz_id"))
+                if latest_attempt
+                else ""
+            ),
+            "completed": completed,
+            "remaining": max(total - completed, 0),
+            "total": total,
         }
-        token = get_tracking_code()
-        return token, dashboard_info, ""
+        if permission == 1:
+            quiz_progress[package_name] = {
+                "completed": completed,
+                "remaining": max(total - completed, 0),
+                "total": total,
+            }
+
+    scores_info = {}
+    if ag_score_row:
+        ag_scores = {
+            "brain_categories": _safe_json_load(
+                ag_score_row.get("brain_categories")
+            ),
+            "brain_branches": _safe_json_load(ag_score_row.get("brain_branches")),
+        }
+        scores_info.update(ag_scores)
+        scores_info["AG"] = ag_scores
+    if scl_score_row:
+        scl_scores = _safe_json_load(scl_score_row.get("scl_date"))
+        scores_info["scl_date"] = scl_scores
+        scores_info["SCL"] = {"scl_date": scl_scores}
+
+    result_state_info = None
+    if result_state_row:
+        result_state_info = {
+            state_key: {
+                **state_info,
+                "value": result_state_row.get(state_key),
+            }
+            for state_key, state_info in AG_REPORT_INFO.items()
+        }
+        result_state_info["edited_time"] = result_state_row.get("edited_time")
+
+    dashboard_info = {
+        "quiz": quiz_progress,
+        "access_state": access_state,
+        "scores": scores_info or None,
+        "result_state": result_state_info,
+        "notifications": notifications,
+    }
+
+    if student_profile:
+        consultant_name = " ".join(
+            filter(
+                None,
+                [
+                    student_profile.get("consultant_first_name")
+                    or student_profile.get("ocon_first_name"),
+                    student_profile.get("consultant_last_name")
+                    or student_profile.get("ocon_last_name"),
+                ],
+            )
+        )
+        dashboard_info["student_info"] = {
+            "stu_id": student_profile.get("stu_id"),
+            "student_id": user_id,
+            "user_id": user_id,
+            "phone": student_profile.get("phone"),
+            "first_name": student_profile.get("first_name"),
+            "last_name": student_profile.get("last_name"),
+            "sex": student_profile.get("sex"),
+            "city": student_profile.get("city"),
+            "birth_date": student_profile.get("birth_date"),
+            "education_level": student_profile.get("education_level"),
+            "education_field": student_profile.get("education_field"),
+            "con_name": consultant_name,
+            "access": stu_access,
+        }
+
+    active_psy = next(
+        (
+            (package_name, status)
+            for package_name, status in access_state.items()
+            if package_name.startswith("PSY_") and status["permission"] == 1
+        ),
+        None,
+    )
+    dashboard_info["psy"] = (
+        {"package_name": active_psy[0], **active_psy[1]}
+        if active_psy
+        else None
+    )
+    return dashboard_info
+
+
+def select_stu_dashboard(request_data, info):
+    try:
+        dashboard_info = load_student_dashboard_data(
+            info["user_id"],
+            notification_role=info.get("role", "stu"),
+            include_notifications=True,
+        )
+        return get_tracking_code(), dashboard_info, ""
     except Exception as e:
-        service_exception_error_logging("ags_api/stu", "select_stu_dashboard", str(e), request_data, info)
+        service_exception_error_logging(
+            "ags_api/stu",
+            "select_stu_dashboard",
+            str(e),
+            request_data,
+            info,
+        )
         return None, None, "اطلاعات داشبورد دریافت نشد."
 
 
@@ -291,6 +419,8 @@ def select_stu_quiz_table_info(request_data, info):
             last_attempt = all_attempts[-1]
             last_quiz_id = last_attempt["quiz_id"]
             last_quiz_state = last_attempt["state"]
+            if last_quiz_state == 1 and last_attempt.get("answer_count", 0) == 0:
+                last_quiz_state = 0
 
             for q in quiz_info:
                 q_id = q["id"]
@@ -337,7 +467,12 @@ def select_stu_quiz_info(request_data, info):
         all_attempts = answer_store.get_attempts(info["user_id"], quiz_kind)
 
         with session_scope() as session:
-            res_quiz_setting = get_quiz_setting(session=session, owner_user_id=owner_user_id, quiz_id=quiz_id)
+            res_quiz_setting = get_quiz_setting(
+                session=session,
+                owner_user_id=owner_user_id,
+                package_name=quiz_kind,
+                quiz_id=quiz_id,
+            )
         # All attempts already limited to this product kind (AG, SCL, ...)
         quiz_ids_for_kind = {q["id"] for q in get_quiz_table_info(kind=quiz_kind)}
 
@@ -396,22 +531,6 @@ def select_stu_quiz_info(request_data, info):
         return None, None, "آزمون مورد نظر شما در دسترس شما نیست."
 
 
-# Pre-compute the last AG question id once (used for Redis enqueue condition)
-AG_LAST_QUESTION_ID = max(
-    q.get("question_id", 0)
-    for quiz in ag_quiz_info
-    for section in quiz.get("sections", [])
-    for q in section.get("questions", [])
-)
-
-SCL_LAST_QUESTION_ID = max(
-    q.get("question_id", 0)
-    for quiz in scl_quiz_info
-    for section in quiz.get("sections", [])
-    for q in section.get("questions", [])
-)
-
-
 def _enqueue_result_generation(user_id, phone, kind: str):
     """
     Push user to Redis queue and log in redis_logs table.
@@ -468,6 +587,11 @@ def submit_quiz_answer(request_data, info):
         if not quiz_kind:
             return None, None, "quiz_kind is required"
 
+        stu_access = _load_student_access(info["user_id"])
+        permission, _ = _package_permission(stu_access, quiz_kind)
+        if permission != 1:
+            return None, None, "شما به این محصول دسترسی ندارید."
+
         question_answer = answer_store.normalize_answer_value(request_data.get("question_Answer"))
 
         # If quiz has timed-out on client side, just mark state=2 and exit
@@ -518,21 +642,13 @@ def submit_quiz_answer(request_data, info):
 
         answer_store.upsert_question_answer(attempt, question_number, question_answer)
 
-        # After the whole product is finished, add user to Redis queue.
-        # For AG product, this happens when the very last question (global id) is answered.
-        if quiz_kind == "AG" and question_number == AG_LAST_QUESTION_ID:
+        # After the whole product is finished, add the user to the report queue.
+        package_last_question_id = get_last_question_id(quiz_kind)
+        if package_last_question_id is not None and question_number == package_last_question_id:
             _enqueue_result_generation(
                 user_id=info["user_id"],
                 phone=info.get("phone"),
-                kind="AG",
-            )
-            message = "کارنامه شما در حال تولید است ، لطفا کمی صبور باشید."
-
-        if quiz_kind == "SCL" and question_number == SCL_LAST_QUESTION_ID:
-            _enqueue_result_generation(
-                user_id=info["user_id"],
-                phone=info.get("phone"),
-                kind="SCL",
+                kind=quiz_kind,
             )
             message = "کارنامه شما در حال تولید است ، لطفا کمی صبور باشید."
 
@@ -562,3 +678,115 @@ def select_student_access_info(request_data, info):
         service_exception_error_logging("ags_api/stu", "select_student_access_info", str(e), request_data,
                                         info)
         return None, None, "اطلاعات دسترسی دانش‌آموز دریافت نشد."
+
+
+def select_student_report_catalog(request_data, info):
+    try:
+        access = _load_student_access(info["user_id"])
+        package_names = ["AG", "SCL"] + [
+            package_name
+            for package_name, package_access in access.items()
+            if package_name.startswith("PSY_")
+            and _package_permission(access, package_name)[0] == 1
+        ]
+        quiz_counts = {
+            package_name: len(get_quiz_table_info(package_name) or [])
+            for package_name in package_names
+        }
+        attempts_by_package = {
+            package_name: answer_store.get_attempts(info["user_id"], package_name)
+            for package_name in package_names
+        }
+
+        with session_scope() as session:
+            queue_statuses = {}
+            for package_name in package_names:
+                queue_info = get_latest_report_queue_status(
+                    session=session,
+                    user_id=info["user_id"],
+                    kind=package_name,
+                )
+                queue_statuses[package_name] = (
+                    queue_info.get("status") if queue_info else None
+                )
+            comment_row = get_student_access_comment(
+                session=session,
+                user_id=info["user_id"],
+            )
+
+        phone = file_helper.normalize_storage_filename(info.get("phone") or "")
+        report_directory = file_helper.safe_storage_path(REPORTS_DIR, phone)
+
+        def _file_available(_package_name, file_name):
+            try:
+                return os.path.isfile(
+                    file_helper.safe_storage_path(
+                        report_directory,
+                        file_name,
+                    )
+                )
+            except file_helper.FileValidationError:
+                return False
+
+        catalog = build_student_report_catalog(
+            access=access,
+            quiz_counts=quiz_counts,
+            attempts_by_package=attempts_by_package,
+            queue_statuses=queue_statuses,
+            file_available=_file_available,
+        )
+        catalog["comment"] = comment_row.get("comment") if comment_row else None
+        return get_tracking_code(), catalog, ""
+    except Exception as e:
+        service_exception_error_logging(
+            "ags_api/stu",
+            "select_student_report_catalog",
+            str(e),
+            request_data,
+            info,
+        )
+        return None, None, "اطلاعات کارنامه‌ها دریافت نشد."
+
+
+def select_student_psy_catalog(request_data, info):
+    try:
+        access = _load_student_access(info["user_id"])
+        package_names = [
+            package_name
+            for package_name, _package_access in access.items()
+            if package_name.startswith("PSY_") and _package_permission(access, package_name)[0] == 1
+        ]
+        catalog = build_psy_catalog({}, package_names=package_names)
+
+        for package in catalog["packages"]:
+            package_name = package["package_name"]
+            attempts = answer_store.get_attempts(info["user_id"], package_name)
+            completed_quizzes = sum(1 for attempt in attempts if int(attempt.get("state") or 0) == 2)
+            in_progress_quizzes = sum(1 for attempt in attempts if int(attempt.get("state") or 0) == 1)
+            quiz_count = int(package.get("quiz_count") or 0)
+            if quiz_count > 0 and completed_quizzes >= quiz_count:
+                state = "completed"
+            elif attempts:
+                state = "in-progress"
+            else:
+                state = "not-started"
+
+            package["student_progress"] = {
+                "state": state,
+                "completed_quizzes": completed_quizzes,
+                "in_progress_quizzes": in_progress_quizzes,
+                "total_quizzes": quiz_count,
+                "percentage": round((completed_quizzes / quiz_count) * 100 if quiz_count else 0),
+                "report_permission": _package_permission(access, package_name)[1],
+            }
+
+        return get_tracking_code(), catalog, ""
+    except Exception as e:
+        service_exception_error_logging(
+            "ags_api/stu",
+            "select_student_psy_catalog",
+            str(e),
+            request_data,
+            info,
+        )
+        return None, None, "اطلاعات آزمون‌های روان‌شناسی دریافت نشد."

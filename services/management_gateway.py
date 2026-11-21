@@ -1,11 +1,16 @@
 from helper.account_passwords import update_user_and_role_password
+from helper.constants import PACKAGES_DATA
 from helper.request_validation import validate_request_data_fields
+from helper.psy_catalog import build_psy_catalog
 from helper.service_errors import not_method_access_return
+from helper.student_access import update_student_accesses_and_capacity
 from helper.validators import password_format_check
+from helper.student_education import EDUCATION_FIELD_IDS, EDUCATION_LEVEL_IDS
 import services.consultant.consultant_service as consultant_service
 import services.institute.institute_service as institute_service
 import services.owner_consultant.owner_consultant_service as owner_consultant_service
 import services.school.school_service as school_service
+import services.student_management_service as student_management_service
 from services.gateway_helpers import ACCESS_DENIED_MESSAGE, error_response, role_handler, service_response
 
 
@@ -65,6 +70,16 @@ def change_setting(request_data, user_info):
     if user_info["role"] == "con":
         return error_response(method_type, ACCESS_DENIED_MESSAGE)
 
+    package_name = str(
+        request_data.get("package_name")
+        or request_data.get("quiz_kind")
+        or request_data.get("kind")
+        or "AG"
+    ).strip().upper()
+    if package_name not in PACKAGES_DATA:
+        return error_response(method_type, "A valid package_name is required.")
+    request_data = {**request_data, "package_name": package_name}
+
     result = role_handler(user_info, {
         "ins": lambda: institute_service.change_setting(request_data=request_data, user_info=user_info),
         "sch": lambda: school_service.change_setting(request_data=request_data, user_info=user_info),
@@ -101,6 +116,31 @@ def change_student_access(request_data, user_info):
     return service_response(method_type, tracking_token, response_data, response_message)
 
 
+def change_student_access_batch(request_data, user_info):
+    method_type = "UPDATE"
+    if user_info["role"] == "con":
+        return error_response(method_type, ACCESS_DENIED_MESSAGE)
+
+    role_config = {
+        "ins": ("ins", "owner_user_id", "ag_api/ins"),
+        "sch": ("sch", "owner_user_id", "ag_api/sch"),
+        "ocon": ("ocon", "consultant_user_id", "ag_api/ocon"),
+    }
+    config = role_config.get(user_info.get("role"))
+    if config is None:
+        return not_method_access_return()
+
+    role_type, id_field, end_point = config
+    tracking_token, response_data, response_message = update_student_accesses_and_capacity(
+        request_data=request_data,
+        user_info=user_info,
+        role_type=role_type,
+        id_field=id_field,
+        end_point=end_point,
+    )
+    return service_response(method_type, tracking_token, response_data, response_message)
+
+
 def change_user_quiz_setting(request_data, user_info):
     return change_setting(request_data=request_data, user_info=user_info)
 
@@ -112,6 +152,69 @@ def get_dashboard(request_data, user_info):
         "sch": lambda: school_service.get_dashboard(request_data=request_data, user_info=user_info),
         "ocon": lambda: owner_consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
         "con": lambda: consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
+    })
+    if result is None:
+        return not_method_access_return()
+
+    tracking_token, response_data, response_message = result
+    return service_response(method_type, tracking_token, response_data, response_message)
+
+
+def get_psy_catalog(request_data, user_info):
+    method_type = "SELECT"
+    result = role_handler(user_info, {
+        "ins": lambda: institute_service.get_dashboard(request_data=request_data, user_info=user_info),
+        "sch": lambda: school_service.get_dashboard(request_data=request_data, user_info=user_info),
+        "ocon": lambda: owner_consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
+        "con": lambda: consultant_service.get_dashboard(request_data=request_data, user_info=user_info),
+    })
+    if result is None:
+        return not_method_access_return()
+
+    tracking_token, response_data, response_message = result
+    dashboard_info = (response_data or {}).get("dashboard_info") or {}
+    return service_response(
+        method_type,
+        tracking_token,
+        build_psy_catalog(dashboard_info),
+        response_message,
+    )
+
+
+def get_capacity(request_data, user_info):
+    method_type = "SELECT"
+    raw_package_names = request_data.get("package_names")
+    if not isinstance(raw_package_names, list) or not raw_package_names:
+        return error_response(method_type, "package_names must be a non-empty list.")
+
+    package_names = list(dict.fromkeys(str(name).strip().upper() for name in raw_package_names))
+    if any(not name or name not in PACKAGES_DATA for name in package_names):
+        return error_response(method_type, "One or more package names are invalid.")
+
+    result = role_handler(user_info, {
+        "ins": lambda: institute_service.get_capacity(package_names, user_info),
+        "sch": lambda: school_service.get_capacity(package_names, user_info),
+        "ocon": lambda: owner_consultant_service.get_capacity(package_names, user_info),
+        "con": lambda: consultant_service.get_capacity(package_names, user_info),
+    })
+    if result is None:
+        return not_method_access_return()
+
+    tracking_token, response_data, response_message = result
+    return service_response(method_type, tracking_token, response_data, response_message)
+
+
+def get_students_without_product_access(request_data, user_info):
+    method_type = "SELECT"
+    package_name = str(request_data.get("package_name") or "").strip().upper()
+    if not package_name or package_name not in PACKAGES_DATA:
+        return error_response(method_type, "A valid package_name is required.")
+
+    result = role_handler(user_info, {
+        "ins": lambda: institute_service.get_students_without_product_access(package_name, user_info),
+        "sch": lambda: school_service.get_students_without_product_access(package_name, user_info),
+        "ocon": lambda: owner_consultant_service.get_students_without_product_access(package_name, user_info),
+        "con": lambda: consultant_service.get_students_without_product_access(package_name, user_info),
     })
     if result is None:
         return not_method_access_return()
@@ -154,6 +257,25 @@ def change_consultant(request_data, user_info):
 
 def get_students(request_data, user_info):
     method_type = "SELECT"
+    column_filters = request_data.get("filters")
+    column_filters = column_filters if isinstance(column_filters, dict) else {}
+    archived_value = next(
+        (
+            source[key]
+            for key in ("archived", "is_archived")
+            for source in (request_data, column_filters)
+            if key in source
+        ),
+        None,
+    )
+    archived_requested = archived_value is True or str(archived_value).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if archived_requested and user_info.get("role") not in {"ins", "ocon"}:
+        return error_response(method_type, ACCESS_DENIED_MESSAGE)
+
     result = role_handler(user_info, {
         "ins": lambda: institute_service.get_students(request_data=request_data, user_info=user_info),
         "sch": lambda: school_service.get_students(request_data=request_data, user_info=user_info),
@@ -165,6 +287,88 @@ def get_students(request_data, user_info):
 
     tracking_token, response_data, response_message = result
     return service_response(method_type, tracking_token, response_data, response_message)
+
+
+def _change_student_archive_state(request_data, user_info, restore=False):
+    method_type = "UPDATE"
+    is_valid, validation_error = validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["student_id"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return validation_error
+    if user_info.get("role") not in {"ins", "ocon"}:
+        return error_response(method_type, ACCESS_DENIED_MESSAGE)
+
+    handler = (
+        student_management_service.restore_student
+        if restore
+        else student_management_service.archive_student
+    )
+    tracking_token, response_data, response_message = handler(
+        request_data=request_data,
+        user_info=user_info,
+    )
+    return service_response(
+        method_type,
+        tracking_token,
+        response_data,
+        response_message,
+    )
+
+
+def archive_student(request_data, user_info):
+    return _change_student_archive_state(request_data, user_info)
+
+
+def restore_student(request_data, user_info):
+    return _change_student_archive_state(request_data, user_info, restore=True)
+
+
+def get_student_options(request_data, user_info):
+    method_type = "SELECT"
+    if user_info.get("role") not in {"ins", "sch", "con", "ocon"}:
+        return not_method_access_return()
+
+    tracking_token, response_data, response_message = (
+        student_management_service.get_student_options(
+            request_data=request_data,
+            user_info=user_info,
+        )
+    )
+    return service_response(
+        method_type,
+        tracking_token,
+        response_data,
+        response_message,
+    )
+
+
+def get_student_management(request_data, user_info):
+    method_type = "SELECT"
+    is_valid, validation_error = validate_request_data_fields(
+        request_data=request_data,
+        required_fields=["student_id"],
+        method_type=method_type,
+    )
+    if not is_valid:
+        return validation_error
+    if user_info.get("role") not in {"ins", "sch", "con", "ocon"}:
+        return not_method_access_return()
+
+    tracking_token, response_data, response_message = (
+        student_management_service.get_student_management(
+            request_data=request_data,
+            user_info=user_info,
+        )
+    )
+    return service_response(
+        method_type,
+        tracking_token,
+        response_data,
+        response_message,
+    )
 
 
 def change_student(request_data, user_info):
@@ -179,6 +383,15 @@ def change_student(request_data, user_info):
     )
     if not is_valid:
         return validation_error
+
+    education_level = request_data.get("education_level")
+    education_field = request_data.get("education_field")
+    if education_level not in EDUCATION_LEVEL_IDS:
+        return error_response(method_type, "دوره تحصیلی انتخاب‌شده معتبر نیست.")
+    if education_level == "second" and education_field not in EDUCATION_FIELD_IDS:
+        return error_response(method_type, "رشته تحصیلی انتخاب‌شده معتبر نیست.")
+    if education_level == "first":
+        education_field = None
 
     result = role_handler(user_info, {
         "ins": lambda: institute_service.change_student(request_data=request_data, user_info=user_info),
