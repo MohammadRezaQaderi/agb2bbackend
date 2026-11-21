@@ -4,6 +4,7 @@ import helper.api_metrics as api_metrics
 import helper.auth_context as auth_context
 import helper.file_helper as file_helper
 import helper.service_errors as service_errors
+from helper.constants import PACKAGES_DATA
 from helper.tracking import get_tracking_code
 import services.institute.institute_service as institute_service
 import services.management_gateway as management_gateway
@@ -38,6 +39,7 @@ async def update_user_file_image(request: Request):
         )
         if not state:
             return service_errors.not_auth_return(message=state_message)
+
         return management_gateway.change_user_info(request_data=request_data, user_info=user_info)
     except KeyError as e:
         return await service_errors.key_error_logging("ag_api", "update_user_file_image", str(e), method_type)
@@ -57,6 +59,7 @@ async def update_user_voice(
         last_voice: str = Form(...),
         role: str = Form(...),
         token: str = Form(...),
+        package_name: str = Form("AG"),
 ):
     method_type = "UPDATE"
     try:
@@ -65,6 +68,10 @@ async def update_user_voice(
         )
         if not state:
             return service_errors.not_auth_return(message=state_message)
+
+        normalized_package_name = str(package_name or "AG").strip().upper()
+        if normalized_package_name not in PACKAGES_DATA:
+            return error_response(method_type, "A valid package_name is required.")
 
         file_helper.validate_content_type(voice.content_type, file_helper.VOICE_CONTENT_TYPES)
         extension = file_helper.get_extension(voice.filename, file_helper.VOICE_EXTENSIONS)
@@ -78,6 +85,7 @@ async def update_user_voice(
             "setting_id": setting_id,
             "description": description,
             "quiz_id": quiz_id,
+            "package_name": normalized_package_name,
             "user_id": int(user_id),
             "voice": new_file_name,
         }

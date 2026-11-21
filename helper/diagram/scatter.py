@@ -1,20 +1,22 @@
 import os
 
-import arabic_reshaper
 import matplotlib.pyplot as plt
-from bidi.algorithm import get_display
+
+from helper.diagram.style import configure_matplotlib, rtl
+
+FONT_FAMILY = configure_matplotlib()
 
 
 def create_scatter_chart(
-        branch_lines,
-        current_x,
-        x_positions,
-        all_values,
-        all_diameters,
-        all_colors,
-        branch_labels,
-        path: str = "",
-        filename: str | bool = False,
+    branch_lines,
+    current_x,
+    x_positions,
+    all_values,
+    all_diameters,
+    all_colors,
+    branch_labels,
+    path: str = "",
+    filename: str | bool = False,
 ):
     """Create and save a scatter plot with vertical separators and Persian labels."""
     path_to_save = os.path.join(path, filename)
@@ -29,7 +31,7 @@ def create_scatter_chart(
             plt.axvline(x=line_pos, color="gray", linestyle="--", linewidth=0.5)
 
     plt.xticks([])
-    plt.yticks(fontsize=10, family="B Zar")
+    plt.yticks(fontsize=10, family=FONT_FAMILY)
 
     y_min = min(all_values) - 0.2
     y_max = max(all_values) + 0.1
@@ -37,15 +39,13 @@ def create_scatter_chart(
 
     label_y = y_min - 0.05 * (y_max - y_min)
     for pos, label in branch_labels:
-        reshaped_label = arabic_reshaper.reshape(label)
-        bidi_label = get_display(reshaped_label)
         plt.text(
             pos,
             label_y,
-            bidi_label,
+            rtl(label),
             fontsize=12,
             rotation=90,
-            family="B Zar",
+            family=FONT_FAMILY,
             ha="center",
             va="top",
             color="blue",

@@ -35,7 +35,12 @@ def create_signup_account(
     else:
         raise ValueError(f"Unsupported signup role: {role}")
 
-    create_capacity_with_packages(session=session, user_id=user_id, package_names=package_names)
+    create_capacity_with_packages(
+        session=session,
+        user_id=user_id,
+        package_names=package_names,
+        initial_allowed_packages={"AG", "SCL"},
+    )
     return user_id
 
 
@@ -88,5 +93,7 @@ def create_student_account(
         sex=request_data["sex"],
         city=request_data["city"],
         birth_date=request_data["birth_date"],
+        education_level=request_data.get("education_level"),
+        education_field=request_data.get("education_field"),
     )
     return user_id

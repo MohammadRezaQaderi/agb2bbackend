@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from helper.db.sqlalchemy.filters import StudentFilters
@@ -13,10 +13,12 @@ from helper.db.sqlalchemy.models import (
     Consultant,
     Institute,
     Notification,
+    NotificationRead,
     OwnerConsultant,
     RedisLog,
     ResultState,
     School,
+    SclScore,
     Score,
     Setting,
     Student,
@@ -32,6 +34,8 @@ def student_list_statement(
     scope: StudentScope,
     user_id: int,
     filters: StudentFilters | None = None,
+    sort_by: str | None = None,
+    sort_direction: str | None = None,
 ) -> Select:
     consultant = aliased(Consultant)
     filters = filters or StudentFilters()
@@ -47,6 +51,11 @@ def student_list_statement(
             Student.sex.label("sex"),
             Student.city.label("city"),
             Student.birth_date.label("birth_date"),
+            Student.education_level.label("education_level"),
+            Student.education_field.label("education_field"),
+            Student.is_archived.label("is_archived"),
+            Student.archived_at.label("archived_at"),
+            Student.archived_by.label("archived_by"),
             Student.access.label("access"),
             Student.comment.label("comment"),
             Student.owner_user_id.label("owner_user_id"),
@@ -57,7 +66,7 @@ def student_list_statement(
         )
         .join(User, User.user_id == Student.user_id)
         .outerjoin(consultant, consultant.user_id == Student.consultant_user_id)
-        .order_by(Student.created_time.desc(), Student.user_id.desc())
+        .where(Student.is_archived == filters.archived)
     )
 
     if scope == "owner":
@@ -68,14 +77,36 @@ def student_list_statement(
         raise ValueError(f"Unsupported student scope: {scope}")
 
     if filters.search:
-        pattern = f"%{filters.search}%"
         statement = statement.where(
-            or_(
-                Student.first_name.like(pattern),
-                Student.last_name.like(pattern),
-                User.phone.like(pattern),
+            _student_search_condition(
+                filters.search,
+                Student.first_name,
+                Student.last_name,
+                User.phone,
+                consultant.first_name,
+                consultant.last_name,
+                Student.education_level,
+                Student.education_field,
             )
         )
+
+    if filters.name:
+        statement = statement.where(_word_search_condition(filters.name, Student.first_name, Student.last_name))
+
+    if filters.phone:
+        statement = statement.where(User.phone.ilike(f"%{filters.phone}%"))
+
+    if filters.consultant_name:
+        statement = statement.where(
+            _word_search_condition(
+                filters.consultant_name,
+                consultant.first_name,
+                consultant.last_name,
+            )
+        )
+
+    if filters.education:
+        statement = statement.where(_education_condition(filters.education))
 
     if filters.sex is not None:
         statement = statement.where(Student.sex == filters.sex)
@@ -91,13 +122,86 @@ def student_list_statement(
         if filters.access_permission is not None:
             access_conditions.append(StudentPackageAccess.permission == filters.access_permission)
 
-        statement = statement.where(
-            select(StudentPackageAccess.id)
-            .where(and_(*access_conditions))
-            .exists()
-        )
+        statement = statement.where(select(StudentPackageAccess.id).where(and_(*access_conditions)).exists())
 
-    return statement
+    if filters.archived and not sort_by:
+        return statement.order_by(Student.archived_at.desc(), Student.user_id.desc())
+
+    return _apply_student_sorting(
+        statement,
+        consultant=consultant,
+        sort_by=sort_by,
+        sort_direction=sort_direction,
+    )
+
+
+def _word_search_condition(value: str, *columns):
+    words = value.split()
+    return and_(*(or_(*(column.ilike(f"%{word}%") for column in columns)) for word in words))
+
+
+def _student_search_condition(value: str, *columns):
+    words = value.split()
+    return and_(
+        *(
+            or_(
+                *(column.ilike(f"%{word}%") for column in columns),
+                _education_condition(word),
+            )
+            for word in words
+        )
+    )
+
+
+def _education_condition(value: str):
+    normalized = value.replace("‌", " ").strip().lower()
+    if "ثبت نشده" in normalized or normalized in {"ثبت", "نشده"}:
+        return Student.education_level.is_(None)
+
+    conditions = []
+    label_values = {
+        "اول": (Student.education_level, "first"),
+        "دوم": (Student.education_level, "second"),
+        "تجربی": (Student.education_field, "experimental"),
+        "ریاضی": (Student.education_field, "mathematics"),
+        "انسانی": (Student.education_field, "humanities"),
+        "فنی": (Student.education_field, "technical_vocational_work_knowledge"),
+        "کاردانش": (Student.education_field, "technical_vocational_work_knowledge"),
+    }
+    for label, (column, stored_value) in label_values.items():
+        if label in normalized:
+            conditions.append(column == stored_value)
+
+    if conditions:
+        return and_(*conditions)
+
+    if normalized == "دوره":
+        return Student.education_level.is_not(None)
+
+    pattern = f"%{normalized}%"
+    return or_(Student.education_level.ilike(pattern), Student.education_field.ilike(pattern))
+
+
+def _apply_student_sorting(
+    statement: Select,
+    consultant,
+    sort_by: str | None,
+    sort_direction: str | None,
+) -> Select:
+    sort_columns = {
+        "full_name": (Student.first_name, Student.last_name),
+        "phone": (User.phone,),
+        "con_name": (consultant.first_name, consultant.last_name),
+        "education": (Student.education_level, Student.education_field),
+        "created_time": (Student.created_time,),
+    }
+    columns = sort_columns.get(str(sort_by or ""))
+    if not columns:
+        return statement.order_by(Student.created_time.desc(), Student.user_id.desc())
+
+    descending = str(sort_direction or "asc").lower() == "desc"
+    ordering = [column.desc() if descending else column.asc() for column in columns]
+    return statement.order_by(*ordering, Student.user_id.desc())
 
 
 def list_students(
@@ -105,8 +209,16 @@ def list_students(
     scope: StudentScope,
     user_id: int,
     filters: StudentFilters | None = None,
+    sort_by: str | None = None,
+    sort_direction: str | None = None,
 ) -> list[dict]:
-    statement = student_list_statement(scope=scope, user_id=user_id, filters=filters)
+    statement = student_list_statement(
+        scope=scope,
+        user_id=user_id,
+        filters=filters,
+        sort_by=sort_by,
+        sort_direction=sort_direction,
+    )
     return [dict(row) for row in session.execute(statement).mappings().all()]
 
 
@@ -117,8 +229,16 @@ def paginate_students(
     filters: StudentFilters | None = None,
     page: int | str | None = None,
     page_size: int | str | None = None,
+    sort_by: str | None = None,
+    sort_direction: str | None = None,
 ) -> Page:
-    statement = student_list_statement(scope=scope, user_id=user_id, filters=filters)
+    statement = student_list_statement(
+        scope=scope,
+        user_id=user_id,
+        filters=filters,
+        sort_by=sort_by,
+        sort_direction=sort_direction,
+    )
     return paginate_mappings(session, statement, page=page, page_size=page_size)
 
 
@@ -138,6 +258,76 @@ def list_students_for_consultant(
     return list_students(session, scope="consultant", user_id=consultant_user_id, filters=filters)
 
 
+def list_student_options(
+    session: Session,
+    scope: StudentScope,
+    user_id: int,
+) -> list[dict]:
+    if scope == "owner":
+        scope_column = Student.owner_user_id
+    elif scope == "consultant":
+        scope_column = Student.consultant_user_id
+    else:
+        raise ValueError(f"Unsupported student scope: {scope}")
+
+    statement = (
+        select(
+            Student.user_id.label("user_id"),
+            Student.first_name.label("first_name"),
+            Student.last_name.label("last_name"),
+            User.phone.label("phone"),
+        )
+        .join(User, User.user_id == Student.user_id)
+        .where(scope_column == user_id, Student.is_archived == 0)
+        .order_by(Student.first_name.asc(), Student.last_name.asc(), Student.user_id.asc())
+    )
+    return [dict(row) for row in session.execute(statement).mappings().all()]
+
+
+def list_students_without_package_access(
+    session: Session,
+    scope: StudentScope,
+    user_id: int,
+    package_name: str,
+) -> list[dict]:
+    if scope == "owner":
+        scope_column = Student.owner_user_id
+    elif scope == "consultant":
+        scope_column = Student.consultant_user_id
+    else:
+        raise ValueError(f"Unsupported student scope: {scope}")
+
+    has_package_access = (
+        select(StudentPackageAccess.id)
+        .where(StudentPackageAccess.stu_user_id == Student.user_id)
+        .where(StudentPackageAccess.package_name == package_name.upper())
+        .where(StudentPackageAccess.permission == 1)
+        .exists()
+    )
+    statement = (
+        select(
+            Student.user_id.label("stu_id"),
+            Student.first_name.label("first_name"),
+            Student.last_name.label("last_name"),
+            User.phone.label("phone"),
+        )
+        .join(User, User.user_id == Student.user_id)
+        .where(scope_column == user_id)
+        .where(Student.is_archived == 0)
+        .where(~has_package_access)
+        .order_by(Student.created_time.desc(), Student.user_id.desc())
+    )
+    rows = session.execute(statement).mappings().all()
+    return [
+        {
+            "stu_id": row["stu_id"],
+            "full_name": f"{row['first_name'] or ''} {row['last_name'] or ''}".strip(),
+            "phone": row["phone"],
+        }
+        for row in rows
+    ]
+
+
 def get_student_birth_date(session: Session, user_id: int) -> str | None:
     statement = select(Student.birth_date).where(Student.user_id == user_id)
     return session.execute(statement).scalar_one_or_none()
@@ -154,6 +344,36 @@ def list_student_package_access(session: Session, user_id: int) -> list[dict]:
         .order_by(StudentPackageAccess.package_name.asc())
     )
     return [dict(row) for row in session.execute(statement).mappings().all()]
+
+
+def list_student_package_access_for_users(
+    session: Session,
+    user_ids: list[int],
+) -> dict[int, dict[str, dict[str, int]]]:
+    if not user_ids:
+        return {}
+
+    statement = (
+        select(
+            StudentPackageAccess.stu_user_id.label("stu_user_id"),
+            StudentPackageAccess.package_name.label("package_name"),
+            StudentPackageAccess.permission.label("permission"),
+            StudentPackageAccess.limit.label("limit"),
+        )
+        .where(StudentPackageAccess.stu_user_id.in_(user_ids))
+        .order_by(StudentPackageAccess.stu_user_id, StudentPackageAccess.package_name)
+    )
+    access_by_user: dict[int, dict[str, dict[str, int]]] = {}
+    for row in session.execute(statement).mappings().all():
+        stu_user_id = int(row["stu_user_id"])
+        package_name = str(row["package_name"] or "").upper()
+        if not package_name:
+            continue
+        access_by_user.setdefault(stu_user_id, {})[package_name] = {
+            "permission": int(row["permission"] or 0),
+            "limit": int(row["limit"] or 0),
+        }
+    return access_by_user
 
 
 def get_student_legacy_access(session: Session, user_id: int) -> str | None:
@@ -211,6 +431,8 @@ def get_student_profile(session: Session, user_id: int) -> dict | None:
             Student.owner_user_id.label("owner_user_id"),
             Student.consultant_user_id.label("consultant_user_id"),
             Student.birth_date.label("birth_date"),
+            Student.education_level.label("education_level"),
+            Student.education_field.label("education_field"),
             owner.role.label("owner_role"),
             Institute.name.label("institute_name"),
             Institute.logo.label("institute_logo"),
@@ -250,6 +472,17 @@ def get_latest_ag_score_summary(session: Session, user_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def get_latest_scl_score_summary(session: Session, user_id: int) -> dict | None:
+    statement = (
+        select(SclScore.scl_date.label("scl_date"))
+        .where(SclScore.user_id == user_id)
+        .order_by(SclScore.edited_time.desc())
+        .limit(1)
+    )
+    row = session.execute(statement).mappings().first()
+    return dict(row) if row else None
+
+
 def get_result_state(session: Session, user_id: int) -> dict | None:
     statement = (
         select(
@@ -270,8 +503,22 @@ def get_result_state(session: Session, user_id: int) -> dict | None:
 
 
 def list_student_notifications(session: Session, user_id: int, role: str, limit: int = 10) -> list[dict]:
+    read_exists = exists().where(
+        NotificationRead.notification_id == Notification.id,
+        NotificationRead.user_id == user_id,
+    )
+    role_terms = {
+        "stu": ["stu", "student"],
+    }.get(role, [role])
+    role_conditions = [
+        Notification.roles.like(f"%{role_term}%")
+        for role_term in role_terms
+        if role_term
+    ]
+
     statement = (
         select(
+            Notification.id.label("id"),
             Notification.title.label("title"),
             Notification.description.label("description"),
             Notification.added_by.label("added_by"),
@@ -279,15 +526,30 @@ def list_student_notifications(session: Session, user_id: int, role: str, limit:
             Notification.persian_date.label("persian_date"),
             Notification.full_text.label("fullText"),
             Notification.created_time.label("created_time"),
+            case((read_exists, 1), else_=0).label("is_read"),
         )
-        .where(or_(Notification.user_id == user_id, Notification.roles.like(f"%{role}%")))
+        .where(
+            or_(
+                Notification.user_id == user_id,
+                Notification.roles.like("%all%"),
+                *role_conditions,
+            )
+        )
         .order_by(Notification.created_time.desc())
         .limit(limit)
     )
-    return [dict(row) for row in session.execute(statement).mappings().all()]
+    return [
+        {**dict(row), "is_read": int(row["is_read"] or 0)}
+        for row in session.execute(statement).mappings().all()
+    ]
 
 
-def get_quiz_setting(session: Session, owner_user_id: int | None, quiz_id: int) -> dict | None:
+def get_quiz_setting(
+    session: Session,
+    owner_user_id: int | None,
+    package_name: str,
+    quiz_id: int,
+) -> dict | None:
     if owner_user_id is None:
         return None
     statement = (
@@ -297,6 +559,7 @@ def get_quiz_setting(session: Session, owner_user_id: int | None, quiz_id: int) 
         )
         .where(
             Setting.user_id == owner_user_id,
+            Setting.package_name == package_name,
             Setting.quiz_id == quiz_id,
         )
         .limit(1)
@@ -332,19 +595,27 @@ def create_redis_log(session: Session, user_id: int, kind: str, result: str, pho
     return True
 
 
-def create_capacity_with_packages(session: Session, user_id: int, package_names: list[str]) -> int:
+def create_capacity_with_packages(
+        session: Session,
+        user_id: int,
+        package_names: list[str],
+        initial_allowed_packages: set[str] | None = None,
+) -> int:
     capacity = Capacity(user_id=user_id)
     session.add(capacity)
     session.flush()
 
+    if initial_allowed_packages is None:
+        initial_allowed_packages = set(package_names)
     for package_name in package_names:
+        initial_allowed = 1 if package_name in initial_allowed_packages else 0
         session.add(
             CapacityPackage(
                 capacity_id=capacity.capacity_id,
                 user_id=user_id,
                 package_name=package_name,
-                total_allowed=1,
-                allowed=1,
+                total_allowed=initial_allowed,
+                allowed=initial_allowed,
                 used=0,
             )
         )
@@ -357,8 +628,11 @@ def get_student_access_for_relation(session: Session, stu_user_id: int) -> dict 
         select(
             Student.owner_user_id.label("owner_user_id"),
             Student.consultant_user_id.label("consultant_user_id"),
+            Student.is_archived.label("is_archived"),
             Student.access.label("access"),
+            User.phone.label("phone"),
         )
+        .join(User, User.user_id == Student.user_id)
         .where(Student.user_id == stu_user_id)
         .limit(1)
     )
@@ -491,6 +765,8 @@ def create_student_profile(
     sex: int,
     city: str,
     birth_date: str,
+    education_level: str | None = None,
+    education_field: str | None = None,
 ) -> None:
     session.add(
         Student(
@@ -503,6 +779,8 @@ def create_student_profile(
             sex=sex,
             city=city,
             birth_date=birth_date,
+            education_level=education_level,
+            education_field=education_field if education_level == "second" else None,
         )
     )
     session.flush()
@@ -518,6 +796,8 @@ def update_student_profile_for_owner(
     city: str,
     consultant_user_id: int,
     birth_date: str,
+    education_level: str | None = None,
+    education_field: str | None = None,
 ) -> int:
     student = session.get(Student, student_user_id)
     if not student:
@@ -529,7 +809,49 @@ def update_student_profile_for_owner(
     student.city = city
     student.consultant_user_id = consultant_user_id
     student.birth_date = birth_date
+    student.education_level = education_level
+    student.education_field = education_field if education_level == "second" else None
     student.editor_id = editor_id
     student.edited_time = datetime.now()
     session.flush()
     return 1
+
+
+def set_student_archive_state(
+    session: Session,
+    student_user_id: int,
+    scope: StudentScope,
+    actor_user_id: int,
+    archived: bool,
+) -> dict | None:
+    if scope == "owner":
+        scope_column = Student.owner_user_id
+    elif scope == "consultant":
+        scope_column = Student.consultant_user_id
+    else:
+        raise ValueError(f"Unsupported student scope: {scope}")
+
+    statement = select(Student).where(
+        Student.user_id == student_user_id,
+        scope_column == actor_user_id,
+    )
+    student = session.execute(statement).scalar_one_or_none()
+    if student is None:
+        return None
+
+    desired_state = bool(archived)
+    changed = bool(student.is_archived) != desired_state
+    if changed:
+        student.is_archived = desired_state
+        student.archived_at = datetime.now() if desired_state else None
+        student.archived_by = actor_user_id if desired_state else None
+        student.edited_time = datetime.now()
+        session.flush()
+
+    return {
+        "student_id": student.user_id,
+        "is_archived": bool(student.is_archived),
+        "archived_at": student.archived_at,
+        "archived_by": student.archived_by,
+        "changed": changed,
+    }

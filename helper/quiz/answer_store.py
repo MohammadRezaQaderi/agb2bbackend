@@ -14,6 +14,7 @@ from helper.db.sqlalchemy.queries.quiz import (
     save_attempt,
     save_question_answer,
 )
+from helper.quiz.quiz_data_extractor import get_definition_version, get_scoring_version
 
 
 def normalize_quiz_kind(kind: Any) -> str:
@@ -65,12 +66,18 @@ def get_attempt(user_id: int, quiz_kind: str, quiz_id: int):
 def upsert_attempt(user_id: int, quiz_kind: str, quiz_id: int, state: int,
                    owner_user_id: int | None, consultant_user_id: int | None, remain_time: int | None = None):
     quiz_kind = normalize_quiz_kind(quiz_kind)
+    definition_version = get_definition_version(quiz_kind)
+    scoring_version = get_scoring_version(quiz_kind)
+    if not definition_version or not scoring_version:
+        raise ValueError(f"unknown quiz package: {quiz_kind}")
     with session_scope() as session:
         return save_attempt(
             session=session,
             user_id=user_id,
             quiz_kind=quiz_kind,
             quiz_id=quiz_id,
+            definition_version=definition_version,
+            scoring_version=scoring_version,
             state=state,
             owner_user_id=owner_user_id,
             consultant_user_id=consultant_user_id,

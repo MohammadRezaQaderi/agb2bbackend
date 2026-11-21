@@ -1,10 +1,10 @@
 import os
 
-import matplotlib
 import matplotlib.pyplot as plt
 
-font = {"family": "B Nazanin"}
-matplotlib.rc("font", **font)
+from helper.diagram.style import configure_matplotlib
+
+FONT_FAMILY = configure_matplotlib()
 
 
 def create_bi_chart(negative_values, positive_values, path, filename):
@@ -28,7 +28,7 @@ def create_bi_chart(negative_values, positive_values, path, filename):
 
     ax_left.barh(categories_left, negative_values, color="salmon", label="Negative")
     ax_left.set_yticks(range(len(categories_left)))
-    ax_left.set_yticklabels(categories_left)
+    ax_left.set_yticklabels(categories_left, family=FONT_FAMILY)
     ax_left.invert_xaxis()
 
     ax_right = ax_left.twinx()
@@ -40,7 +40,7 @@ def create_bi_chart(negative_values, positive_values, path, filename):
         left=0,
     )
     ax_right.set_yticks(range(len(categories_right)))
-    ax_right.set_yticklabels(categories_right)
+    ax_right.set_yticklabels(categories_right, family=FONT_FAMILY)
 
     tick_values = [-24, -20, -16, -12, -8, -4, 0, 4, 8, 12, 16, 20, 24]
     ax_left.set_xticks(tick_values)

@@ -2,7 +2,19 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Identity, Integer, String, Text, Unicode, UnicodeText
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Identity,
+    Integer,
+    String,
+    Text,
+    Unicode,
+    UnicodeText,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from helper.db.sqlalchemy.base import Base, TimestampMixin
@@ -97,6 +109,16 @@ class Student(Base, TimestampMixin):
     access: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     comment: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     birth_date: Mapped[str | None] = mapped_column(Unicode(4), nullable=True)
+    education_level: Mapped[str | None] = mapped_column(Unicode(10), nullable=True)
+    education_field: Mapped[str | None] = mapped_column(Unicode(30), nullable=True)
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    archived_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.user_id"), nullable=True)
     consultant_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.user_id"), nullable=True)
     adder_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -160,9 +182,13 @@ class StudentPackageAccess(Base, TimestampMixin):
 
 class Setting(Base, TimestampMixin):
     __tablename__ = "setting"
+    __table_args__ = (
+        UniqueConstraint("user_id", "package_name", "quiz_id", name="uq_setting_user_package_quiz"),
+    )
 
     setting_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    package_name: Mapped[str] = mapped_column(String(25), nullable=False)
     description: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     voice: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     quiz_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -338,11 +364,16 @@ class NotificationRead(Base):
 
 class QuizAttempt(Base, TimestampMixin):
     __tablename__ = "quiz_attempt"
+    __table_args__ = (
+        UniqueConstraint("user_id", "quiz_kind", "quiz_id", name="uq_quiz_attempt_user_kind_quiz"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), nullable=False)
     quiz_kind: Mapped[str] = mapped_column(String(25), nullable=False)
     quiz_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    definition_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    scoring_version: Mapped[str] = mapped_column(String(50), nullable=False)
     state: Mapped[int] = mapped_column(Integer, nullable=False)
     remain_time: Mapped[int | None] = mapped_column(Integer, nullable=True)
     owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.user_id"), nullable=True)
@@ -359,6 +390,21 @@ class QuizQuestionAnswer(Base, TimestampMixin):
     quiz_id: Mapped[int] = mapped_column(Integer, nullable=False)
     question_id: Mapped[int] = mapped_column(Integer, nullable=False)
     answer_value: Mapped[str] = mapped_column(UnicodeText, nullable=False)
+
+
+class QuizLabel(Base, TimestampMixin):
+    __tablename__ = "quiz_labels"
+    __table_args__ = (
+        UniqueConstraint("user_id", "quiz_kind", name="uq_quiz_labels_user_kind"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), nullable=False)
+    quiz_kind: Mapped[str] = mapped_column(String(50), nullable=False)
+    labels_json: Mapped[str] = mapped_column(UnicodeText, nullable=False)
+    metadata_json: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    definition_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    scoring_version: Mapped[str] = mapped_column(String(50), nullable=False)
 
 
 class QuizMissingAnswer(Base, TimestampMixin):

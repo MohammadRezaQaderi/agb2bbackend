@@ -6,8 +6,8 @@ from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.quiz import create_missing_answer
 from helper.db.sqlalchemy.queries.students import get_student_birth_date
 from helper.quiz import answer_store
-from helper.quiz.ag_answer_info import quiz_labels, quiz_questions_answer_schema
-from helper.quiz.scl_answer_info import (
+from quiz_packages.ag.legacy_v1.scoring import quiz_labels, quiz_questions_answer_schema
+from quiz_packages.scl.legacy_v1.scoring import (
     quiz_labels as scl_quiz_labels,
     quiz_questions_answer_schema as scl_quiz_questions_answer_schema,
 )

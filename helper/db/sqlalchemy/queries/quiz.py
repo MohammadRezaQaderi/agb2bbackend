@@ -14,6 +14,8 @@ def _attempt_to_dict(attempt: QuizAttempt) -> dict:
         "user_id": attempt.user_id,
         "quiz_kind": attempt.quiz_kind,
         "quiz_id": attempt.quiz_id,
+        "definition_version": attempt.definition_version,
+        "scoring_version": attempt.scoring_version,
         "state": attempt.state,
         "remain_time": attempt.remain_time,
         "owner_user_id": attempt.owner_user_id,
@@ -26,12 +28,23 @@ def _attempt_to_dict(attempt: QuizAttempt) -> dict:
 
 
 def list_attempts_for_user_kind(session: Session, user_id: int, quiz_kind: str) -> list[dict]:
+    answer_count = (
+        select(func.count(QuizQuestionAnswer.id))
+        .where(QuizQuestionAnswer.attempt_id == QuizAttempt.id)
+        .correlate(QuizAttempt)
+        .scalar_subquery()
+    )
     statement = (
-        select(QuizAttempt)
+        select(QuizAttempt, answer_count.label("answer_count"))
         .where(QuizAttempt.user_id == user_id, QuizAttempt.quiz_kind == quiz_kind)
         .order_by(QuizAttempt.quiz_id.asc())
     )
-    return [_attempt_to_dict(attempt) for attempt in session.execute(statement).scalars().all()]
+    attempts = []
+    for attempt, saved_answer_count in session.execute(statement).all():
+        item = _attempt_to_dict(attempt)
+        item["answer_count"] = int(saved_answer_count or 0)
+        attempts.append(item)
+    return attempts
 
 
 def get_attempt_for_user_kind_quiz(
@@ -98,6 +111,8 @@ def save_attempt(
     user_id: int,
     quiz_kind: str,
     quiz_id: int,
+    definition_version: str,
+    scoring_version: str,
     state: int,
     owner_user_id: int | None,
     consultant_user_id: int | None,
@@ -125,6 +140,8 @@ def save_attempt(
         user_id=user_id,
         quiz_kind=quiz_kind,
         quiz_id=quiz_id,
+        definition_version=definition_version,
+        scoring_version=scoring_version,
         state=state,
         remain_time=remain_time,
         owner_user_id=owner_user_id,

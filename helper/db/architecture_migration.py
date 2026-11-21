@@ -520,7 +520,8 @@ def ensure_admin_tables(conn: Any, cursor: Any, dry_run: bool) -> None:
 
 
 def ensure_quiz_attempt_tables(conn: Any, cursor: Any, dry_run: bool) -> None:
-    if not table_exists(cursor, "quiz_attempt"):
+    quiz_attempt_exists = table_exists(cursor, "quiz_attempt")
+    if not quiz_attempt_exists:
         run_sql(
             conn,
             cursor,
@@ -530,6 +531,8 @@ def ensure_quiz_attempt_tables(conn: Any, cursor: Any, dry_run: bool) -> None:
                 [user_id] INT NOT NULL,
                 [quiz_kind] VARCHAR(25) NOT NULL,
                 [quiz_id] INT NOT NULL,
+                [definition_version] VARCHAR(50) NOT NULL DEFAULT 'legacy-v1',
+                [scoring_version] VARCHAR(50) NOT NULL DEFAULT 'legacy-v1',
                 [state] INT NOT NULL DEFAULT 1,
                 [remain_time] INT NULL,
                 [owner_user_id] INT NULL,
@@ -566,6 +569,117 @@ def ensure_quiz_attempt_tables(conn: Any, cursor: Any, dry_run: bool) -> None:
         )
     else:
         print("SKIP: quiz_question_answer already exists")
+
+
+def ensure_quiz_labels(conn: Any, cursor: Any, dry_run: bool) -> None:
+    if table_exists(cursor, "quiz_labels"):
+        print("SKIP: quiz_labels already exists")
+        return
+
+    run_sql(
+        conn,
+        cursor,
+        """
+        CREATE TABLE [quiz_labels] (
+            [id] INT IDENTITY(1, 1) PRIMARY KEY,
+            [user_id] INT NOT NULL,
+            [quiz_kind] VARCHAR(50) NOT NULL,
+            [labels_json] NVARCHAR(MAX) NOT NULL,
+            [metadata_json] NVARCHAR(MAX) NULL,
+            [definition_version] VARCHAR(50) NOT NULL,
+            [scoring_version] VARCHAR(50) NOT NULL,
+            [created_time] DATETIME DEFAULT GETDATE(),
+            [edited_time] DATETIME DEFAULT GETDATE(),
+            CONSTRAINT [uq_quiz_labels_user_kind] UNIQUE ([user_id], [quiz_kind]),
+            CONSTRAINT [fk_quiz_labels_user]
+                FOREIGN KEY ([user_id]) REFERENCES [users]([user_id]),
+            CONSTRAINT [ck_quiz_labels_json] CHECK (ISJSON([labels_json]) = 1),
+            CONSTRAINT [ck_quiz_labels_metadata_json]
+                CHECK ([metadata_json] IS NULL OR ISJSON([metadata_json]) = 1)
+        )
+        """,
+        dry_run,
+        "create quiz_labels",
+    )
+
+
+def ensure_quiz_package_versioning(conn: Any, cursor: Any, dry_run: bool) -> None:
+    if table_exists(cursor, "setting"):
+        setting_had_package_name = column_exists(cursor, "setting", "package_name")
+        ensure_column(conn, cursor, "setting", "package_name", "VARCHAR(25) NULL", dry_run)
+        run_sql(
+            conn,
+            cursor,
+            """
+            UPDATE setting
+            SET package_name = 'AG', edited_time = GETDATE()
+            WHERE package_name IS NULL OR LTRIM(RTRIM(package_name)) = ''
+            """,
+            dry_run,
+            "backfill setting.package_name as AG",
+        )
+
+        duplicate_sql = (
+            """
+            SELECT COUNT(*) FROM (
+                SELECT user_id, package_name, quiz_id
+                FROM setting
+                WHERE user_id IS NOT NULL AND package_name IS NOT NULL AND quiz_id IS NOT NULL
+                GROUP BY user_id, package_name, quiz_id
+                HAVING COUNT(*) > 1
+            ) d
+            """
+            if setting_had_package_name
+            else """
+            SELECT COUNT(*) FROM (
+                SELECT user_id, quiz_id
+                FROM setting
+                WHERE user_id IS NOT NULL AND quiz_id IS NOT NULL
+                GROUP BY user_id, quiz_id
+                HAVING COUNT(*) > 1
+            ) d
+            """
+        )
+        ensure_index_if_clean(
+            conn,
+            cursor,
+            "setting",
+            "ux_setting_user_package_quiz",
+            "user_id, package_name, quiz_id",
+            duplicate_sql,
+            dry_run,
+        )
+    else:
+        print("SKIP: setting table does not exist")
+
+    if not table_exists(cursor, "quiz_attempt"):
+        print("SKIP: quiz_attempt table does not exist")
+        return
+
+    ensure_column(conn, cursor, "quiz_attempt", "definition_version", "VARCHAR(50) NULL", dry_run)
+    ensure_column(conn, cursor, "quiz_attempt", "scoring_version", "VARCHAR(50) NULL", dry_run)
+    run_sql(
+        conn,
+        cursor,
+        """
+        UPDATE quiz_attempt
+        SET definition_version = 'legacy-v1'
+        WHERE definition_version IS NULL OR LTRIM(RTRIM(definition_version)) = ''
+        """,
+        dry_run,
+        "backfill quiz_attempt.definition_version",
+    )
+    run_sql(
+        conn,
+        cursor,
+        """
+        UPDATE quiz_attempt
+        SET scoring_version = 'legacy-v1'
+        WHERE scoring_version IS NULL OR LTRIM(RTRIM(scoring_version)) = ''
+        """,
+        dry_run,
+        "backfill quiz_attempt.scoring_version",
+    )
 
 
 def backfill_student_package_access(conn: Any, cursor: Any, dry_run: bool) -> None:
@@ -764,6 +878,9 @@ def run_migration(
         rename_table_if_needed(conn, cursor, "error_log", "quiz_missing_answers", dry_run)
         rename_column_if_needed(conn, cursor, "ocon", "wCon_id", "ocon_id", dry_run)
         ensure_column(conn, cursor, "ocon", "logo", "VARCHAR(MAX) NULL", dry_run)
+        ensure_column(conn, cursor, "stu", "is_archived", "BIT NOT NULL DEFAULT 0", dry_run)
+        ensure_column(conn, cursor, "stu", "archived_at", "DATETIME NULL", dry_run)
+        ensure_column(conn, cursor, "stu", "archived_by", "INT NULL", dry_run)
         rename_column_if_needed(conn, cursor, "quiz_missing_answers", "q_id", "question_id", dry_run)
         normalize_ocon_role_names(conn, cursor, dry_run)
         normalize_relation_columns(conn, cursor, dry_run)
@@ -788,6 +905,8 @@ def run_migration(
         ensure_notification_reads(conn, cursor, dry_run)
         ensure_admin_tables(conn, cursor, dry_run)
         ensure_quiz_attempt_tables(conn, cursor, dry_run)
+        ensure_quiz_labels(conn, cursor, dry_run)
+        ensure_quiz_package_versioning(conn, cursor, dry_run)
         backfill_student_package_access(conn, cursor, dry_run)
         alter_text_columns(conn, cursor, dry_run)
         if migrate_password_hash:

@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from helper.response.password_response import build_display_password
+from helper.quiz.quiz_data_extractor import get_package_quiz_counts
 
 
 def _safe_access(raw_access: Any) -> dict[str, Any]:
@@ -13,9 +14,19 @@ def _safe_access(raw_access: Any) -> dict[str, Any]:
         return {}
 
 
+def _filter_access(access: dict[str, Any], package_name: str | None) -> dict[str, Any]:
+    requested_package = str(package_name or "").strip().upper()
+    if not requested_package:
+        return access
+    if requested_package == "PSY":
+        return {key: value for key, value in access.items() if key.startswith("PSY_")}
+    return {requested_package: access[requested_package]} if requested_package in access else {}
+
+
 def build_student_report_response(
     students: list[dict[str, Any]],
     include_consultant_name: bool = False,
+    package_name: str | None = None,
 ) -> list[dict[str, Any]]:
     responses = []
     for stu in students:
@@ -30,7 +41,7 @@ def build_student_report_response(
             "password": build_display_password(stu.get("password")),
             "sex": stu.get("sex"),
             "city": stu.get("city"),
-            "access": _safe_access(stu.get("access")),
+            "access": _filter_access(_safe_access(stu.get("access")), package_name),
             "full_name": f"{first_name} {last_name}".strip(),
             "consultant_comment": stu.get("comment"),
             "report_id": stu.get("user_id"),
@@ -73,7 +84,7 @@ def build_student_management_report_response(
     include_consultant_name: bool = False,
     package_quiz_count: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
-    package_quiz_count = package_quiz_count or {"AG": 7, "SCL": 4}
+    package_quiz_count = package_quiz_count or get_package_quiz_counts(packages_data.keys())
     latest_attempts = _latest_attempts_by_student_package(quiz_attempts)
     responses = []
 

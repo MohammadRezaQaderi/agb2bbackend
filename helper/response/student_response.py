@@ -39,6 +39,11 @@ def build_student_list_response(
                 "city": stu.get("city"),
                 "full_name": f"{first_name} {last_name}".strip(),
                 "birth_date": stu.get("birth_date"),
+                "education_level": stu.get("education_level"),
+                "education_field": stu.get("education_field"),
+                "is_archived": bool(stu.get("is_archived")),
+                "archived_at": stu.get("archived_at"),
+                "archived_by": stu.get("archived_by"),
                 "access": access_data,
             }
         )

@@ -6,35 +6,42 @@ import logging
 import sys
 import io
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import List, Tuple, Dict, Any
 
-from helper.chart import bar, bidirection, gauge, bidirection_two_side, tube, scatter, horizontal
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from helper.diagram import bar, bidirection, gauge, bidirection_two_side, horizontal, scatter, tube
+from helper.diagram.ag_report1 import build_chart_data, render_report_media
 from helper.db.sqlalchemy import session_scope
+from helper.db.sqlalchemy.queries.quiz_labels import upsert_quiz_labels
 from helper.db.sqlalchemy.queries.scheduler_reports import (
-    count_completed_quiz_attempts,
     get_scheduler_student_context,
+    list_completed_attempt_versions,
     update_redis_log_status,
     upsert_hedayat_fields,
     upsert_result_state,
     upsert_scl_score,
     upsert_score,
 )
-from helper.quiz import answer_store
-from helper.office.excel_helper import LoadExcelSourceFile, compute_brain_info
-from helper.quiz.check_score import score_computation_scl
-from helper.quiz.report_info import *
-from helper.quiz.bookmarks_info import CALC_DATA, USER_TAGS_INFO, COLOR_TAGS
-from helper.quiz.scl_answer_info import bookmark_scl_object
-from helper.quiz.scl_report_info import get_statefast_value, get_interfast_value, get_report_text
+from helper.quiz.runtime_provider import resolve_attempt_runtime
+from helper.office.excel_helper import compute_brain_info
+from quiz_packages.ag.legacy_v1.reports import *
+from quiz_packages.scl.legacy_v1.report_bookmarks import CALC_DATA, COLOR_TAGS, USER_TAGS_INFO
+from quiz_packages.scl.legacy_v1.reports import get_interfast_value, get_report_text, get_statefast_value
+from quiz_packages.scl.legacy_v1.scoring import bookmark_scl_object
 from helper.office.word_helper import (
     generate_first_report_documents,
     generate_second_report_documents,
     generate_third_report_documents,
     generate_forth_report_documents,
     generate_fifth_report_documents,
+    require_libreoffice,
 )
 from config import (
-    BRAIN_EXCEL_PATH,
+    DEFAULT_REPORT_LOGO_PATH,
     REPORTS_DIR,
     INS_PIC_DIR,
     PICS_WORD_SCL_DIR,
@@ -44,17 +51,6 @@ from config import (
     REDIS_PASSWORD,
     REDIS_DB,
 )
-
-master_file = None
-master_sheet = None
-
-
-def load_master_excel():
-    global master_file, master_sheet
-    if master_file is None or master_sheet is None:
-        master_file = LoadExcelSourceFile(str(BRAIN_EXCEL_PATH))
-        master_sheet = master_file.sheets["نسخه اصلی"]
-    return master_file, master_sheet
 
 # Logging configuration
 utf8_stream = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
@@ -196,6 +192,8 @@ SCL_PIC_DICT = {"drug_addicion": [("image15.png", "drog4.png"), ("image16.png", 
 
 class AGReportScheduler:
     def __init__(self):
+        libreoffice_path = require_libreoffice()
+        logging.info("Using LibreOffice executable: %s", libreoffice_path)
         self.redis = redis.Redis(
             host=REDIS_HOST,
             port=REDIS_PORT,
@@ -259,20 +257,20 @@ class AGReportScheduler:
             self._log_error(user_id, "AG", str(e))
             raise
 
-    def _validate_quiz_data(self, user_id: str, report_kind: str) -> None:
-        """Validate that user has sufficient quiz data."""
+    def _validate_quiz_data(self, user_id: str, report_kind: str):
+        """Resolve and validate the runtime recorded on completed attempts."""
         try:
             with session_scope() as session:
-                completed_count = count_completed_quiz_attempts(
+                attempt_versions = list_completed_attempt_versions(
                     session=session,
                     user_id=user_id,
                     report_kind=report_kind,
                 )
 
-            if report_kind == "AG" and completed_count < 7:
-                raise ValueError("Insufficient quiz data for report generation")
-            if report_kind == "SCL" and completed_count < 4:
-                raise ValueError("Insufficient quiz data for report generation")
+            return resolve_attempt_runtime(
+                report_kind,
+                attempt_versions,
+            )
         except Exception as e:
             logging.error(f"Error validating quiz data: {str(e)}")
             self._log_error(user_id, report_kind, str(e))
@@ -288,6 +286,96 @@ class AGReportScheduler:
         except Exception as e:
             logging.error(f"Failed to create directory: {str(e)}")
             raise
+
+    @staticmethod
+    def _motivation_summary(value: float, maximum: float, subject: str) -> str:
+        score = max(0, min(100, round(float(value) * 100 / maximum)))
+        if score < 20:
+            level = "خیلی کم"
+        elif score < 40:
+            level = "کم"
+        elif score < 60:
+            level = "متوسط"
+        elif score < 80:
+            level = "زیاد"
+        else:
+            level = "خیلی زیاد"
+        return f"اهمیت {subject} برای شما در سطح {level} قرار دارد (امتیاز {score} از ۱۰۰)."
+
+    def _build_first_report_text(
+            self,
+            data: Dict,
+            institute_name: str,
+            consultant_name: str,
+            chart_data,
+    ) -> Dict[str, str]:
+        """Build all AG Report 1 text replacements without rendering charts."""
+        catel_explain, _, _, _ = catel_info(data["IQ_Number"])
+        info = {
+            "#name": data.get("student_name", ""),
+            "#inst_name": institute_name,
+            "#con_name": consultant_name,
+            "#right_cattel": str(data.get("correct", 0)),
+            "#wrong_cattel": str(data.get("wrong", 0)),
+            "#non_cattel": str(data.get("unanswered", 0)),
+            "#توضیحات_کتل": catel_explain,
+        }
+
+        gardner_text = (
+            ("سلاام", "Visual_spatial", gardner_visual_explain),
+            ("سلااام", "Linguistic_verbal", gardner_linguistic_explain),
+            ("سلاااام", "Logical_mathematical", gardner_logical_explain),
+            ("سلااااام", "Body_kinesthetic", gardner_body_explain),
+            ("سلاااااام", "Musical", gardner_musical_explain),
+            ("سلااااااام", "Interpersonal", gardner_interpersonal_explain),
+            ("سلاااااااام", "Intrapersonal", gardner_intrapersonal_explain),
+            ("سلااااااااام", "Naturalistic", gardner_naturalistic_explain),
+        )
+        for placeholder, key, explain in gardner_text:
+            info[placeholder] = explain(data[key])
+
+        neo_text = (
+            ("سلاااااااااام", "Extraversion", neo_extraversion_explain),
+            ("سلااااااااااام", "Agreeableness", neo_agreeableness_explain),
+            ("سلاااااااااااام", "Neuroticism", neo_neuroticism_explain),
+            ("سلااااااااااااام", "Openness", neo_openness_explain),
+            ("سلاااااااااااااام", "Conscientiousness", neo_conscientiousness_explain),
+        )
+        for placeholder, key, explain in neo_text:
+            info[placeholder] = explain(data[key])[0]
+
+        holland_keys = [key for key, _, _ in (
+            ("Realistic", "و", "واقع گرایی"),
+            ("Investigative", "ج", "جستجوگری"),
+            ("Artistic", "هـ", "هنری"),
+            ("Social", "الف", "اجتماعی"),
+            ("Enterprising", "م", "متهور"),
+            ("Conventional", "ق", "قراردادی"),
+        )]
+        top_holland = sorted(holland_keys, key=lambda key: data[key], reverse=True)[:3]
+        for index, key in enumerate(top_holland):
+            ordinal = ("first", "second", "third")[index]
+            desire_title, desire_text = get_holland_desire(key)
+            work_title, work_text = get_holland_work(key)[:2]
+            info[f"#desire_{ordinal}_title"] = desire_title
+            info[("سلااااااااااااااام", "سلاااااااااااااااام", "سلااااااااااااااااام")[index]] = desire_text
+            info[f"#work_{ordinal}_title"] = work_title
+            info[("سلاااااااااااااااااام", "سلااااااااااااااااااام", "سلاااااااااااااااااااام")[index]] = work_text
+
+        info.update({
+            "سلااااااااااااااااااااام": get_clifton_strategic(data),
+            "سلاااااااااااااااااااااام": get_clifton_relation(data),
+            "سلااااااااااااااااااااااام": get_clifton_infiltrate(data),
+            "سلاااااااااااااااااااااااام": get_clifton_executive(data),
+            "#تعهد": f"سطح تعهد تحصیلی شما {chart_data.commitment['label']} است.",
+            "#سختی": self._motivation_summary(data["Field"], 12, "تحمل سختی مسیر تحصیلی"),
+            "#مهاجرت": self._motivation_summary(data["Imigration"], 16, "مهاجرت"),
+            "#شغل": self._motivation_summary(data["Job"], 12, "وجود شغل مرتبط با رشته"),
+            "#درآمد": self._motivation_summary(data["Money"], 16, "درآمد"),
+            "#جایگاه": self._motivation_summary(data["Social_place"], 12, "جایگاه اجتماعی"),
+            "#زمان": self._motivation_summary(data["Speed"], 12, "سرعت رسیدن به درآمد"),
+        })
+        return info
 
     def _generate_first_report_charts(self, data: Dict, user_directory: str,
                                       institute_name: str, consultant_name: str) -> Tuple[List, Dict, List, List, List]:
@@ -762,15 +850,10 @@ class AGReportScheduler:
 
         return fields_matched
 
-    def _compute_scl_scores(self, user_id: str) -> tuple[Dict, List[int]]:
+    def _compute_scl_scores(self, user_id: str, runtime_provider) -> tuple[Dict, List[int]]:
         """Compute SCL labels for a user based on quiz question answer rows."""
         try:
-            user_answers: Dict[str, Any] = answer_store.get_answers_for_user_kind(
-                int(user_id),
-                "SCL",
-            )
-
-            labels, missing_questions = score_computation_scl(user_answers)
+            labels, missing_questions = runtime_provider.score_user(int(user_id))
             return labels, missing_questions
         except Exception as e:
             logging.error(f"Error computing SCL scores for user {user_id}: {e}")
@@ -840,14 +923,17 @@ class AGReportScheduler:
 
         return scl_calc_data
 
-    def _handle_scl_report(self, user_id: str) -> None:
+    def _handle_scl_report(self, user_id: str, runtime_provider=None) -> None:
         """Handle SCL kind: compute labels and store result in redis_logs."""
         try:
             start_time = time.time()
             report_kind = "SCL"
 
             # Validate quiz data
-            self._validate_quiz_data(user_id, report_kind)
+            runtime_provider = runtime_provider or self._validate_quiz_data(
+                user_id,
+                report_kind,
+            )
 
             # Get student information
             student, student_name, phone, institute_name, consultant_name, logo_path = self._get_student_info(user_id)
@@ -875,8 +961,21 @@ class AGReportScheduler:
                     status=1,
                 )
 
-            labels, missing_questions = self._compute_scl_scores(user_id)
+            labels, missing_questions = self._compute_scl_scores(
+                user_id,
+                runtime_provider,
+            )
             scl_calc_data = self._calculate_scl_calc_data(labels)
+            with session_scope() as session:
+                upsert_quiz_labels(
+                    session=session,
+                    user_id=user_id,
+                    quiz_kind=runtime_provider.package_name,
+                    labels=labels,
+                    metadata={"missing_questions": missing_questions},
+                    definition_version=runtime_provider.definition_versions[0],
+                    scoring_version=runtime_provider.scoring_version,
+                )
 
             # Generate Report 3
             # Mapping from CALC_DATA keys to advice keys for get_report_text
@@ -1308,14 +1407,60 @@ class AGReportScheduler:
             self._log_error(user_id, "SCL", str(e))
             raise
 
-    def _handle_ag_report(self, user_id: str) -> None:
+    def _handle_psy_labels(self, user_id: str, runtime_provider=None) -> None:
+        """Compute and persist labels for PSY packages without generating a PDF."""
+        if runtime_provider is None:
+            raise ValueError("PSY runtime provider is required")
+        report_kind = runtime_provider.package_name
+        try:
+            with session_scope() as session:
+                update_redis_log_status(
+                    session=session,
+                    user_id=user_id,
+                    kind=runtime_provider.package_name,
+                    result="PSY label computation started in scheduler",
+                    status=1,
+                )
+
+            labels, missing_questions = runtime_provider.score_user(int(user_id))
+            with session_scope() as session:
+                stored_ag_labels = upsert_quiz_labels(
+                    session=session,
+                    user_id=user_id,
+                    quiz_kind=runtime_provider.package_name,
+                    labels=labels,
+                    metadata={"missing_questions": missing_questions},
+                    definition_version=runtime_provider.definition_versions[0],
+                    scoring_version=runtime_provider.scoring_version,
+                )
+                update_redis_log_status(
+                    session=session,
+                    user_id=user_id,
+                    kind=runtime_provider.package_name,
+                    result="PSY labels stored successfully",
+                    status=2,
+                )
+        except Exception as exc:
+            logging.exception(
+                "Failed to compute PSY labels for user %s and package %s: %s",
+                user_id,
+                report_kind,
+                exc,
+            )
+            self._log_error(user_id, report_kind, str(exc))
+            raise
+
+    def _handle_ag_report(self, user_id: str, runtime_provider=None) -> None:
         """Main method to generate complete report for a user."""
         try:
             start_time = time.time()
             report_kind = "AG"
 
             # Validate quiz data
-            self._validate_quiz_data(user_id, report_kind)
+            runtime_provider = runtime_provider or self._validate_quiz_data(
+                user_id,
+                report_kind,
+            )
 
             # Get student information
             student, student_name, phone, institute_name, consultant_name, logo_path = self._get_student_info(user_id)
@@ -1334,12 +1479,11 @@ class AGReportScheduler:
                 )
 
             # Compute brain info
-            master_file, master_sheet = load_master_excel()
             data, fields, categories, branches, correct, wrong, unanswered = compute_brain_info(
                 user_id,
                 phone=phone,
-                master_file=master_file,
-                master_sheet=master_sheet
+                scorer=runtime_provider.score_user,
+                calculator=runtime_provider.calculate_report_data,
             )
 
             quiz_score_json = json.dumps(
@@ -1351,6 +1495,19 @@ class AGReportScheduler:
             brain_branches_json = json.dumps(branches, ensure_ascii=False)
 
             with session_scope() as session:
+                stored_ag_labels = upsert_quiz_labels(
+                    session=session,
+                    user_id=user_id,
+                    quiz_kind=runtime_provider.package_name,
+                    labels=data,
+                    metadata={
+                        "correct": correct,
+                        "wrong": wrong,
+                        "unanswered": unanswered,
+                    },
+                    definition_version=runtime_provider.definition_versions[0],
+                    scoring_version=runtime_provider.scoring_version,
+                )
                 upsert_score(
                     session=session,
                     user_id=user_id,
@@ -1379,26 +1536,35 @@ class AGReportScheduler:
             data["wrong"] = wrong
             data["unanswered"] = unanswered
 
-            # Generate first report
-            first_report_images = FIRST_REPORT_IMAGES.copy()
-            first_report_pictures, first_report_info, effect, color_handle_tag, color_handle_color = \
-                self._generate_first_report_charts(data, user_directory, institute_name, consultant_name)
-
-            if logo_path:
-                first_report_images.append('image53.jpeg')
-                first_report_pictures.append(logo_path)
-
-            generate_first_report_documents(
-                list(first_report_info.keys()),
-                list(first_report_info.values()),
-                first_report_images,
-                first_report_pictures,
-                user_directory,
-                effect,
-                color_handle_tag,
-                color_handle_color,
-                phone
+            # Generate AG Report 1 from the persisted, versioned label payload.
+            chart_data = build_chart_data(stored_ag_labels["labels"])
+            first_report_info = self._build_first_report_text(
+                data,
+                institute_name,
+                consultant_name,
+                chart_data,
             )
+            with TemporaryDirectory(prefix="ag-report1-charts-", dir=user_directory) as chart_directory:
+                report_media = render_report_media(chart_data, chart_directory)
+                effective_logo = Path(logo_path) if logo_path and Path(logo_path).is_file() else DEFAULT_REPORT_LOGO_PATH
+                if effective_logo and effective_logo.is_file():
+                    report_media["image14.jpeg"] = effective_logo
+
+                generate_first_report_documents(
+                    list(first_report_info.keys()),
+                    list(first_report_info.values()),
+                    list(report_media.keys()),
+                    list(report_media.values()),
+                    user_directory,
+                    [],
+                    [],
+                    [],
+                    phone,
+                )
+
+            report1_pdf = Path(user_directory) / "Report1.pdf"
+            if not report1_pdf.is_file() or report1_pdf.stat().st_size == 0:
+                raise RuntimeError("AG Report 1 generation did not produce a non-empty PDF")
 
             # Generate second report
             suggested_other = self._get_sorted_suggested_fields(fields)
@@ -1486,14 +1652,8 @@ class AGReportScheduler:
 
                     logging.info(f"Processing user ID: {user_id} with kind: {kind}")
 
-                    if kind == "AG":
-                        self._handle_ag_report(user_id)
-                    elif kind == "SCL":
-                        self._handle_scl_report(user_id)
-                    else:
-                        logging.warning(
-                            "Unknown kind '%s' for user %s, skipping job.", kind, user_id
-                        )
+                    runtime_provider = self._validate_quiz_data(user_id, kind)
+                    runtime_provider.generate_report(self, user_id)
 
                     time.sleep(10)
 

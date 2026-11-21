@@ -1,15 +1,17 @@
 import copy
 import os
 import shutil
+import subprocess
+import tempfile
+import time
 import uuid
 import zipfile
 from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
 
-import pythoncom
-import win32com.client as client
-from docx2pdf import convert
+import config
 from lxml import etree
+from PIL import Image
 from config import REPORT1_TEMPLATE_PATH, REPORT2_TEMPLATE_PATH, REPORT3_TEMPLATE_PATH, REPORT5_TEMPLATE_PATH, \
     OCD_TEMPLATE_PATH, ANX_TEMPLATE_PATH, DEP_TEMPLATE_PATH
 
@@ -23,6 +25,11 @@ ANX_TEMPLATE = Path(ANX_TEMPLATE_PATH)
 DEP_TEMPLATE = Path(DEP_TEMPLATE_PATH)
 DONT_REMOVE = ["Report1.pdf", "Report2.pdf", "Report3.pdf", "Report4.pdf", "Report5.pdf", "labels.json",
                "user_info.json", "report_text_replacements.json", "scl_calc_data.json"]
+FIRST_REPORT_GRAPHIC_EFFECTS = (
+    '<effectLst><outerShdw blurRad="107950" dist="12700" dir="5400000" algn="ctr"><srgbClr val="000000"/></outerShdw></effectLst>',
+    '<scene3d><camera prst="orthographicFront"><rot lat="0" lon="0" rev="0"/></camera><lightRig rig="soft" dir="t"><rot lat="0" lon="0" rev="0"/></lightRig></scene3d>',
+    '<sp3d contourW="44450" prstMaterial="matte"><bevelT w="63500" h="63500" prst="artDeco"/><contourClr><srgbClr val="FFFFFF"/></contourClr></sp3d>',
+)
 
 
 def get_xml_tag_without_ns(XMLTag: str) -> str:
@@ -42,29 +49,119 @@ def get_xml_tag_without_ns(XMLTag: str) -> str:
 
 
 def convert_docx_to_pdf(source_file: Path | str, destination_file: Path | str) -> None:
-    """Convert a DOCX file to PDF, overwriting the destination when needed."""
-    src = Path(source_file)
-    dst = Path(destination_file)
-    dst.unlink(missing_ok=True)
-    convert(str(src), str(dst))
+    """Convert a DOCX file to PDF through LibreOffice."""
+    ok, message = convert_to_pdf(source_file, destination_file)
+    if not ok:
+        raise RuntimeError(f"Failed to convert Word report to PDF: {message}")
 
 
 def convert_word_to_pdf(source_file: Path | str, destination_file: Path | str) -> None:
-    """Convert a Word document to PDF via COM (Windows only)."""
-    src = Path(source_file)
-    dst = Path(destination_file)
-    dst.unlink(missing_ok=True)
+    """Backward-compatible alias for LibreOffice document conversion."""
+    convert_docx_to_pdf(source_file, destination_file)
 
-    pythoncom.CoInitialize()
-    word = client.DispatchEx("Word.Application")
-    word.Visible = False
+
+def _resolve_libreoffice_command() -> str:
+    candidates = [config.LIBREOFFICE_PATH]
+    if os.name == "nt":
+        candidates.extend(
+            [
+                r"C:\Program Files\LibreOffice\program\soffice.exe",
+                r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+                "soffice.exe",
+            ]
+        )
+    else:
+        candidates.extend(["soffice", "libreoffice"])
+
+    for candidate in candidates:
+        path = Path(candidate)
+        if path.is_absolute() and path.exists():
+            return str(path)
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    raise FileNotFoundError(
+        "LibreOffice executable was not found. Install LibreOffice or set "
+        "AG_LIBREOFFICE_PATH to the full path of soffice.exe "
+        f"(configured value: {config.LIBREOFFICE_PATH!r})."
+    )
+
+
+def require_libreoffice() -> str:
+    """Resolve LibreOffice or fail before the scheduler consumes queue jobs."""
+    return _resolve_libreoffice_command()
+
+
+def _convert_to_pdf_once(input_file: Path, output_file: Path) -> tuple[bool, str]:
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    expected_output = output_file.parent / f"{input_file.stem}.pdf"
+    output_file.unlink(missing_ok=True)
+    if expected_output != output_file:
+        expected_output.unlink(missing_ok=True)
+
+    profile_dir = Path(tempfile.mkdtemp(prefix="agb2b-libreoffice-"))
+    command = [
+        _resolve_libreoffice_command(),
+        f"-env:UserInstallation={profile_dir.resolve().as_uri()}",
+        "--headless",
+        "--nologo",
+        "--nofirststartwizard",
+        "--norestore",
+        "--convert-to",
+        "pdf",
+        "--outdir",
+        str(output_file.parent),
+        str(input_file),
+    ]
     try:
-        doc = word.Documents.Open(str(src))
-        # https://learn.microsoft.com/en-us/office/vba/api/word.wdsaveformat
-        doc.SaveAs(str(dst), FileFormat=17)  # wdFormatPDF
-        doc.Close()
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=max(1, config.LIBREOFFICE_TIMEOUT_SECONDS),
+        )
+    except subprocess.TimeoutExpired as exc:
+        details = (exc.stderr or exc.stdout or "").strip()
+        message = f"timed out after {config.LIBREOFFICE_TIMEOUT_SECONDS}s"
+        if details:
+            message += f": {details}"
+        return False, message
+    except OSError as exc:
+        return False, str(exc)
     finally:
-        word.Quit()
+        shutil.rmtree(profile_dir, ignore_errors=True)
+
+    if result.returncode != 0:
+        error = (result.stderr or result.stdout or "LibreOffice conversion failed").strip()
+        return False, f"exit code {result.returncode}: {error}"
+    if not expected_output.exists():
+        return False, "Output PDF not generated"
+    if expected_output != output_file:
+        expected_output.replace(output_file)
+    return True, str(output_file)
+
+
+def convert_to_pdf(input_file: str | Path, output_file: str | Path) -> tuple[bool, str]:
+    """Convert a Word-compatible document to PDF with bounded retries."""
+    source = Path(input_file)
+    destination = Path(output_file)
+    attempts = max(1, config.LIBREOFFICE_CONVERSION_ATTEMPTS)
+    errors = []
+
+    for attempt in range(1, attempts + 1):
+        try:
+            ok, message = _convert_to_pdf_once(source, destination)
+        except Exception as exc:
+            ok, message = False, str(exc)
+        if ok:
+            return True, message
+        errors.append(f"attempt {attempt}/{attempts}: {message}")
+        if attempt < attempts:
+            delay = max(0, config.LIBREOFFICE_RETRY_DELAY_SECONDS) * attempt
+            print(f"LibreOffice conversion failed ({errors[-1]}); retrying in {delay:.1f}s")
+            time.sleep(delay)
+    return False, "; ".join(errors)
 
 
 def get_xml_tag_without_namespace(xml_tag: str) -> str:
@@ -148,6 +245,53 @@ def replace_texts(xml_tree: etree.ElementTree, old_texts: Sequence[str], new_tex
     return xml_tree
 
 
+def replace_texts_across_runs(
+        xml_tree: etree.ElementTree,
+        replacements: dict[str, str],
+) -> etree.ElementTree:
+    """Replace paragraph text even when a Word token is split across styled runs."""
+    if xml_tree is None:
+        return xml_tree
+
+    ordered = sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)
+    for paragraph in (node for node in xml_tree.iter() if get_xml_tag_without_ns(node.tag) == "p"):
+        text_nodes = [node for node in paragraph.iter() if get_xml_tag_without_ns(node.tag) == "t"]
+        for old, replacement in ordered:
+            replacement = str(replacement).replace("\t", " ").replace("\r", " ").replace("\n", " ")
+            while text_nodes:
+                combined = "".join(node.text or "" for node in text_nodes)
+                start = combined.find(old)
+                if start < 0:
+                    break
+                end = start + len(old)
+                cursor = 0
+                start_index = end_index = 0
+                start_offset = end_offset = 0
+                for index, node in enumerate(text_nodes):
+                    node_text = node.text or ""
+                    node_end = cursor + len(node_text)
+                    if cursor <= start < node_end or (start == cursor and not node_text):
+                        start_index = index
+                        start_offset = start - cursor
+                    if cursor < end <= node_end:
+                        end_index = index
+                        end_offset = end - cursor
+                        break
+                    cursor = node_end
+
+                first_text = text_nodes[start_index].text or ""
+                if start_index == end_index:
+                    text_nodes[start_index].text = first_text[:start_offset] + replacement + first_text[end_offset:]
+                    continue
+
+                last_text = text_nodes[end_index].text or ""
+                text_nodes[start_index].text = first_text[:start_offset] + replacement
+                for index in range(start_index + 1, end_index):
+                    text_nodes[index].text = ""
+                text_nodes[end_index].text = last_text[end_offset:]
+    return xml_tree
+
+
 def remove_labeled_texts(xml_tree: etree.ElementTree, labels: list[str], excepts: list[str]):
     if xml_tree is None:
         return xml_tree
@@ -198,12 +342,14 @@ def remove_labeled_texts(xml_tree: etree.ElementTree, labels: list[str], excepts
 def replace_image_in_word_folder(source_folder: Path | str, old_image_file: str, new_image_file: Path | str) -> None:
     """Replace a single image inside the docx media folder."""
     old_file = Path(source_folder) / "word" / "media" / old_image_file
-    with open(new_image_file, "rb") as file:
-        data = file.read()
-    with open(old_file, "rb+") as file:
-        file.seek(0)
-        file.write(data)
-        file.truncate()
+    if not old_file.is_file():
+        raise FileNotFoundError(f"DOCX media target does not exist: {old_image_file}")
+    source = Path(new_image_file)
+    if old_file.suffix.lower() in {".jpg", ".jpeg"} and source.suffix.lower() not in {".jpg", ".jpeg"}:
+        with Image.open(source) as image:
+            image.convert("RGB").save(old_file, format="JPEG", quality=95)
+        return
+    shutil.copyfile(source, old_file)
 
 
 def replace_images_in_word_folder(
@@ -595,38 +741,37 @@ def generate_first_report_documents(
 ) -> None:
     """Generate first report docx/pdf with provided data and assets."""
     try:
-        folder_word = Path(user_directory) / "Tree"
-        unzip_word_file(REPORT1_TEMPLATE, folder_word)
-        tree_path = folder_word / "word"
-        tree = load_xml_file(tree_path / "document.xml")
+        del effects, color_handle_tags, color_handle_colors
+        replacements = dict(zip(tag_names, user_report_info))
+        with tempfile.TemporaryDirectory(prefix="ag-report1-", dir=user_directory) as temporary:
+            folder_word = Path(temporary) / "docx"
+            unzip_word_file(REPORT1_TEMPLATE, folder_word)
+            replace_images_in_word_folder(folder_word, image_names, user_report_pictures)
 
-        replace_texts_in_headers(
-            folder_word, ["#name", "#inst_name", "#con_name"], user_report_info[:3]
-        )
-        replace_images_in_word_folder(folder_word, image_names, user_report_pictures)
-        tree = replace_texts(tree, tag_names, user_report_info)
+            xml_parts = [folder_word / "word" / "document.xml"]
+            xml_parts.extend((folder_word / "word").glob("header*.xml"))
+            xml_parts.extend((folder_word / "word").glob("footer*.xml"))
+            for xml_part in xml_parts:
+                tree = load_xml_file(xml_part)
+                tree = replace_texts_across_runs(tree, replacements)
+                unresolved = []
+                for paragraph in (node for node in tree.iter() if get_xml_tag_without_ns(node.tag) == "p"):
+                    text = "".join(
+                        node.text or "" for node in paragraph.iter() if get_xml_tag_without_ns(node.tag) == "t"
+                    )
+                    if "#" in text or "سلا" in text:
+                        unresolved.append(text)
+                if unresolved:
+                    raise ValueError(f"Unresolved AG Report 1 template tokens in {xml_part.name}: {unresolved[:3]}")
+                save_xml_to_file(tree, xml_part)
 
-        # for tag, color in zip(color_handle_tags, color_handle_colors):
-        #     tree = change_graphic_background_color(tree, color, tag, None)
-        for effect in effects:
-            tree = change_graphic_effect(
-                tree,
-                ["effectLst", "scene3d", "sp3d"],
-                [
-                    '<effectLst><outerShdw blurRad="107950" dist="12700" dir="5400000" algn="ctr"><srgbClr val="000000"/></outerShdw></effectLst>',
-                    '<scene3d><camera prst="orthographicFront"><rot lat="0" lon="0" rev="0"/></camera><lightRig rig="soft" dir="t"><rot lat="0" lon="0" rev="0"/></lightRig></scene3d>',
-                    '<sp3d contourW="44450" prstMaterial="matte"><bevelT w="63500" h="63500" prst="artDeco"/><contourClr><srgbClr val="FFFFFF"/></srgbClr></contourClr></sp3d>',
-                ],
-                effect,
-            )
-
-        save_xml_to_file(tree, tree_path / "document.xml")
-
-        destination_docx = Path(user_directory) / f"Report1{phone}.docx"
-        destination_pdf = Path(user_directory) / "Report1.pdf"
-        zip_word_folder(folder_word, destination_docx)
-        convert_docx_to_pdf(destination_docx, destination_pdf)
-        remove_unneeded_files(user_directory, DONT_REMOVE)
+            destination_docx = Path(user_directory) / f"Report1{phone}.docx"
+            destination_pdf = Path(user_directory) / "Report1.pdf"
+            zip_word_folder(folder_word, destination_docx, remove_folder=False)
+            convert_docx_to_pdf(destination_docx, destination_pdf)
+            if not destination_pdf.is_file() or destination_pdf.stat().st_size == 0:
+                raise RuntimeError("AG Report 1 PDF was not created or is empty")
+        remove_unneeded_files(user_directory, [*DONT_REMOVE, destination_docx.name])
     except Exception as exc:
         raise RuntimeError("Failed to generate first report documents") from exc
 
