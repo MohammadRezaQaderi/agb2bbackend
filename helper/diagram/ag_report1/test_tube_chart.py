@@ -30,8 +30,8 @@ def render_test_tube_chart(score, color="#2D7FD3", width=240, height=700, font="
     uid = f"tt{next(_ids)}"
     W, H = width, height
     score = max(0, min(100, score))
-    tx, tw = 50, 92                  # لوله
-    top, bottom = 130, H - 40
+    tx, tw = 35, min(130, W * 0.47)  # لوله؛ استفاده بهتر از عرض باکس تصویر باریک
+    top, bottom = max(82, H * 0.11), H - max(24, H * 0.035)
     r = tw / 2
     body_top, body_bot = top + 26, bottom - r
     lvl_bot = bottom - 8
@@ -59,10 +59,12 @@ def render_test_tube_chart(score, color="#2D7FD3", width=240, height=700, font="
         major = g % 20 == 0
         s.append(f'<line x1="{tx + tw + 8}" x2="{tx + tw + (26 if major else 16)}" y1="{_n(y)}" y2="{_n(y)}" stroke="#B5B9CF" stroke-width="{3 if major else 2}" stroke-linecap="round"/>')
         if major:
-            s.append(f'<text x="{tx + tw + 34}" y="{_n(y + 8)}" text-anchor="start" font-size="22" fill="{MUTED}">{fa(g)}</text>')
-    s.append(f'<rect x="{tx + tw / 2 - 64}" y="20" width="128" height="72" rx="36" fill="{color}"/>')
-    s.append(f'<text x="{tx + tw / 2}" y="69" text-anchor="middle" font-size="40" font-weight="bold" fill="#FFFFFF">{fa(round(score))}٪</text>')
-    s.append(f'<polygon points="{tx + tw / 2 - 12},92 {tx + tw / 2 + 12},92 {tx + tw / 2},106" fill="{color}"/>')
+            s.append(f'<text x="{tx + tw + 25}" y="{_n(y + 7)}" text-anchor="start" font-size="{max(18, W * 0.075):.1f}" fill="{MUTED}">{fa(g)}</text>')
+    badge_w, badge_h = tw + 36, max(54, H * 0.075)
+    badge_y = max(8, top * 0.12)
+    s.append(f'<rect x="{tx + tw / 2 - badge_w / 2}" y="{_n(badge_y)}" width="{_n(badge_w)}" height="{_n(badge_h)}" rx="{_n(badge_h / 2)}" fill="{color}"/>')
+    s.append(f'<text x="{tx + tw / 2}" y="{_n(badge_y + badge_h * 0.69)}" text-anchor="middle" font-size="{max(28, W * 0.13):.1f}" font-weight="bold" fill="#FFFFFF">{fa(round(score))}٪</text>')
+    s.append(f'<polygon points="{tx + tw / 2 - 12},{_n(badge_y + badge_h)} {tx + tw / 2 + 12},{_n(badge_y + badge_h)} {tx + tw / 2},{_n(badge_y + badge_h + 12)}" fill="{color}"/>')
     s.append("</svg>")
     return "".join(s)
 

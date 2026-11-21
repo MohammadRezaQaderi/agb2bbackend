@@ -20,6 +20,7 @@
 """
 import math
 from html import escape
+from .neo_overall_chart import NEO_FACTOR_COLORS
 
 INK, MUTED, LINE = "#1F2340", "#6B7096", "#E4E6F0"
 C = {"iq": "#1A8F87", "gardner": "#2F9E62", "neo": "#F08A24", "holland": "#7A4FD0", "clifton": "#D62839"}
@@ -139,7 +140,8 @@ def render_glance_chart(data, width=1600, height=1760, font="IRAN"):
     row_h = (h3 - 150) / max(1, len(neo))
     for i, d in enumerate(neo):
         y = y3 + 150 + row_h * i + row_h / 2
-        x0, x1, c = 330, W - 336, NEO_COLORS[i % 5]
+        x0, x1 = 330, W - 336
+        c = NEO_FACTOR_COLORS.get(d.get("key"), NEO_COLORS[i % 5])
         s.append(f'<text x="{W - 56}" y="{_n(y + 11)}" text-anchor="end" font-size="32" font-weight="bold" fill="{c}">{escape(d["right"])}</text>')
         s.append(f'<text x="50" y="{_n(y + 11)}" text-anchor="start" font-size="32" fill="{MUTED}">{escape(d["left"])}</text>')
         s.append(f'<rect x="{x0}" y="{_n(y - 9)}" width="{x1 - x0}" height="18" rx="9" fill="{LINE}"/>')
