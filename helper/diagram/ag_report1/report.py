@@ -220,21 +220,21 @@ def _renderers(data: AGReport1ChartData) -> dict[str, Callable[[], str]]:
         "clifton": data.clifton,
     }
     renderers: dict[str, Callable[[], str]] = {
-        "image13.png": lambda: render_glance_chart(glance, width=1600, height=1760, font="Vazirmatn"),
+        "image13.png": lambda: render_glance_chart(glance, width=1600, height=1760, font="IRAN"),
         "image16.png": lambda: render_gauge_chart(
-            data.iq["score"], **IQ_PRESET, width=1500, height=960, font="Vazirmatn"
+            data.iq["score"], **IQ_PRESET, width=1500, height=960, font="IRAN"
         ),
         "image18.png": lambda: render_gardner_bar_chart(
-            data.gardner, width=2400, height=1350, font="Vazirmatn"
+            data.gardner, width=2400, height=1350, font="IRAN"
         ),
         "image69.png": lambda: render_holland_chart(
-            data.holland, width=1600, height=900, font="Vazirmatn"
+            data.holland, width=1600, height=900, font="IRAN"
         ),
         "image71.png": lambda: render_clifton_chart(
-            data.clifton, width=1600, height=820, font="Vazirmatn"
+            data.clifton, width=1600, height=820, font="IRAN"
         ),
         "image81.png": lambda: render_commitment_chart(
-            data.commitment, width=1600, height=640, font="Vazirmatn"
+            data.commitment, width=1600, height=640, font="IRAN"
         ),
     }
     for target, item, color in zip(
@@ -243,14 +243,14 @@ def _renderers(data: AGReport1ChartData) -> dict[str, Callable[[], str]]:
         GARDNER_COLORS,
     ):
         renderers[target] = lambda item=item, color=color: render_test_tube_chart(
-            item["score"], color=color, width=360, height=1050, font="Vazirmatn"
+            item["score"], color=color, width=280, height=820, font="IRAN"
         )
     for target, item in zip(
         ("image53.png", "image55.png", "image57.png", "image59.png", "image61.png"),
         data.neo,
     ):
         renderers[target] = lambda item=item: render_neo_overall_chart(
-            [item], width=3000, height=225, font="Vazirmatn"
+            [item], width=3000, height=225, font="IRAN"
         )
     return renderers
 
