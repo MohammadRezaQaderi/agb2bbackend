@@ -60,7 +60,7 @@ DEFAULT_REPORT_LOGO_PATH = Path(_env("AG_DEFAULT_REPORT_LOGO_PATH", "")) if _env
     "AG_DEFAULT_REPORT_LOGO_PATH", ""
 ) else None
 REPORT2_TEMPLATE_PATH = Path(
-    _env("AG_REPORT2_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report2.docx"))
+    _env("AG_REPORT2_TEMPLATE_PATH", str(PROJECT_DIR / "report_templates" / "ag" / "Report2.docx"))
 )
 REPORT3_TEMPLATE_PATH = Path(
     _env("AG_REPORT3_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report3.docx"))
