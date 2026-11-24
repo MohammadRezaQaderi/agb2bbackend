@@ -62,7 +62,14 @@ def render_gauge_chart(value, vmin=0, vmax=100, segments=None, caption="", show_
     segments = segments or MATCH_PRESET["segments"]
     uid = f"g{next(_ids)}"
     W, H = width, height
-    cx, cy, r, th = W / 2, 395, 265, 56
+    # Fit the semi-circle to the requested canvas while preserving its shape.
+    # Report2 detail pages have a short, wide image box; scale the illustration
+    # to that box instead of leaving large unused margins around a fixed gauge.
+    scale = min(W / 1000, H / 640)
+    cx = W / 2
+    cy = 0.615 * H
+    r = min(0.414 * H, 0.40 * W)
+    th = 0.0875 * H
     v = max(vmin, min(vmax, value))
     t = (v - vmin) / (vmax - vmin)
     ang = lambda x: math.pi * (max(vmin, min(vmax, x)) - vmin) / (vmax - vmin)
@@ -87,37 +94,40 @@ def render_gauge_chart(value, vmin=0, vmax=100, segments=None, caption="", show_
         if on:
             s.append(f'<path d="{_arc(cx, cy, r + th / 2 + 12, a1, a2)}" stroke="{col}" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.55"/>')
         am = (a1 + a2) / 2
-        lx, ly = cx - (r + th / 2 + 50) * math.cos(am), cy - (r + th / 2 + 50) * math.sin(am)
+        label_r = r + th / 2 + 0.078 * H
+        lx, ly = cx - label_r * math.cos(am), cy - label_r * math.sin(am)
         anc = "end" if math.cos(am) > 0.35 else ("start" if math.cos(am) < -0.35 else "middle")
-        s.append(f'<text x="{_n(lx)}" y="{_n(ly + 9)}" text-anchor="{anc}" font-size="26" '
+        s.append(f'<text x="{_n(lx)}" y="{_n(ly + 0.014 * H)}" text-anchor="{anc}" font-size="{_n(26 * scale)}" '
                  f'{"font-weight=" + chr(34) + "bold" + chr(34) + " " if on else ""}fill="{col if on else MUTED}">{escape(name)}</text>')
     # درجه‌بندی داخلی
     for i in range(41):
         a = math.pi * i / 40
-        r1 = r - th / 2 - 14
-        r2 = r1 - (16 if i % 5 == 0 else 8)
+        r1 = r - th / 2 - 0.022 * H
+        r2 = r1 - ((0.025 if i % 5 == 0 else 0.013) * H)
         s.append(f'<line x1="{_n(cx - r1 * math.cos(a))}" y1="{_n(cy - r1 * math.sin(a))}" x2="{_n(cx - r2 * math.cos(a))}" '
-                 f'y2="{_n(cy - r2 * math.sin(a))}" stroke="#C9CCDD" stroke-width="{3 if i % 5 == 0 else 2}" stroke-linecap="round"/>')
+                 f'y2="{_n(cy - r2 * math.sin(a))}" stroke="#C9CCDD" stroke-width="{_n((3 if i % 5 == 0 else 2) * scale)}" stroke-linecap="round"/>')
     # کمینه و بیشینه
-    s.append(f'<text x="{_n(cx - r)}" y="{cy + 50}" text-anchor="middle" font-size="24" fill="{MUTED}">{fa(vmin)}</text>')
-    s.append(f'<text x="{_n(cx + r)}" y="{cy + 50}" text-anchor="middle" font-size="24" fill="{MUTED}">{fa(vmax)}</text>')
+    s.append(f'<text x="{_n(cx - r)}" y="{_n(cy + 0.078 * H)}" text-anchor="middle" font-size="{_n(24 * scale)}" fill="{MUTED}">{fa(vmin)}</text>')
+    s.append(f'<text x="{_n(cx + r)}" y="{_n(cy + 0.078 * H)}" text-anchor="middle" font-size="{_n(24 * scale)}" fill="{MUTED}">{fa(vmax)}</text>')
     # عقربه
     a = math.pi * t
     tipx, tipy = cx - (r - th / 2 - 30) * math.cos(a), cy - (r - th / 2 - 30) * math.sin(a)
-    nx, ny = math.sin(a) * 13, -math.cos(a) * 13
-    tailx, taily = cx + 34 * math.cos(a), cy + 34 * math.sin(a)
+    nx, ny = math.sin(a) * 0.021 * H, -math.cos(a) * 0.021 * H
+    tailx, taily = cx + 0.053 * H * math.cos(a), cy + 0.053 * H * math.sin(a)
     s.append(f'<polygon points="{_n(tipx)},{_n(tipy)} {_n(cx + nx)},{_n(cy + ny)} {_n(tailx)},{_n(taily)} {_n(cx - nx)},{_n(cy - ny)}" '
              f'fill="url(#{uid}nd)" stroke="#FFFFFF" stroke-width="3" stroke-linejoin="round"/>')
-    s.append(f'<circle cx="{_n(cx)}" cy="{cy}" r="30" fill="#FFFFFF" stroke="{INK}" stroke-width="8"/>')
-    s.append(f'<circle cx="{_n(cx)}" cy="{cy}" r="11" fill="{acol}"/>')
+    s.append(f'<circle cx="{_n(cx)}" cy="{_n(cy)}" r="{_n(0.047 * H)}" fill="#FFFFFF" stroke="{INK}" stroke-width="{_n(8 * scale)}"/>')
+    s.append(f'<circle cx="{_n(cx)}" cy="{_n(cy)}" r="{_n(0.017 * H)}" fill="{acol}"/>')
     # عدد و سطح
     val = fa(round(value)) + show_value_suffix
-    s.append(f'<text x="{_n(cx)}" y="{cy + 112}" text-anchor="middle" font-size="76" font-weight="bold" fill="{INK}">{val}</text>')
+    s.append(f'<text x="{_n(cx)}" y="{_n(cy + 0.175 * H)}" text-anchor="middle" font-size="{_n(76 * scale)}" font-weight="bold" fill="{INK}">{val}</text>')
     if caption:
-        s.append(f'<text x="{_n(cx)}" y="{cy + 156}" text-anchor="middle" font-size="26" fill="{MUTED}">{escape(caption)}</text>')
-    chip_w = 46 + 22 * len(active[2])
-    s.append(f'<rect x="{_n(cx - chip_w / 2)}" y="{cy + 178}" width="{_n(chip_w)}" height="48" rx="24" fill="{acol}"/>')
-    s.append(f'<text x="{_n(cx)}" y="{cy + 211}" text-anchor="middle" font-size="27" font-weight="bold" fill="#FFFFFF">{escape(active[2])}</text>')
+        s.append(f'<text x="{_n(cx)}" y="{_n(cy + 0.244 * H)}" text-anchor="middle" font-size="{_n(26 * scale)}" fill="{MUTED}">{escape(caption)}</text>')
+    chip_h = 0.075 * H
+    chip_w = min(W * 0.62, (46 + 22 * len(active[2])) * scale)
+    chip_y = min(H - chip_h - 4, cy + 0.278 * H)
+    s.append(f'<rect x="{_n(cx - chip_w / 2)}" y="{_n(chip_y)}" width="{_n(chip_w)}" height="{_n(chip_h)}" rx="{_n(chip_h / 2)}" fill="{acol}"/>')
+    s.append(f'<text x="{_n(cx)}" y="{_n(chip_y + chip_h * 0.68)}" text-anchor="middle" font-size="{_n(27 * scale)}" font-weight="bold" fill="#FFFFFF">{escape(active[2])}</text>')
     s.append("</svg>")
     return "".join(s)
 

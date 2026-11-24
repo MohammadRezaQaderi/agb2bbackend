@@ -15,6 +15,10 @@ if str(ROOT) not in sys.path:
 
 from helper.diagram import bar, bidirection, gauge, bidirection_two_side, horizontal, scatter, tube
 from helper.diagram.ag_report1 import build_chart_data, render_report_media
+from helper.diagram.ag_report2 import render_report_media as render_report2_media
+from helper.diagram.ag_report2.report import MEDIA_TARGETS as REPORT2_MEDIA_TARGETS
+from helper.diagram.ag_report2.report import BRANCHES as REPORT2_BRANCHES
+from helper.diagram.ag_report2.report import persianize_text as persianize_report2_text
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.quiz_labels import upsert_quiz_labels
 from helper.db.sqlalchemy.queries.scheduler_reports import (
@@ -70,12 +74,7 @@ FIRST_REPORT_IMAGES = [
     'image41.png', 'image42.png', 'image43.png', 'image44.png', 'image48.png'
 ]
 
-SECOND_REPORT_IMAGES = [
-    'image27.png', 'image30.png', 'image32.png', 'image36.png', 'image37.png', 'image40.png',
-    'image41.png', 'image44.png', 'image45.png', 'image48.png', 'image49.png', 'image52.png',
-    'image53.png', 'image56.png', 'image57.png', 'image61.png', 'image62.png', 'image65.png',
-    'image66.png', 'image69.png'
-]
+SECOND_REPORT_IMAGES = REPORT2_MEDIA_TARGETS + ("image15.jpeg",)
 
 CATEL_EFFECT = [
     ['سرآمد', ' ۱۶۴ به بالا', ' ۰/۰۰۳ ٪'], ['نابغه', ' ۱۴۸ - ۱۶۳', ' ۰/۱۳ ٪'],
@@ -686,10 +685,10 @@ class AGReportScheduler:
     def _generate_second_report_charts(self, data: Dict, categories: List, branches: List,
                                        suggested_other: List, user_directory: str,
                                        institute_name: str, consultant_name: str,
-                                       user_id: str, phone: str) -> Tuple[
-        List, Dict, List, List, List]:
+                                       user_id: str, phone: str,
+                                       chart_directory: str) -> Tuple[
+        Dict[str, Path], Dict, List, List, List]:
         """Generate all charts for the second report."""
-        report_pictures = []
         report_info = {
             "#name": data.get("student_name", ""),
             "#inst_name": institute_name,
@@ -700,53 +699,19 @@ class AGReportScheduler:
         colors_color = []
 
         try:
-            # Category bar chart
-            sorted_categories = sorted(categories, key=lambda x: x["Value"], reverse=True)
-            values = [int(item["Value"]) for item in sorted_categories]
-            category_names = [item["Category"] for item in sorted_categories]
-            colors = [CATEGORY_DEF_COLOR[item] for item in category_names]
+            for index, branch in enumerate(branches):
+                fields_match = get_fields_matches(branch["Value"])
+                if index < len(STATE_TAGS):
+                    colors_tag.append(STATE_TAGS[index])
+                    colors_color.append(fields_match[1])
+                    report_info[STATE_TAGS[index]] = persianize_report2_text(fields_match[0])
+                report_info[f"#{index + 1}_branch_color"] = REPORT2_BRANCHES[index][2]
 
-            bar_path = bar.create_bar_chart(
-                categories=category_names,
-                title='',
-                values=values,
-                colors=colors,
-                rotation=90,
-                size=9,
-                path=user_directory,
-                filename='secondbar'
-            )
-            report_pictures.append(f"{bar_path}.png")
-
-            # Gauge charts for categories
-            for index, cat in enumerate(categories):
-                value = max(cat["Value"], 10)
-                ranges = [(0, 30), (31, 70), (71, 100)]
-                gauge_path = gauge.create_gauge_chart(
-                    value=value,
-                    labels=['', '', ''],
-                    colors=['#42b74a', '#ffbb10', '#cf2020'],
-                    ranges=ranges,
-                    path=user_directory,
-                    filename=f"gaugeSecond{index + 1}"
-                )
-                report_pictures.append(f"{gauge_path}.png")
-
-            # Scatter chart
-            scatter_data = self._prepare_scatter_data(branches, suggested_other, report_info, colors_tag, colors_color,
-                                                      user_id, phone)
-            scatter_path = scatter.create_scatter_chart(
-                scatter_data["branch_lines"], scatter_data["current_x"],
-                scatter_data["x_positions"], scatter_data["all_values"],
-                scatter_data["all_diameters"], scatter_data["all_colors"],
-                scatter_data["branch_labels"], path=user_directory, filename="scatter"
-            )
-            report_pictures.append(f"{scatter_path}.png")
-
+            fields = [item for group in suggested_other for item in group[2]]
             # Prepare field matches
             fields_matched = self._prepare_field_matches(suggested_other, report_info)
-
-            return report_pictures, report_info, fields_matched, colors_tag, colors_color
+            chart_media = render_report2_media(branches, categories, fields, chart_directory)
+            return chart_media, report_info, fields_matched, colors_tag, colors_color
 
         except Exception as e:
             logging.error(f"Error generating second report charts: {str(e)}")
@@ -775,10 +740,11 @@ class AGReportScheduler:
             branch_lines.append(current_x - 0.5)
 
             # Process fields in this branch
-            for item in suggested_other[index][2]:
+            branch_fields = suggested_other[index][2] if index < len(suggested_other) else []
+            for item in branch_fields:
                 x_positions.append(current_x)
                 all_values.append(item["Personality"])
-                all_diameters.append(item["Ratio"] * 400)
+                all_diameters.append(item["Ratio"])
                 all_colors.append(BRANCH_COLOR[int(item['BranchId'])])
                 current_x += 1
 
@@ -1571,42 +1537,46 @@ class AGReportScheduler:
 
             # Generate second report
             suggested_other = self._get_sorted_suggested_fields(fields)
-            second_report_images = SECOND_REPORT_IMAGES.copy()
-            second_report_pictures, second_report_info, fields_matched, colors_tag, colors_color = \
-                self._generate_second_report_charts(data, categories, branches, suggested_other, user_directory,
-                                                    institute_name, consultant_name, user_id, phone)
-
-            if logo_path:
-                second_report_images.append('image74.jpeg')
-                second_report_pictures.append(logo_path)
-
-            # Persist matched fields and benchmark names for debugging/traceability
-            try:
-                with open(os.path.join(user_directory, f"fields_matched_{phone}.json"), "w", encoding="utf-8") as f:
-                    json.dump(
-                        {
-                            "fields_matched": fields_matched,
-                            "fields_benchmark_name": FIELDS_BENCHMARK_NAME,
-                        },
-                        f,
-                        ensure_ascii=False,
-                        indent=2,
+            with TemporaryDirectory(prefix="ag-report2-charts-", dir=user_directory) as chart_directory:
+                report2_media, second_report_info, fields_matched, colors_tag, colors_color = \
+                    self._generate_second_report_charts(
+                        data, categories, branches, suggested_other, user_directory,
+                        institute_name, consultant_name, user_id, phone, chart_directory,
                     )
-            except Exception as exc:
-                logging.warning("Could not save fields_matched debug file: %s", exc)
+                logo = Path(logo_path) if logo_path and Path(logo_path).is_file() else DEFAULT_REPORT_LOGO_PATH
+                if logo and logo.is_file():
+                    report2_media["image15.jpeg"] = logo
+                second_report_images = tuple(
+                    target for target in SECOND_REPORT_IMAGES if target in report2_media
+                )
+                second_report_pictures = [str(report2_media[target]) for target in second_report_images]
+                # Persist matched fields and benchmark names for debugging/traceability.
+                try:
+                    with open(os.path.join(user_directory, f"fields_matched_{phone}.json"), "w", encoding="utf-8") as f:
+                        json.dump(
+                            {
+                                "fields_matched": fields_matched,
+                                "fields_benchmark_name": FIELDS_BENCHMARK_NAME,
+                            },
+                            f,
+                            ensure_ascii=False,
+                            indent=2,
+                        )
+                except Exception as exc:
+                    logging.warning("Could not save fields_matched debug file: %s", exc)
 
-            generate_second_report_documents(
-                user_directory,
-                fields_matched,
-                FIELDS_BENCHMARK_NAME,
-                second_report_images,
-                second_report_pictures,
-                list(second_report_info.keys()),
-                list(second_report_info.values()),
-                colors_tag,
-                colors_color,
-                phone
-            )
+                generate_second_report_documents(
+                    user_directory,
+                    fields_matched,
+                    FIELDS_BENCHMARK_NAME,
+                    second_report_images,
+                    second_report_pictures,
+                    list(second_report_info.keys()),
+                    list(second_report_info.values()),
+                    colors_tag,
+                    colors_color,
+                    phone
+                )
 
             # Update completion status
             with session_scope() as session:

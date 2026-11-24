@@ -807,45 +807,132 @@ def generate_second_report_documents(
 ) -> None:
     """Generate second report docx/pdf with provided data and assets."""
     try:
-        folder_word = Path(user_directory) / "Tree2"
-        unzip_word_file(REPORT2_TEMPLATE, folder_word)
-
-        tree_path = folder_word / "word"
-        tree = load_xml_file(tree_path / "document.xml")
-
-        replace_texts_in_headers(
-            folder_word, ["#name", "#inst_name", "#con_name"], user_report_info[:3]
-        )
-        replace_images_in_word_folder(folder_word, image_names, user_report_pictures)
-        #
-        # for tag, color in zip(colors_tag, colors_color):
-        #     tree = change_graphic_background_color(tree, color, tag, None)
-
-        tree = replace_texts(tree, tag_names, user_report_info)
-
-        for index, _ in enumerate(fields_matched):
-            tree = insert_values_into_table(
-                tree,
-                fields_benchmark_name[index][0][1],
-                fields_matched[index][0],
-                fields_benchmark_name[index][0][0],
-            )
-            tree = insert_values_into_table(
-                tree,
-                fields_benchmark_name[index][1][1],
-                fields_matched[index][1],
-                fields_benchmark_name[index][1][0],
-            )
-
-        save_xml_to_file(tree, tree_path / "document.xml")
-
         destination_docx = Path(user_directory) / f"Report2{phone}.docx"
         destination_pdf = Path(user_directory) / "Report2.pdf"
-        zip_word_folder(folder_word, destination_docx)
-        convert_docx_to_pdf(destination_docx, destination_pdf)
+        with tempfile.TemporaryDirectory(prefix="ag-report2-", dir=user_directory) as temporary:
+            folder_word = Path(temporary) / "docx"
+            unzip_word_file(REPORT2_TEMPLATE, folder_word)
+            tree_path = folder_word / "word"
+            replace_images_in_word_folder(folder_word, image_names, user_report_pictures)
+
+            replacements = {
+                key: _persianize_user_visible_numbers(value)
+                for key, value in zip(tag_names, user_report_info)
+            }
+            tree = replace_texts_across_runs(load_xml_file(tree_path / "document.xml"), replacements)
+
+            for index, _ in enumerate(fields_matched):
+                _insert_report2_table_values(
+                    tree,
+                    fields_benchmark_name[index][0][1],
+                    _persianize_table_values(fields_matched[index][0]),
+                    fields_benchmark_name[index][0][0],
+                )
+                other_fields = fields_benchmark_name[index][1][1]
+                _insert_report2_other_values(
+                    tree,
+                    other_fields,
+                    _persianize_table_values(fields_matched[index][1]),
+                    other_fields[0],
+                    other_fields[1],
+                )
+
+            save_xml_to_file(tree, tree_path / "document.xml")
+            header_replacements = {
+                key: replacements[key]
+                for key in ("#name", "#inst_name", "#con_name")
+                if key in replacements
+            }
+            for xml_part in [*tree_path.glob("header*.xml"), *tree_path.glob("footer*.xml")]:
+                header_tree = replace_texts_across_runs(load_xml_file(xml_part), header_replacements)
+                save_xml_to_file(header_tree, xml_part)
+
+            zip_word_folder(folder_word, destination_docx, remove_folder=False)
+            convert_docx_to_pdf(destination_docx, destination_pdf)
         remove_unneeded_files(user_directory, DONT_REMOVE)
     except Exception as exc:
         raise RuntimeError("Failed to generate second report documents") from exc
+
+
+def _persianize_user_visible_numbers(value: object) -> str:
+    """Convert Western digits in Report2 presentation strings only."""
+    return str(value).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+
+
+def _persianize_table_values(rows: Sequence[Sequence[object]]) -> list[list[str]]:
+    return [[_persianize_user_visible_numbers(value) for value in row] for row in rows]
+
+
+def _insert_report2_table_values(
+        xml_tree: etree._ElementTree,
+        fields: Sequence[str],
+        values: Sequence[Sequence[str]],
+        placeholder: str,
+) -> bool:
+    """Fill the unique row template identified by its visible first-cell token."""
+    word_ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    for table in (node for node in xml_tree.iter() if node.tag == f"{{{word_ns}}}tbl"):
+        rows = [node for node in table if node.tag == f"{{{word_ns}}}tr"]
+        if len(rows) < 2:
+            continue
+        first_cell = next(
+            (node for node in rows[1] if node.tag == f"{{{word_ns}}}tc"),
+            None,
+        )
+        row_text = "".join(
+            node.text or ""
+            for node in (first_cell.iter() if first_cell is not None else ())
+            if node.tag == f"{{{word_ns}}}t"
+        )
+        if placeholder not in row_text:
+            continue
+
+        template_row = copy.deepcopy(rows[1])
+        for row in rows[1:]:
+            table.remove(row)
+        position = list(table).index(rows[0]) + 1
+        for record in values:
+            row = copy.deepcopy(template_row)
+            replaced = replace_texts_across_runs(
+                etree.ElementTree(row),
+                {str(old): _persianize_user_visible_numbers(new) for old, new in zip(fields, record)},
+            ).getroot()
+            _refresh_ids(replaced)
+            table.insert(position, replaced)
+            position += 1
+        return True
+    return False
+
+
+def _insert_report2_other_values(
+        xml_tree: etree._ElementTree,
+        fields: Sequence[str],
+        values: Sequence[Sequence[str]],
+        row_placeholder: str,
+        value_placeholder: str,
+) -> bool:
+    """Fill an other-fields table selected by its branch-specific first cell."""
+    word_ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    for table in (node for node in xml_tree.iter() if node.tag == f"{{{word_ns}}}tbl"):
+        rows = [node for node in table if node.tag == f"{{{word_ns}}}tr"]
+        if len(rows) < 2:
+            continue
+        first_text = "".join(
+            node.text or ""
+            for node in rows[1].findall(".//w:tc[1]//w:t", {"w": word_ns})
+        )
+        if row_placeholder not in first_text or value_placeholder not in "".join(
+            node.text or "" for node in rows[1].iter() if node.tag == f"{{{word_ns}}}t"
+        ):
+            continue
+        row_texts = [
+            "".join(node.text or "" for node in row.iter() if node.tag == f"{{{word_ns}}}t")
+            for row in rows[1:]
+        ]
+        if any("T1" in text or "T2" in text for text in row_texts):
+            continue
+        return _insert_report2_table_values(xml_tree, fields, values, row_placeholder)
+    return False
 
 
 def generate_third_report_documents(
