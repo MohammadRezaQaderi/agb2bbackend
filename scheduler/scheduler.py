@@ -700,18 +700,22 @@ class AGReportScheduler:
         }
         colors_tag = []
         colors_color = []
+        state_values_by_branch_id = {}
 
         try:
             for branch in branches:
                 branch_id = report2_branch_id(branch)
                 if branch_id not in STATE_TAG_BY_BRANCH_ID:
                     raise ValueError(f"Unknown Report2 Brain BranchId: {branch_id}")
+                if branch_id in state_values_by_branch_id:
+                    raise ValueError(f"Duplicate Report2 Brain BranchId: {branch_id}")
                 fields_match = get_fields_matches(branch["Value"])
                 state_tag = STATE_TAG_BY_BRANCH_ID[branch_id]
                 colors_tag.append(state_tag)
                 colors_color.append(fields_match[1])
                 report_info[state_tag] = persianize_report2_text(fields_match[0])
                 report_info[f"#{branch_id}_branch_color"] = REPORT2_BRANCH_COLORS[branch_id]
+                state_values_by_branch_id[branch_id] = fields_match[0]
 
             fields = [
                 item for branch_id in REPORT2_BRANCH_IDS
@@ -720,6 +724,14 @@ class AGReportScheduler:
             # Prepare field matches
             fields_matched = self._prepare_field_matches(suggested_other, report_info)
             chart_media = render_report2_media(branches, categories, fields, chart_directory)
+            if set(state_values_by_branch_id) != set(REPORT2_BRANCH_IDS):
+                raise ValueError(
+                    "Report2 result-state data must contain all seven Brain branches; "
+                    f"received BranchIds={sorted(state_values_by_branch_id)}"
+                )
+            state_data = [state_values_by_branch_id[branch_id] for branch_id in REPORT2_BRANCH_IDS]
+            with session_scope() as session:
+                upsert_result_state(session=session, user_id=user_id, state_data=state_data)
             return chart_media, report_info, fields_matched, colors_tag, colors_color
 
         except Exception as e:
