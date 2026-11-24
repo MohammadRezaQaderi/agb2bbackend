@@ -13,7 +13,14 @@
 from html import escape
 
 INK, MUTED, LINE = "#1F2340", "#7A7FA3", "#E8EAF3"
-COLORS = ["#2F6FD6", "#1FA463", "#F07B2E", "#E0AE00", "#E53935"]
+NEO_FACTOR_COLORS = {
+    "Extraversion": "#2F6FD6",
+    "Agreeableness": "#1FA463",
+    "Neuroticism": "#F07B2E",
+    "Openness": "#E0AE00",
+    "Conscientiousness": "#E53935",
+}
+_FALLBACK_COLORS = tuple(NEO_FACTOR_COLORS.values())
 
 
 def fa(n):
@@ -38,19 +45,22 @@ def render_neo_overall_chart(items, width=1600, height=820, font="IRAN"):
                  f'stroke-width="{3 if g == 50 else 2}" {"" if g == 50 else "stroke-dasharray=" + chr(34) + "6 8" + chr(34)}/>')
         s.append(f'<text x="{_n(x)}" y="{top - 40}" text-anchor="middle" font-size="24" fill="{MUTED}">{name}</text>')
     for i, d in enumerate(items):
-        c = COLORS[i % len(COLORS)]
+        c = NEO_FACTOR_COLORS.get(d.get("key"), _FALLBACK_COLORS[i % len(_FALLBACK_COLORS)])
         cy = top + row_h * i + row_h / 2
         sc = max(0, min(100, d["score"]))
         px = x0 + (x1 - x0) * sc / 100
         right_dom = sc >= 50
-        s.append(f'<rect x="{x0}" y="{_n(cy - 24)}" width="{x1 - x0}" height="48" rx="24" fill="{c}" opacity="0.07"/>')
+        scale = min(1.55, max(1.0, row_h / 86))
+        bar_h, marker_r = 48 * scale, 34 * scale
+        s.append(f'<rect x="{x0}" y="{_n(cy - bar_h / 2)}" width="{x1 - x0}" height="{_n(bar_h)}" rx="{_n(bar_h / 2)}" fill="{c}" opacity="0.07"/>')
         bx, bw = (mid, px - mid) if right_dom else (px, mid - px)
         if bw > 0:
-            s.append(f'<rect x="{_n(bx)}" y="{_n(cy - 24)}" width="{_n(bw)}" height="48" rx="24" fill="{c}" opacity="0.85"/>')
-        s.append(f'<circle cx="{_n(px)}" cy="{_n(cy)}" r="34" fill="#FFFFFF" stroke="{c}" stroke-width="7"/>')
-        s.append(f'<text x="{_n(px)}" y="{_n(cy + 10)}" text-anchor="middle" font-size="26" font-weight="bold" fill="{c}">{fa(round(sc))}</text>')
-        s.append(f'<text x="{W - 30}" y="{_n(cy + 11)}" text-anchor="end" font-size="32" {"font-weight=" + chr(34) + "bold" + chr(34) + " fill=" + chr(34) + c + chr(34) if right_dom else "fill=" + chr(34) + MUTED + chr(34)}>{escape(d["right"])}</text>')
-        s.append(f'<text x="30" y="{_n(cy + 11)}" text-anchor="start" font-size="32" {"font-weight=" + chr(34) + "bold" + chr(34) + " fill=" + chr(34) + c + chr(34) if not right_dom else "fill=" + chr(34) + MUTED + chr(34)}>{escape(d["left"])}</text>')
+            s.append(f'<rect x="{_n(bx)}" y="{_n(cy - bar_h / 2)}" width="{_n(bw)}" height="{_n(bar_h)}" rx="{_n(bar_h / 2)}" fill="{c}" opacity="0.85"/>')
+        s.append(f'<circle cx="{_n(px)}" cy="{_n(cy)}" r="{_n(marker_r)}" fill="#FFFFFF" stroke="{c}" stroke-width="{_n(7 * scale)}"/>')
+        s.append(f'<text x="{_n(px)}" y="{_n(cy + 10 * scale)}" text-anchor="middle" font-size="{_n(26 * scale)}" font-weight="bold" fill="{c}">{fa(round(sc))}</text>')
+        label_size = 32 * scale
+        s.append(f'<text x="{W - 30}" y="{_n(cy + 11 * scale)}" text-anchor="end" font-size="{_n(label_size)}" {"font-weight=" + chr(34) + "bold" + chr(34) + " fill=" + chr(34) + c + chr(34) if right_dom else "fill=" + chr(34) + MUTED + chr(34)}>{escape(d["right"])}</text>')
+        s.append(f'<text x="30" y="{_n(cy + 11 * scale)}" text-anchor="start" font-size="{_n(label_size)}" {"font-weight=" + chr(34) + "bold" + chr(34) + " fill=" + chr(34) + c + chr(34) if not right_dom else "fill=" + chr(34) + MUTED + chr(34)}>{escape(d["left"])}</text>')
     s.append("</svg>")
     return "".join(s)
 

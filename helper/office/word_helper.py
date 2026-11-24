@@ -292,6 +292,22 @@ def replace_texts_across_runs(
     return xml_tree
 
 
+def _polish_report1_question_mark_size(xml_tree: etree.ElementTree) -> None:
+    """Reduce oversized standalone Persian question marks in Report 1 callouts."""
+    word_ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    for paragraph in (node for node in xml_tree.iter() if node.tag == f"{{{word_ns}}}p"):
+        text = "".join(
+            node.text or ""
+            for node in paragraph.iter()
+            if node.tag == f"{{{word_ns}}}t"
+        ).strip()
+        if text != "؟":
+            continue
+        for size_tag in (f"{{{word_ns}}}sz", f"{{{word_ns}}}szCs"):
+            for size in paragraph.iter(size_tag):
+                size.set(f"{{{word_ns}}}val", "30")
+
+
 def remove_labeled_texts(xml_tree: etree.ElementTree, labels: list[str], excepts: list[str]):
     if xml_tree is None:
         return xml_tree
@@ -754,6 +770,7 @@ def generate_first_report_documents(
             for xml_part in xml_parts:
                 tree = load_xml_file(xml_part)
                 tree = replace_texts_across_runs(tree, replacements)
+                _polish_report1_question_mark_size(tree)
                 unresolved = []
                 for paragraph in (node for node in tree.iter() if get_xml_tag_without_ns(node.tag) == "p"):
                     text = "".join(

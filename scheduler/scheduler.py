@@ -375,6 +375,9 @@ class AGReportScheduler:
             "#جایگاه": self._motivation_summary(data["Social_place"], 12, "جایگاه اجتماعی"),
             "#زمان": self._motivation_summary(data["Speed"], 12, "سرعت رسیدن به درآمد"),
         })
+        persian_digits = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
+        for key in info.keys() - {"#name", "#inst_name", "#con_name"}:
+            info[key] = str(info[key]).translate(persian_digits)
         return info
 
     def _generate_first_report_charts(self, data: Dict, user_directory: str,
