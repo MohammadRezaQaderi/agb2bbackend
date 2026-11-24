@@ -58,18 +58,18 @@ def _arc(cx, cy, r, a1, a2):
 
 
 def render_gauge_chart(value, vmin=0, vmax=100, segments=None, caption="", show_value_suffix="",
-                       width=1000, height=640, font="IRAN", layout_scale=1.0):
+                       width=1000, height=640, font="IRAN"):
     segments = segments or MATCH_PRESET["segments"]
     uid = f"g{next(_ids)}"
     W, H = width, height
     # Fit the semi-circle to the requested canvas while preserving its shape.
     # Report2 detail pages have a short, wide image box; scale the illustration
     # to that box instead of leaving large unused margins around a fixed gauge.
-    scale = min(W / 1000, H / 640) * layout_scale
+    scale = min(W / 1000, H / 640)
     cx = W / 2
     cy = 0.615 * H
-    r = min(0.414 * H * layout_scale, 0.40 * W * layout_scale)
-    th = 0.0875 * H * layout_scale
+    r = min(0.414 * H, 0.40 * W)
+    th = 0.0875 * H
     v = max(vmin, min(vmax, value))
     t = (v - vmin) / (vmax - vmin)
     ang = lambda x: math.pi * (max(vmin, min(vmax, x)) - vmin) / (vmax - vmin)
@@ -123,7 +123,7 @@ def render_gauge_chart(value, vmin=0, vmax=100, segments=None, caption="", show_
     s.append(f'<text x="{_n(cx)}" y="{_n(cy + 0.175 * H)}" text-anchor="middle" font-size="{_n(76 * scale)}" font-weight="bold" fill="{INK}">{val}</text>')
     if caption:
         s.append(f'<text x="{_n(cx)}" y="{_n(cy + 0.244 * H)}" text-anchor="middle" font-size="{_n(26 * scale)}" fill="{MUTED}">{escape(caption)}</text>')
-    chip_h = 0.075 * H * layout_scale
+    chip_h = 0.075 * H
     chip_w = min(W * 0.62, (46 + 22 * len(active[2])) * scale)
     chip_y = min(H - chip_h - 4, cy + 0.278 * H)
     s.append(f'<rect x="{_n(cx - chip_w / 2)}" y="{_n(chip_y)}" width="{_n(chip_w)}" height="{_n(chip_h)}" rx="{_n(chip_h / 2)}" fill="{acol}"/>')

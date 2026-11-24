@@ -18,8 +18,6 @@ from helper.diagram.ag_report1 import build_chart_data, render_report_media
 from helper.diagram.ag_report2 import render_report_media as render_report2_media
 from helper.diagram.ag_report2.report import MEDIA_TARGETS as REPORT2_MEDIA_TARGETS
 from helper.diagram.ag_report2.report import BRANCHES as REPORT2_BRANCHES
-from helper.diagram.ag_report2.report import BRANCH_COLORS as REPORT2_BRANCH_COLORS
-from helper.diagram.ag_report2.report import branch_id_for as report2_branch_id
 from helper.diagram.ag_report2.report import persianize_text as persianize_report2_text
 from helper.db.sqlalchemy import session_scope
 from helper.db.sqlalchemy.queries.quiz_labels import upsert_quiz_labels
@@ -86,11 +84,7 @@ CATEL_EFFECT = [
     ['آموزش پذیر', ' ۵۲ - ۶۷', ' ۲/۱۴ ٪'], ['حمایت پذیر', ' ۳۶ به پایین', ' ۰/۰۰۳ ٪']
 ]
 
-REPORT2_BRANCH_IDS = tuple(identifier for identifier, _, _ in REPORT2_BRANCHES)
-STATE_TAG_BY_BRANCH_ID = {
-    1: '#t_state', 2: '#r_state', 3: '#e_state', 4: '#a_state',
-    5: '#m_state', 6: '#f_state', 7: '#i_state',
-}
+STATE_TAGS = ['#t_state', '#r_state', '#e_state', '#a_state', '#m_state', '#f_state', '#i_state']
 
 STATE_INFO = [
     (('زممممممممد', 'زمممممممممد', 'زممممممممممد'), ('تممممممممد', 'تمممممممممد', 'تممممممممممد')),
@@ -110,34 +104,29 @@ STATE_INFO = [
     (('زممممممممممممممد', 'زمممممممممممممممد', 'زممممممممممممممممد'),
      ('تممممممممممممممد', 'تمممممممممممممممد', 'تممممممممممممممممد')),
 ]
-STATE_INFO_BY_BRANCH_ID = {
-    1: STATE_INFO[0],
-    2: STATE_INFO[1],
-    3: STATE_INFO[2],
-    4: STATE_INFO[3],
-    5: STATE_INFO[5],  # DOCX state placeholders put Management after Agriculture.
-    6: STATE_INFO[4],
-    7: STATE_INFO[6],
-}
 
-# Keys are Brain BranchIds. The DOCX tables appear in a different visual order,
-# so table population must target the visible Persian placeholder by branch.
-FIELDS_BENCHMARK_NAME = {
-    1: (('Reshteha_Tajrobi', ['رشته_پیشنهادی_تجربی', 'S1', 'S2', 'T1', 'T2']),
-        ('Sayer_Tajrobi', ['سایر_تجربی', 'سایر_رنگ'])),
-    2: (('Reshteha_Riazi', ['رشته_پیشنهادی_ریاضی', 'S1', 'S2', 'T1', 'T2']),
-        ('Sayer_Riazi', ['سایر_ریاضی', 'سایر_رنگ'])),
-    3: (('Reshteha_Ensani', ['رشته_پیشنهادی_انسانی', 'S1', 'S2', 'T1', 'T2']),
-        ('Sayer_Ensani', ['سایر_انسانی', 'سایر_رنگ'])),
-    4: (('Reshteha_Honar', ['رشته_پیشنهادی_هنر', 'S1', 'S2', 'T1', 'T2']),
-        ('Sayer_Honar', ['سایر_هنر', 'سایر_رنگ'])),
-    5: (('Reshteha_Modiriat', ['رشته_پیشنهادی_مدیریت', 'S1', 'S2', 'T1', 'T2']),
-        ('Sayer_Modiriat', ['سایر_مدیریت', 'سایر_رنگ'])),
-    6: (('Reshteha_Keshavarzi', ['رشته_پیشنهادی_کشاورزی', 'S1', 'S2', 'T1', 'T2']),
-        ('Sayer_Keshavarzi', ['سایر_کشاورزی', 'سایر_رنگ'])),
-    7: (('Reshteha_Sanat', ['رشته_پیشنهادی_صنعت', 'S1', 'S2', 'T1', 'T2']),
-        ('Sayer_Sanat', ['سایر_صنعت', 'سایر_رنگ'])),
-}
+FIELDS_BENCHMARK_NAME = [
+    (('Reshteha_Tajrobi', ['رشته_پیشنهادی_تجربی', 'S1', 'S2', 'T1', 'T2']),
+     ('Sayer_Tajrobi', ['سایر_تجربی', 'سایر_رنگ'])),
+
+    (('Reshteha_Riazi', ['رشته_پیشنهادی_ریاضی', 'S1', 'S2', 'T1', 'T2']),
+     ('Sayer_Riazi', ['سایر_ریاضی', 'سایر_رنگ'])),
+
+    (('Reshteha_Ensani', ['رشته_پیشنهادی_انسانی', 'S1', 'S2', 'T1', 'T2']),
+     ('Sayer_Ensani', ['سایر_انسانی', 'سایر_رنگ'])),
+
+    (('Reshteha_Honar', ['رشته_پیشنهادی_هنر', 'S1', 'S2', 'T1', 'T2']),
+     ('Sayer_Honar', ['سایر_هنر', 'سایر_رنگ'])),
+
+    (('Reshteha_Keshavarzi', ['رشته_پیشنهادی_کشاورزی', 'S1', 'S2', 'T1', 'T2']),
+     ('Sayer_Keshavarzi', ['سایر_کشاورزی', 'سایر_رنگ'])),
+
+    (('Reshteha_Modiriat', ['رشته_پیشنهادی_مدیریت', 'S1', 'S2', 'T1', 'T2']),
+     ('Sayer_Modiriat', ['سایر_مدیریت', 'سایر_رنگ'])),
+
+    (('Reshteha_Sanat', ['رشته_پیشنهادی_صنعت', 'S1', 'S2', 'T1', 'T2']),
+     ('Sayer_Sanat', ['سایر_صنعت', 'سایر_رنگ']))
+]
 
 CATEGORY_DEF_COLOR = {
     "دبیری": "#c8acdc", "مدیریت": "#a0a4bc", "علوم پایه": "#a0c4e4", "هنر": "#a0dcfc",
@@ -149,8 +138,8 @@ CATEGORY_DEF_COLOR = {
 }
 
 BRANCH_COLOR = {
-    1: "#E39B00", 2: "#E8505B", 3: "#9DB000", 4: "#1FA463",
-    5: "#2F6FD6", 6: "#0FA3C9", 7: "#8456C9"
+    1: "#FF9900", 2: "#FF5050", 3: "#FFFF00", 4: "#00B050",
+    5: "#0070C0", 6: "#00B0F0", 7: "#7030A0"
 }
 
 SCL_PIC_DICT = {"drug_addicion": [("image15.png", "drog4.png"), ("image16.png", "drog3.png"),
@@ -588,13 +577,11 @@ class AGReportScheduler:
             color_handle_color.append(color)
         return color_handle_tag, color_handle_color
 
-    def _get_sorted_suggested_fields(self, fields: List) -> Dict[int, tuple]:
+    def _get_sorted_suggested_fields(self, fields: List) -> List:
         """Sort and group suggested fields by branch."""
         branch_groups = {}
         for item in fields:
-            branch = int(item["BranchId"])
-            if branch not in REPORT2_BRANCH_IDS:
-                raise ValueError(f"Unknown Report2 Brain BranchId: {branch}")
+            branch = item["BranchId"]
             branch_groups.setdefault(branch, []).append(item)
 
         def _c1_value(field: Dict) -> float:
@@ -604,14 +591,24 @@ class AGReportScheduler:
             except (TypeError, ValueError):
                 return 0.0
 
-        groups_by_id = {}
-        for branch_id in REPORT2_BRANCH_IDS:
-            branch = branch_groups.get(branch_id, [])
+        # Ensure deterministic ordering by BranchId, so it aligns with FIELDS_BENCHMARK_NAME
+        def _branch_sort_key(val):
+            try:
+                return int(val)
+            except Exception:
+                return val
+
+        grouped_array = [branch_groups[k] for k in sorted(branch_groups.keys(), key=_branch_sort_key)]
+        final_list = []
+
+        for branch in grouped_array:
             suggested_list = [f for f in branch if _c1_value(f) > 0]
             other_list = [f for f in branch if _c1_value(f) <= 0]
             all_list = branch.copy()
-            groups_by_id[branch_id] = (suggested_list, other_list, all_list)
-        return groups_by_id
+
+            final_list.append((suggested_list, other_list, all_list))
+
+        return final_list
 
     def _process_hedayat_fields(self, fields: List) -> Tuple[str, str]:
         """Process fields to extract suggested and other field names for hedayat_fields table."""
@@ -702,21 +699,15 @@ class AGReportScheduler:
         colors_color = []
 
         try:
-            for branch in branches:
-                branch_id = report2_branch_id(branch)
-                if branch_id not in STATE_TAG_BY_BRANCH_ID:
-                    raise ValueError(f"Unknown Report2 Brain BranchId: {branch_id}")
+            for index, branch in enumerate(branches):
                 fields_match = get_fields_matches(branch["Value"])
-                state_tag = STATE_TAG_BY_BRANCH_ID[branch_id]
-                colors_tag.append(state_tag)
-                colors_color.append(fields_match[1])
-                report_info[state_tag] = persianize_report2_text(fields_match[0])
-                report_info[f"#{branch_id}_branch_color"] = REPORT2_BRANCH_COLORS[branch_id]
+                if index < len(STATE_TAGS):
+                    colors_tag.append(STATE_TAGS[index])
+                    colors_color.append(fields_match[1])
+                    report_info[STATE_TAGS[index]] = persianize_report2_text(fields_match[0])
+                report_info[f"#{index + 1}_branch_color"] = REPORT2_BRANCHES[index][2]
 
-            fields = [
-                item for branch_id in REPORT2_BRANCH_IDS
-                for item in suggested_other[branch_id][2]
-            ]
+            fields = [item for group in suggested_other for item in group[2]]
             # Prepare field matches
             fields_matched = self._prepare_field_matches(suggested_other, report_info)
             chart_media = render_report2_media(branches, categories, fields, chart_directory)
@@ -738,20 +729,18 @@ class AGReportScheduler:
         current_x = 0
         state_data = []
 
-        for branch in branches:
-            branch_id = report2_branch_id(branch)
+        for index, branch in enumerate(branches):
             fields_match = get_fields_matches(branch["Value"])
-            state_tag = STATE_TAG_BY_BRANCH_ID[branch_id]
-            colors_tag.append(state_tag)
+            colors_tag.append(STATE_TAGS[index])
             colors_color.append(fields_match[1])
 
-            tag_branch_color = f"#{branch_id}_branch_color"
+            tag_branch_color = f"#{index + 1}_branch_color"
             branch_name = branch["Branch"]
             branch_start_x = current_x
             branch_lines.append(current_x - 0.5)
 
             # Process fields in this branch
-            branch_fields = suggested_other[branch_id][2]
+            branch_fields = suggested_other[index][2] if index < len(suggested_other) else []
             for item in branch_fields:
                 x_positions.append(current_x)
                 all_values.append(item["Personality"])
@@ -761,9 +750,9 @@ class AGReportScheduler:
 
             branch_end_x = current_x - 1
             branch_labels.append(((branch_start_x + branch_end_x) / 2, branch_name))
-            report_info[state_tag] = fields_match[0]
+            report_info[STATE_TAGS[index]] = fields_match[0]
             state_data.append(fields_match[0])
-            report_info[tag_branch_color] = REPORT2_BRANCH_COLORS[branch_id]
+            report_info[tag_branch_color] = fields_match[1]
 
         with session_scope() as session:
             upsert_result_state(session=session, user_id=user_id, state_data=state_data)
@@ -778,18 +767,17 @@ class AGReportScheduler:
             "state_data": state_data
         }
 
-    def _prepare_field_matches(self, suggested_other: Dict[int, tuple], report_info: Dict) -> Dict[int, tuple]:
+    def _prepare_field_matches(self, suggested_other: List, report_info: Dict) -> List:
         """Prepare field matches for report generation."""
-        fields_matched = {}
+        fields_matched = []
 
-        for branch_id in REPORT2_BRANCH_IDS:
-            branch_data = suggested_other[branch_id]
+        for index, branch_data in enumerate(suggested_other):
             suggested_list = []
             other_list = []
 
             # Process suggested fields
             sorted_suggested = sorted(branch_data[0], key=lambda x: x['Personality'], reverse=True)
-            top_field_tags = STATE_INFO_BY_BRANCH_ID[branch_id][0]
+            top_field_tags = STATE_INFO[index][0]
 
             if not sorted_suggested:
                 for tag in top_field_tags:
@@ -810,7 +798,7 @@ class AGReportScheduler:
 
             # Process other fields
             sorted_other = sorted(branch_data[1], key=lambda x: x['Personality'], reverse=True)
-            but_field_tags = STATE_INFO_BY_BRANCH_ID[branch_id][1]
+            but_field_tags = STATE_INFO[index][1]
 
             if not sorted_other:
                 for tag in but_field_tags:
@@ -827,7 +815,7 @@ class AGReportScheduler:
                     field_data = last_other[i] if i < len(last_other) else {"Field": 'رشته ای یافت نشد!'}
                     report_info[tag] = field_data["Field"]
 
-            fields_matched[branch_id] = (suggested_list, other_list)
+            fields_matched.append((suggested_list, other_list))
 
         return fields_matched
 

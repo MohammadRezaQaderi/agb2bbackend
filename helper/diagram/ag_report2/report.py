@@ -15,20 +15,14 @@ _HERE = Path(__file__).resolve().parent
 _RTL_TEXT = re.compile(r"[\u0600-\u06ff]")
 
 BRANCHES = (
-    (1, "علوم تجربی", "#E39B00"),
-    (2, "ریاضی و فیزیک", "#E8505B"),
+    (1, "ریاضی و فیزیک", "#E8505B"),
+    (2, "علوم تجربی", "#E39B00"),
     (3, "علوم انسانی", "#9DB000"),
-    (4, "هنر", "#1FA463"),
-    (5, "مدیریت و خدمات", "#2F6FD6"),
-    (6, "کشاورزی و امور دامی", "#0FA3C9"),
-    (7, "صنعت", "#8456C9"),
+    (4, "گروه هنر", "#1FA463"),
+    (5, "گروه کشاورزی", "#0FA3C9"),
+    (6, "گروه مدیریت و خدمات", "#2F6FD6"),
+    (7, "گروه صنعت", "#8456C9"),
 )
-BRANCH_COLORS = {identifier: color for identifier, _, color in BRANCHES}
-BRANCH_ID_BY_LABEL = {
-    "علوم تجربی": 1, "ریاضی و فیزیک": 2, "علوم انسانی": 3, "هنر": 4,
-    "گروه هنر": 4, "مدیریت و خدمات": 5, "گروه مدیریت و خدمات": 5,
-    "کشاورزی و امور دامی": 6, "گروه کشاورزی": 6, "صنعت": 7, "گروه صنعت": 7,
-}
 
 # Domain keys intentionally correspond to the stable category labels used by
 # the existing AG report tables and calculation output.
@@ -40,7 +34,7 @@ DOMAIN_TARGETS = (
     ("مهندسی سازه و عمران", "image28.png"),
     ("مهندسی صنعتی", "image30.png"),
     ("مهندسی الکترونیک و کامپیوتر", "image32.png"),
-    ("علوم انسانی", "image34.png"),
+    ("تربیت بدنی", "image34.png"),
     ("مالی و حسابداری", "image36.png"),
     ("روان‌شناسی و خدمات اجتماعی", "image38.png"),
     ("روابط عمومی و رسانه", "image40.png"),
@@ -95,15 +89,8 @@ def _shape_svg_text(svg: str) -> bytes:
     return etree.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def branch_id_for(branch: Mapping[str, Any]) -> int:
-    identifier = branch.get("BranchId", branch.get("Id"))
-    if identifier is not None:
-        return int(identifier)
-    label = str(branch.get("Branch", branch.get("name", ""))).strip()
-    try:
-        return BRANCH_ID_BY_LABEL[label]
-    except KeyError as exc:
-        raise ValueError(f"Unknown Report2 branch label: {label!r}") from exc
+def _branch_id(branch: Mapping[str, Any]) -> int:
+    return int(branch.get("BranchId", branch.get("Id", 0)))
 
 
 def _renderers(
@@ -115,11 +102,13 @@ def _renderers(
     domains_chart = _load_chart_module("domains_bar_chart.py")
     scatter_chart = _load_chart_module("scatter_chart.py")
 
-    branch_scores = {branch_id_for(branch): branch.get("Value") for branch in branches}
+    branch_scores = {
+        int(b.get("BranchId", identifier)): b.get("Value")
+        for identifier, b in enumerate(branches, start=1)
+    }
     branch_label_by_id = {identifier: label for identifier, label, _ in BRANCHES}
     branch_items = [
-        {"name": branch_label_by_id.get(identifier, label), "score": branch_scores[identifier],
-         "color": BRANCH_COLORS[identifier]}
+        {"name": branch_label_by_id.get(identifier, label), "score": branch_scores[identifier]}
         for identifier, label, _ in BRANCHES
         if identifier in branch_scores
     ]
@@ -148,9 +137,9 @@ def _renderers(
             "branch": branch_label,
             "name": str(item.get("Field") or ""),
             "fit": item.get("Personality", 0),
-            # Keep the source Ratio unchanged; the renderer maps its legacy
-            # Matplotlib marker area to an equivalent SVG circle radius.
-            "popularity": item.get("Ratio", 0),
+            # Match the legacy visual diameter (Ratio * 400) to the new
+            # renderer's radius formula (10 + 26 * popularity / 100).
+            "popularity": max(0, min(100, (float(item.get("Ratio", 0) or 0) * 4 - 10) * 100 / 26)),
         })
 
     renderers = {
@@ -158,13 +147,13 @@ def _renderers(
             branch_items, width=1600, height=900, font="IRAN"
         ),
         "image18.png": lambda: domains_chart.render_domains_bar_chart(
-            domain_items, sort=True, width=3200, height=2430, font="IRAN"
+            domain_items, sort=True, width=3200, height=2600, font="IRAN"
         ),
         "image58.png": lambda: scatter_chart.render_scatter_chart(
             scatter_items,
-            branches=[(label, BRANCH_COLORS[identifier]) for identifier, label, _ in BRANCHES],
+            branches=[(label, color) for _, label, color in BRANCHES],
             width=1600,
-            height=1608,
+            height=1100,
             font="IRAN",
         ),
     }
@@ -177,7 +166,7 @@ def _renderers(
     for domain_name, target in DOMAIN_TARGETS:
         score = domain_scores[domain_name]
         renderers[target] = lambda score=score: render_gauge_chart(
-            score, **MATCH_PRESET, width=1500, height=960, font="IRAN", layout_scale=1.08
+            score, **MATCH_PRESET, width=1500, height=960, font="IRAN"
         )
     return renderers
 

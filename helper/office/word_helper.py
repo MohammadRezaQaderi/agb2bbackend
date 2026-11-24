@@ -7,11 +7,11 @@ import time
 import uuid
 import zipfile
 from pathlib import Path
-from typing import Iterable, List, Mapping, Sequence, Tuple
+from typing import Iterable, List, Sequence, Tuple
 
 import config
 from lxml import etree
-from PIL import Image, ImageOps
+from PIL import Image
 from config import REPORT1_TEMPLATE_PATH, REPORT2_TEMPLATE_PATH, REPORT3_TEMPLATE_PATH, REPORT5_TEMPLATE_PATH, \
     OCD_TEMPLATE_PATH, ANX_TEMPLATE_PATH, DEP_TEMPLATE_PATH
 
@@ -374,23 +374,6 @@ def replace_images_in_word_folder(
     """Replace multiple images inside the docx media folder."""
     for old, new in zip(old_image_files, new_image_files):
         replace_image_in_word_folder(source_folder, old, new)
-
-
-def _replace_report2_logo(source_folder: Path | str, source_file: Path | str) -> None:
-    """Replace Report2's shared header logo while preserving its media aspect ratio."""
-    target = Path(source_folder) / "word" / "media" / "image15.jpeg"
-    if not target.is_file():
-        raise FileNotFoundError("DOCX media target does not exist: image15.jpeg")
-    with Image.open(target) as original:
-        target_size = original.size
-    with Image.open(source_file) as opened:
-        logo = ImageOps.exif_transpose(opened).convert("RGBA")
-    logo.thumbnail(target_size, Image.Resampling.LANCZOS)
-    canvas = Image.new("RGB", target_size, "white")
-    x = (target_size[0] - logo.width) // 2
-    y = (target_size[1] - logo.height) // 2
-    canvas.paste(logo, (x, y), logo.getchannel("A"))
-    canvas.save(target, format="JPEG", quality=95)
 
 
 def _refresh_ids(row: etree._Element) -> None:
@@ -812,8 +795,8 @@ def generate_first_report_documents(
 
 def generate_second_report_documents(
         user_directory: Path | str,
-        fields_matched: Mapping[int, Sequence],
-        fields_benchmark_name: Mapping[int, Sequence],
+        fields_matched: Sequence,
+        fields_benchmark_name: Sequence,
         image_names: Sequence[str],
         user_report_pictures: Sequence[Path | str],
         tag_names: Sequence[str],
@@ -830,11 +813,7 @@ def generate_second_report_documents(
             folder_word = Path(temporary) / "docx"
             unzip_word_file(REPORT2_TEMPLATE, folder_word)
             tree_path = folder_word / "word"
-            for image_name, image_path in zip(image_names, user_report_pictures):
-                if image_name == "image15.jpeg":
-                    _replace_report2_logo(folder_word, image_path)
-                else:
-                    replace_image_in_word_folder(folder_word, image_name, image_path)
+            replace_images_in_word_folder(folder_word, image_names, user_report_pictures)
 
             replacements = {
                 key: _persianize_user_visible_numbers(value)
@@ -842,36 +821,21 @@ def generate_second_report_documents(
             }
             tree = replace_texts_across_runs(load_xml_file(tree_path / "document.xml"), replacements)
 
-            if set(fields_matched) != set(fields_benchmark_name):
-                raise ValueError(
-                    "Report2 branch data/template mapping differs: "
-                    f"data={sorted(fields_matched)}, template={sorted(fields_benchmark_name)}"
-                )
-            for branch_id in sorted(fields_benchmark_name):
-                benchmark = fields_benchmark_name[branch_id]
-                recommended_fields = benchmark[0][1]
-                recommended_placeholder = recommended_fields[0]
-                if not _insert_report2_table_values(
+            for index, _ in enumerate(fields_matched):
+                _insert_report2_table_values(
                     tree,
-                    recommended_fields,
-                    _persianize_table_values(fields_matched[branch_id][0]),
-                    recommended_placeholder,
-                ):
-                    raise ValueError(
-                        f"Report2 recommended-field table not found for BranchId {branch_id}: "
-                        f"{recommended_placeholder}"
-                    )
-                other_fields = benchmark[1][1]
-                if not _insert_report2_other_values(
+                    fields_benchmark_name[index][0][1],
+                    _persianize_table_values(fields_matched[index][0]),
+                    fields_benchmark_name[index][0][0],
+                )
+                other_fields = fields_benchmark_name[index][1][1]
+                _insert_report2_other_values(
                     tree,
                     other_fields,
-                    _persianize_table_values(fields_matched[branch_id][1]),
+                    _persianize_table_values(fields_matched[index][1]),
                     other_fields[0],
                     other_fields[1],
-                ):
-                    raise ValueError(
-                        f"Report2 other-fields table not found for BranchId {branch_id}: {other_fields[0]}"
-                    )
+                )
 
             save_xml_to_file(tree, tree_path / "document.xml")
             header_replacements = {
@@ -887,7 +851,7 @@ def generate_second_report_documents(
             convert_docx_to_pdf(destination_docx, destination_pdf)
         remove_unneeded_files(user_directory, DONT_REMOVE)
     except Exception as exc:
-        raise RuntimeError(f"Failed to generate second report documents: {exc}") from exc
+        raise RuntimeError("Failed to generate second report documents") from exc
 
 
 def _persianize_user_visible_numbers(value: object) -> str:
@@ -905,56 +869,39 @@ def _insert_report2_table_values(
         values: Sequence[Sequence[str]],
         placeholder: str,
 ) -> bool:
-    """Fill the unique row template identified by its visible Persian token."""
+    """Fill the unique row template identified by its visible first-cell token."""
     word_ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-    matches = []
     for table in (node for node in xml_tree.iter() if node.tag == f"{{{word_ns}}}tbl"):
         rows = [node for node in table if node.tag == f"{{{word_ns}}}tr"]
         if len(rows) < 2:
             continue
+        first_cell = next(
+            (node for node in rows[1] if node.tag == f"{{{word_ns}}}tc"),
+            None,
+        )
         row_text = "".join(
             node.text or ""
-            for node in rows[1].iter()
+            for node in (first_cell.iter() if first_cell is not None else ())
             if node.tag == f"{{{word_ns}}}t"
         )
         if placeholder not in row_text:
             continue
-        matches.append((table, rows))
 
-    if len(matches) > 1:
-        raise ValueError(f"Report2 placeholder is ambiguous in the template: {placeholder}")
-    if not matches:
-        return False
-
-    table, rows = matches[0]
-    _set_report2_row_property(rows[0], "tblHeader")
-    template_row = copy.deepcopy(rows[1])
-    for row in rows[1:]:
-        _set_report2_row_property(row, "cantSplit")
-    for row in rows[1:]:
-        table.remove(row)
-    position = list(table).index(rows[0]) + 1
-    for record in values:
-        row = copy.deepcopy(template_row)
-        _set_report2_row_property(row, "cantSplit")
-        replaced = replace_texts_across_runs(
-            etree.ElementTree(row),
-            {str(old): _persianize_user_visible_numbers(new) for old, new in zip(fields, record)},
-        ).getroot()
-        _refresh_ids(replaced)
-        table.insert(position, replaced)
-        position += 1
-    return True
-
-
-def _set_report2_row_property(row: etree._Element, property_name: str) -> None:
-    word_ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-    tr_pr = row.find(f"{{{word_ns}}}trPr")
-    if tr_pr is None:
-        tr_pr = etree.Element(f"{{{word_ns}}}trPr")
-        row.insert(0, tr_pr)
-    if tr_pr.find(f"{{{word_ns}}}{property_name}") is None:
-        etree.SubElement(tr_pr, f"{{{word_ns}}}{property_name}")
+        template_row = copy.deepcopy(rows[1])
+        for row in rows[1:]:
+            table.remove(row)
+        position = list(table).index(rows[0]) + 1
+        for record in values:
+            row = copy.deepcopy(template_row)
+            replaced = replace_texts_across_runs(
+                etree.ElementTree(row),
+                {str(old): _persianize_user_visible_numbers(new) for old, new in zip(fields, record)},
+            ).getroot()
+            _refresh_ids(replaced)
+            table.insert(position, replaced)
+            position += 1
+        return True
+    return False
 
 
 def _insert_report2_other_values(

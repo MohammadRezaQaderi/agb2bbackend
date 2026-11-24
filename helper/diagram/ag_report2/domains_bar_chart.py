@@ -31,10 +31,10 @@ def level(v):
 def render_domains_bar_chart(items, sort=True, width=1600, height=None, font="IRAN"):
     data = sorted(items, key=lambda d: -d["score"]) if sort else list(items)
     W = width
-    row_h = 120
+    row_h = 80
     top = 155
     H = height or int(top + row_h * len(data) + 40)
-    lab = 1150
+    lab = 470
     right, left = W - lab, 120
     pw = right - left
     s = [f'<svg xmlns="http://www.w3.org/2000/svg" direction="ltr" style="direction:ltr" width="{W}" height="{H}" '
@@ -46,23 +46,23 @@ def render_domains_bar_chart(items, sort=True, width=1600, height=None, font="IR
         lx -= w + 18
         s.append(f'<rect x="{_n(lx)}" y="26" width="{_n(w)}" height="44" rx="22" fill="{col}" opacity="0.15"/>')
         s.append(f'<circle cx="{_n(lx + w - 22)}" cy="48" r="9" fill="{col}"/>')
-        s.append(f'<text x="{_n(lx + w - 40)}" y="57" text-anchor="end" font-size="30" fill="{INK}">{name}</text>')
+        s.append(f'<text x="{_n(lx + w - 40)}" y="57" text-anchor="end" font-size="24" fill="{INK}">{name}</text>')
     for g in range(0, 101, 20):
         x = right - pw * g / 100
         s.append(f'<line x1="{_n(x)}" x2="{_n(x)}" y1="{top - 16}" y2="{H - 30}" stroke="{GRID}" stroke-width="2" stroke-dasharray="6 8"/>')
-        s.append(f'<text x="{_n(x)}" y="{top - 26}" text-anchor="middle" font-size="30" fill="{MUTED}">{fa(g)}</text>')
+        s.append(f'<text x="{_n(x)}" y="{top - 26}" text-anchor="middle" font-size="22" fill="{MUTED}">{fa(g)}</text>')
     for i, d in enumerate(data):
         cy = top + row_h * i + row_h / 2
         name, col = level(d["score"])
         w = pw * max(0, min(100, d["score"])) / 100
         bold = ' font-weight="bold"' if i < 3 and sort else ""
-        s.append(f'<text x="{W - 80}" y="{_n(cy + 20)}" text-anchor="end" font-size="68"{bold} fill="{INK}">{escape(d["name"])}</text>')
-        s.append(f'<circle cx="{W - 46}" cy="{_n(cy)}" r="31" fill="{col}" opacity="0.18"/>')
-        s.append(f'<text x="{W - 46}" y="{_n(cy + 12)}" text-anchor="middle" font-size="32" font-weight="bold" fill="{col}">{fa(i + 1)}</text>')
-        s.append(f'<rect x="{left}" y="{_n(cy - 28)}" width="{pw}" height="56" rx="28" fill="#F2F3F8"/>')
+        s.append(f'<text x="{W - 80}" y="{_n(cy + 10)}" text-anchor="end" font-size="34"{bold} fill="{INK}">{escape(d["name"])}</text>')
+        s.append(f'<circle cx="{W - 46}" cy="{_n(cy)}" r="20" fill="{col}" opacity="0.18"/>')
+        s.append(f'<text x="{W - 46}" y="{_n(cy + 8)}" text-anchor="middle" font-size="23" font-weight="bold" fill="{col}">{fa(i + 1)}</text>')
+        s.append(f'<rect x="{left}" y="{_n(cy - 18)}" width="{pw}" height="36" rx="18" fill="#F2F3F8"/>')
         if w > 0:
-            s.append(f'<rect x="{_n(right - w)}" y="{_n(cy - 28)}" width="{_n(w)}" height="56" rx="28" fill="{col}"/>')
-        s.append(f'<text x="{_n(right - w - 18)}" y="{_n(cy + 18)}" text-anchor="end" font-size="52" font-weight="bold" fill="{col}">{fa(round(d["score"]))}٪</text>')
+            s.append(f'<rect x="{_n(right - w)}" y="{_n(cy - 18)}" width="{_n(w)}" height="36" rx="18" fill="{col}"/>')
+        s.append(f'<text x="{_n(right - w - 14)}" y="{_n(cy + 10)}" text-anchor="end" font-size="28" font-weight="bold" fill="{col}">{fa(round(d["score"]))}٪</text>')
     s.append("</svg>")
     return "".join(s)
 
