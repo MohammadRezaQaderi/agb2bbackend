@@ -83,7 +83,7 @@ BRAIN_EXCEL_PATH = Path(
 
 LIBREOFFICE_PATH = _env(
     "AG_LIBREOFFICE_PATH",
-    r"C:\Program Files\LibreOffice\program\soffice.exe" if os.name == "nt" else "soffice",
+    r"D:\Program Files\LibreOffice\program\soffice.exe" if os.name == "nt" else "soffice",
 )
 LIBREOFFICE_TIMEOUT_SECONDS = _env_int("AG_LIBREOFFICE_TIMEOUT_SECONDS", 180)
 LIBREOFFICE_CONVERSION_ATTEMPTS = _env_int("AG_LIBREOFFICE_CONVERSION_ATTEMPTS", 2)
