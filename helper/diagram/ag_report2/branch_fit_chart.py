@@ -16,7 +16,7 @@
 """
 from html import escape
 
-COLORS = ["#E8505B", "#E39B00", "#9DB000", "#1FA463", "#0FA3C9", "#2F6FD6", "#8456C9"]
+COLORS = ["#E39B00", "#E8505B", "#9DB000", "#1FA463", "#2F6FD6", "#0FA3C9", "#8456C9"]
 LEVELS = ["خیلی کم", "کم", "متوسط", "زیاد", "خیلی زیاد"]
 
 
@@ -49,13 +49,12 @@ def render_branch_fit_chart(items, width=1600, height=900, font="IRAN"):
             s.append(f'<text x="{_n(gx - plot_w / 10)}" y="{top - 40}" text-anchor="middle" font-size="26" fill="#8A8FB0">{LEVELS[g]}</text>')
     for i, d in enumerate(items):
         cy = top + row_h * i + row_h / 2
-        c = COLORS[i % len(COLORS)]
+        c = d.get("color", COLORS[i % len(COLORS)])
         bh = min(48, row_h * 0.55)
         w = plot_w * max(0, min(100, d["score"])) / 100
         best = d["score"] == max_s
         bold = ' font-weight="bold"' if best else ""
-        star = " ★" if best else ""
-        s.append(f'<text x="{W - 40}" y="{_n(cy + 12)}" text-anchor="end" font-size="34"{bold} fill="#1F2340">{escape(d["name"])}{star}</text>')
+        s.append(f'<text x="{W - 40}" y="{_n(cy + 12)}" text-anchor="end" font-size="34"{bold} fill="#1F2340">{escape(d["name"])}</text>')
         s.append(f'<rect x="{left}" y="{_n(cy - bh / 2)}" width="{plot_w}" height="{_n(bh)}" rx="{_n(bh / 2)}" fill="{c}" opacity="0.13"/>')
         s.append(f'<rect x="{_n(right - w)}" y="{_n(cy - bh / 2)}" width="{_n(w)}" height="{_n(bh)}" rx="{_n(bh / 2)}" fill="{c}"/>')
         s.append(f'<text x="{left - 24}" y="{_n(cy + 11)}" text-anchor="end" font-size="30" font-weight="bold" fill="{c}">{fa(round(d["score"]))}٪</text>')
