@@ -269,6 +269,15 @@ def _is_report1_word_char(char: str) -> bool:
     return char == "_" or char.isalnum() or unicodedata.category(char).startswith("M")
 
 
+def _is_ascii_report1_placeholder(token: str) -> bool:
+    return (
+        token.startswith("#")
+        and len(token) > 1
+        and token[1].isascii()
+        and (token[1].isalpha() or token[1] == "_")
+    )
+
+
 def _find_report1_text_token_spans(
         text: str,
         ordered_replacements: Sequence[Tuple[str, str]],
@@ -284,8 +293,14 @@ def _find_report1_text_token_spans(
             end = index + len(token)
             if _is_report1_word_char(token[0]) and index and _is_report1_word_char(text[index - 1]):
                 continue
-            if _is_report1_word_char(token[-1]) and end < len(text) and _is_report1_word_char(text[end]):
-                continue
+            if end < len(text):
+                if _is_ascii_report1_placeholder(token):
+                    # ASCII-named placeholders can directly precede Persian prose
+                    # (e.g. #inst_nameنام); only ASCII identifier chars extend them.
+                    if text[end].isascii() and (text[end].isalnum() or text[end] == "_"):
+                        continue
+                elif _is_report1_word_char(token[-1]) and _is_report1_word_char(text[end]):
+                    continue
             value = str(replacement).replace("\t", " ").replace("\r", " ").replace("\n", " ")
             match = (index, end, token, value)
             break
@@ -349,7 +364,8 @@ def _find_unresolved_report1_tokens(text: str, replacement_keys: Iterable[str]) 
     replacement_keys = {key for key in replacement_keys if key}
     candidates = set(replacement_keys)
     candidates.add("سلام")
-    candidates.update(re.findall(r"#[\w\u0600-\u06FF]+", text))
+    candidates.update(re.findall(r"#[A-Za-z_][A-Za-z0-9_]*", text))
+    candidates.update(re.findall(r"#[\u0600-\u06FF][\w\u0600-\u06FF]*", text))
     candidates.update(re.findall(r"سلا{2,}م", text))
     ordered = [(token, "") for token in sorted(candidates, key=len, reverse=True)]
     return sorted({token for _, _, token, _ in _find_report1_text_token_spans(text, ordered)
