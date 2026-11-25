@@ -1,5 +1,6 @@
 import copy
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -306,6 +307,17 @@ def _polish_report1_question_mark_size(xml_tree: etree.ElementTree) -> None:
         for size_tag in (f"{{{word_ns}}}sz", f"{{{word_ns}}}szCs"):
             for size in paragraph.iter(size_tag):
                 size.set(f"{{{word_ns}}}val", "30")
+
+
+def _find_unresolved_report1_tokens(text: str, replacement_keys: Iterable[str]) -> list[str]:
+    """Find remaining Report1 markers without matching ordinary Persian prose."""
+    unresolved = {key for key in replacement_keys if key and key in text}
+    # Named Report1 placeholders use #name-style tokens. Legacy Persian
+    # placeholders spell سلام with at least two alefs (e.g. سلاام), unlike
+    # the ordinary word سلام that may appear in generated analysis text.
+    unresolved.update(re.findall(r"#[\w\u0600-\u06FF]+", text))
+    unresolved.update(re.findall(r"سلا{2,}م", text))
+    return sorted(unresolved)
 
 
 def remove_labeled_texts(xml_tree: etree.ElementTree, labels: list[str], excepts: list[str]):
@@ -793,8 +805,7 @@ def generate_first_report_documents(
                     text = "".join(
                         node.text or "" for node in paragraph.iter() if get_xml_tag_without_ns(node.tag) == "t"
                     )
-                    if "#" in text or "سلا" in text:
-                        unresolved.append(text)
+                    unresolved.extend(_find_unresolved_report1_tokens(text, replacements))
                 if unresolved:
                     raise ValueError(f"Unresolved AG Report 1 template tokens in {xml_part.name}: {unresolved[:3]}")
                 save_xml_to_file(tree, xml_part)
