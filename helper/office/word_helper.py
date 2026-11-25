@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import unicodedata
 import uuid
 import zipfile
 from pathlib import Path
@@ -250,47 +251,81 @@ def replace_texts_across_runs(
         xml_tree: etree.ElementTree,
         replacements: dict[str, str],
 ) -> etree.ElementTree:
-    """Replace paragraph text even when a Word token is split across styled runs."""
+    """Replace original paragraph tokens, including tokens split across Word runs."""
     if xml_tree is None:
         return xml_tree
 
     ordered = sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)
     for paragraph in (node for node in xml_tree.iter() if get_xml_tag_without_ns(node.tag) == "p"):
         text_nodes = [node for node in paragraph.iter() if get_xml_tag_without_ns(node.tag) == "t"]
-        for old, replacement in ordered:
-            replacement = str(replacement).replace("\t", " ").replace("\r", " ").replace("\n", " ")
-            while text_nodes:
-                combined = "".join(node.text or "" for node in text_nodes)
-                start = combined.find(old)
-                if start < 0:
-                    break
-                end = start + len(old)
-                cursor = 0
-                start_index = end_index = 0
-                start_offset = end_offset = 0
-                for index, node in enumerate(text_nodes):
-                    node_text = node.text or ""
-                    node_end = cursor + len(node_text)
-                    if cursor <= start < node_end or (start == cursor and not node_text):
-                        start_index = index
-                        start_offset = start - cursor
-                    if cursor < end <= node_end:
-                        end_index = index
-                        end_offset = end - cursor
-                        break
-                    cursor = node_end
-
-                first_text = text_nodes[start_index].text or ""
-                if start_index == end_index:
-                    text_nodes[start_index].text = first_text[:start_offset] + replacement + first_text[end_offset:]
-                    continue
-
-                last_text = text_nodes[end_index].text or ""
-                text_nodes[start_index].text = first_text[:start_offset] + replacement
-                for index in range(start_index + 1, end_index):
-                    text_nodes[index].text = ""
-                text_nodes[end_index].text = last_text[end_offset:]
+        original = "".join(node.text or "" for node in text_nodes)
+        matches = _find_report1_text_token_spans(original, ordered)
+        for start, end, _, replacement in reversed(matches):
+            _replace_text_range(text_nodes, start, end, replacement)
     return xml_tree
+
+
+def _is_report1_word_char(char: str) -> bool:
+    return char == "_" or char.isalnum() or unicodedata.category(char).startswith("M")
+
+
+def _find_report1_text_token_spans(
+        text: str,
+        ordered_replacements: Sequence[Tuple[str, str]],
+) -> list[Tuple[int, int, str, str]]:
+    """Find non-overlapping token occurrences in original text using word boundaries."""
+    matches = []
+    index = 0
+    while index < len(text):
+        match = None
+        for token, replacement in ordered_replacements:
+            if not token or not text.startswith(token, index):
+                continue
+            end = index + len(token)
+            if _is_report1_word_char(token[0]) and index and _is_report1_word_char(text[index - 1]):
+                continue
+            if _is_report1_word_char(token[-1]) and end < len(text) and _is_report1_word_char(text[end]):
+                continue
+            value = str(replacement).replace("\t", " ").replace("\r", " ").replace("\n", " ")
+            match = (index, end, token, value)
+            break
+        if match is None:
+            index += 1
+        else:
+            matches.append(match)
+            index = match[1]
+    return matches
+
+
+def _replace_text_range(text_nodes: Sequence[etree._Element], start: int, end: int, replacement: str) -> None:
+    """Apply one original-text span while retaining existing Word run placement."""
+    cursor = 0
+    start_index = end_index = None
+    start_offset = end_offset = 0
+    for index, node in enumerate(text_nodes):
+        node_text = node.text or ""
+        node_end = cursor + len(node_text)
+        if start_index is None and (cursor <= start < node_end or (start == cursor and not node_text)):
+            start_index = index
+            start_offset = start - cursor
+        if cursor < end <= node_end:
+            end_index = index
+            end_offset = end - cursor
+            break
+        cursor = node_end
+
+    if start_index is None or end_index is None:
+        return
+    first_text = text_nodes[start_index].text or ""
+    if start_index == end_index:
+        text_nodes[start_index].text = first_text[:start_offset] + replacement + first_text[end_offset:]
+        return
+
+    last_text = text_nodes[end_index].text or ""
+    text_nodes[start_index].text = first_text[:start_offset] + replacement
+    for index in range(start_index + 1, end_index):
+        text_nodes[index].text = ""
+    text_nodes[end_index].text = last_text[end_offset:]
 
 
 def _polish_report1_question_mark_size(xml_tree: etree.ElementTree) -> None:
@@ -310,14 +345,15 @@ def _polish_report1_question_mark_size(xml_tree: etree.ElementTree) -> None:
 
 
 def _find_unresolved_report1_tokens(text: str, replacement_keys: Iterable[str]) -> list[str]:
-    """Find remaining Report1 markers without matching ordinary Persian prose."""
-    unresolved = {key for key in replacement_keys if key and key in text}
-    # Named Report1 placeholders use #name-style tokens. Legacy Persian
-    # placeholders spell سلام with at least two alefs (e.g. سلاام), unlike
-    # the ordinary word سلام that may appear in generated analysis text.
-    unresolved.update(re.findall(r"#[\w\u0600-\u06FF]+", text))
-    unresolved.update(re.findall(r"سلا{2,}م", text))
-    return sorted(unresolved)
+    """Find unresolved original template markers, respecting Persian word boundaries."""
+    replacement_keys = {key for key in replacement_keys if key}
+    candidates = set(replacement_keys)
+    candidates.add("سلام")
+    candidates.update(re.findall(r"#[\w\u0600-\u06FF]+", text))
+    candidates.update(re.findall(r"سلا{2,}م", text))
+    ordered = [(token, "") for token in sorted(candidates, key=len, reverse=True)]
+    return sorted({token for _, _, token, _ in _find_report1_text_token_spans(text, ordered)
+                   if token not in replacement_keys})
 
 
 def remove_labeled_texts(xml_tree: etree.ElementTree, labels: list[str], excepts: list[str]):
@@ -798,8 +834,6 @@ def generate_first_report_documents(
             xml_parts.extend((folder_word / "word").glob("footer*.xml"))
             for xml_part in xml_parts:
                 tree = load_xml_file(xml_part)
-                tree = replace_texts_across_runs(tree, replacements)
-                _polish_report1_question_mark_size(tree)
                 unresolved = []
                 for paragraph in (node for node in tree.iter() if get_xml_tag_without_ns(node.tag) == "p"):
                     text = "".join(
@@ -808,6 +842,8 @@ def generate_first_report_documents(
                     unresolved.extend(_find_unresolved_report1_tokens(text, replacements))
                 if unresolved:
                     raise ValueError(f"Unresolved AG Report 1 template tokens in {xml_part.name}: {unresolved[:3]}")
+                tree = replace_texts_across_runs(tree, replacements)
+                _polish_report1_question_mark_size(tree)
                 save_xml_to_file(tree, xml_part)
 
             destination_docx = Path(user_directory) / f"Report1{phone}.docx"
