@@ -12,6 +12,7 @@ from typing import Mapping
 import arabic_reshaper
 from bidi.algorithm import get_display
 from lxml import etree
+from PIL import Image, ImageStat
 
 from . import chart_overview, fig_iceberg, fig_roadmap
 from .svgkit import fa, text
@@ -141,7 +142,7 @@ def build_r3_overview_svg(context) -> str:
     root.set("height", f"{height + 7:g}mm")
     root.set("viewBox", f"0 0 {width:g} {height + 7:g}")
     root.append(etree.fromstring(text(
-        width / 2, height + 5, "نمره نرمال‌شده روی مقیاس ۰ تا ۱۰۰", size=2.8,
+        width / 2, height + 5, "نمره نرمال‌شده روی مقیاس ۰ تا ۱۰۰", size=3.4,
         fill="#6B7280", anchor="middle",
     ).encode("utf-8")))
     return etree.tostring(root, encoding="unicode")
@@ -222,6 +223,12 @@ def render_r3_visuals(context, output_dir: Path | str, dpi: int = 200) -> dict[s
         cairosvg.svg2png(bytestring=_shape_svg_text(svg), write_to=str(path), dpi=dpi)
         if not path.is_file() or path.stat().st_size == 0:
             raise RuntimeError(f"Required R3 chart was not rendered: {name}")
+        with Image.open(path) as rendered:
+            if rendered.width <= 0 or rendered.height <= 0:
+                raise RuntimeError(f"Required R3 chart has invalid dimensions: {name}")
+            spread = max(ImageStat.Stat(rendered.convert("RGB")).stddev)
+        if spread < 1.0:
+            raise RuntimeError(f"Required R3 chart appears blank: {name}")
         outputs[name] = path
     required = {"image5.png", "roadmap_surface", "roadmap_psych", "roadmap_root"}
     if set(outputs) != required:
