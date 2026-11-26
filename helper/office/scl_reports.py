@@ -131,12 +131,54 @@ SCL_REPORT3_IMAGE_MAP: Mapping[str, tuple[tuple[str, str], ...]] = MappingProxyT
               ("image149.png", "perfectionism2.png"), ("image148.png", "perfectionism1.png")),
 })
 
-# These count-specific assets are deliberately kept separate: the current DOCX has
-# subtype media at image91–94 and an overall severity scale at image95–98, with no
-# dedicated count-art target verified in its relationships.
+# The top OCD illustrations are beside the four subtype descriptions. Keep their
+# media targets keyed by subtype, rather than selecting only one by priority.
+SCL_REPORT3_OCD_SUBTYPE_TARGETS = MappingProxyType({
+    "ocd1": "image94.png",
+    "ocd2": "image93.png",
+    "ocd3": "image91.png",
+    "ocd4": "image92.png",
+})
+
+# The bottom illustration slots are explicitly associated with the DOCX labels:
+# right-to-left Normal, Mild, Moderate, Severe. Count selection is computed only
+# from active subtype scores; it is not derived from the overall OCD severity.
 SCL_REPORT3_OCD_COUNT_ASSETS = MappingProxyType({
     1: "ocd11.png", 2: "ocd22.png", 3: "ocd33.png", 4: "ocd44.png",
 })
+SCL_REPORT3_OCD_COUNT_TARGETS = MappingProxyType({
+    1: "image95.png", 2: "image96.png", 3: "image97.png", 4: "image98.png",
+})
+
+
+def report3_ocd_media_for_active_subtypes(
+        active_subtypes: tuple[str, ...], count_asset: str | None,
+) -> tuple[tuple[str, str], ...]:
+    """Return explicit subtype/count artwork targets from the shared calculation."""
+    if len(set(active_subtypes)) != len(active_subtypes):
+        raise ValueError("Report3 active OCD subtype list contains duplicates")
+    unknown = set(active_subtypes) - set(SCL_REPORT3_OCD_SUBTYPE_TARGETS)
+    if unknown:
+        raise ValueError(f"Unknown active SCL OCD subtypes: {sorted(unknown)}")
+
+    active_count = len(active_subtypes)
+    expected_asset = SCL_REPORT3_OCD_COUNT_ASSETS.get(active_count)
+    if count_asset != expected_asset:
+        raise ValueError(
+            "Report3 OCD count asset does not match active subtype count: "
+            f"count={active_count}, expected={expected_asset!r}, received={count_asset!r}"
+        )
+
+    media = [
+        (SCL_REPORT3_OCD_SUBTYPE_TARGETS[subtype], f"{subtype}.png")
+        for subtype in active_subtypes
+    ]
+    if active_count:
+        target = SCL_REPORT3_OCD_COUNT_TARGETS.get(active_count)
+        if target is None or expected_asset is None:
+            raise ValueError(f"No Report3 OCD count illustration mapping for count {active_count}")
+        media.append((target, expected_asset))
+    return tuple(media)
 
 SCL_REPORT3_HIDDEN_MARKER_REPLACEMENTS = MappingProxyType({
     **{name: "" for name in (
@@ -154,7 +196,7 @@ def select_scl_report3_media(
         factor_scores: Mapping[str, float],
         labels: Mapping[str, Any],
 ) -> tuple[Mapping[str, tuple[str, str]], tuple[str, ...], str | None]:
-    """Select the legacy SCL illustration and subtype-count metadata once."""
+    """Select legacy factor illustrations and authoritative OCD subtype metadata."""
     selected: dict[str, tuple[str, str]] = {}
     ocd_labels = labels.get("OCD", {})
     subtype_scores = {}
@@ -219,6 +261,11 @@ def _report3_renderer(context: SCLReportContext, output_dir: Path, assets_dir: P
     media = []
     asset_dir = Path(config.SCL_ASSET_DIR)
     for factor, (target, asset) in context.image_selections.items():
+        # OCD's four top illustrations are selected individually from the
+        # authoritative active subtype set below. The legacy single OCD entry is
+        # retained in context for its existing score-image consumer only.
+        if factor == "ocd":
+            continue
         source = asset_dir / asset
         if not source.is_file():
             raise FileNotFoundError(f"Required SCL Report3 asset is missing: {source}")
@@ -226,6 +273,22 @@ def _report3_renderer(context: SCLReportContext, output_dir: Path, assets_dir: P
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
         media.append((target, destination))
+
+    ocd_media = report3_ocd_media_for_active_subtypes(
+        tuple(context.active_ocd_subtypes), context.active_ocd_count_asset,
+    )
+    for target, asset in ocd_media:
+        source = asset_dir / asset
+        if not source.is_file():
+            raise FileNotFoundError(f"Required SCL Report3 OCD illustration is missing: {source}")
+        destination = assets_dir / f"active_{target.removesuffix('.png')}_{asset}"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        media.append((target, destination))
+
+    media_targets = [target for target, _ in media]
+    if len(media_targets) != len(set(media_targets)):
+        raise ValueError("SCL Report3 media mapping contains duplicate DOCX targets")
     media.append(("image5.png", visuals["image5.png"]))
 
     if context.student.logo_path:

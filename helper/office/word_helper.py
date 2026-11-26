@@ -1182,6 +1182,35 @@ def _insert_scl_report3_roadmap_images(
             raise ValueError(f"Report3 {layer} roadmap contains non-chart bookmarks or links")
         selected[layer] = paragraph
 
+    # In the supplied template the psychological page's large light-purple
+    # backing is a separate floating shape in the paragraph immediately before
+    # the roadmap group. Its relativeHeight is greater than the roadmap anchors,
+    # so LibreOffice paints it over the inserted inline image. Keep its original
+    # geometry and position, but place this verified backing behind document
+    # content in the isolated DOCX copy.
+    psych_paragraph = selected["psych"]
+    background_paragraph = psych_paragraph.getprevious()
+    backgrounds = []
+    if background_paragraph is not None:
+        for anchor in background_paragraph.xpath(".//*[local-name()='anchor']"):
+            fills = {
+                value.upper()
+                for value in anchor.xpath(".//*[local-name()='srgbClr']/@val")
+            }
+            extents = anchor.xpath("./*[local-name()='extent']")
+            if not extents:
+                continue
+            width = int(extents[0].get("cx", "0"))
+            height = int(extents[0].get("cy", "0"))
+            if "F3EEFC" in fills and width >= 5_000_000 and height >= 5_000_000:
+                backgrounds.append(anchor)
+    if len(backgrounds) != 1:
+        raise ValueError(
+            "Expected the single light-purple SCL Report3 psychological roadmap "
+            f"backing immediately before its anchor paragraph; found {len(backgrounds)}"
+        )
+    backgrounds[0].set("behindDoc", "1")
+
     rels_path = word_folder / "word" / "_rels" / "document.xml.rels"
     content_types_path = word_folder / "[Content_Types].xml"
     rels_tree = load_xml_file(rels_path)
