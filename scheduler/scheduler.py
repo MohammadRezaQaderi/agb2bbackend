@@ -44,6 +44,7 @@ from helper.office.word_helper import (
     require_libreoffice,
 )
 from helper.office.scl_reports import (
+    SCL_REPORT3_HIDDEN_MARKER_REPLACEMENTS,
     make_scl_report_context,
     render_scl_report_set,
     select_scl_report3_media,
@@ -1034,6 +1035,8 @@ class AGReportScheduler:
             process_layer(psycho_keys, psycho_tags)
             process_layer(real_keys, real_tags)
 
+            report3_text_replacements.update(SCL_REPORT3_HIDDEN_MARKER_REPLACEMENTS)
+
             report5_text_replacements = {}
             report5_needed = []
             report5_unneeded = []
@@ -1068,7 +1071,18 @@ class AGReportScheduler:
                     report5_values.append(round(scl_calc_data[key] / 4 * 100, 2))
                     report5_colors.append(CALC_DATA[key]["color"])
 
-            report3_user_info = {**user_info, **report3_text_replacements}
+            report3_user_info = {
+                **user_info,
+                "#name": student_name,
+                "#con_name": consultant_name,
+                "#inst_name": institute_name,
+                **report3_text_replacements,
+            }
+            other_report_text_replacements = {
+                key: value for key, value in report3_text_replacements.items()
+                if key not in SCL_REPORT3_HIDDEN_MARKER_REPLACEMENTS
+            }
+            report4_user_info = {**user_info, **other_report_text_replacements}
             report4_values = {key: scl_calc_data.get(key, 0.0)
                               for key in ("anxiety", "ocd", "depression")}
             report4_kind = max(report4_values, key=report4_values.get)
@@ -1078,7 +1092,7 @@ class AGReportScheduler:
             image_selections, active_ocd_subtypes, active_ocd_count_asset = select_scl_report3_media(
                 scl_calc_data, labels
             )
-            report5_user_info = {**report3_user_info, **report5_text_replacements}
+            report5_user_info = {**report4_user_info, **report5_text_replacements}
 
             with open(os.path.join(user_directory, "labels.json"), "w", encoding="utf-8") as f:
                 json.dump(labels, f, ensure_ascii=False, indent=2)
@@ -1109,7 +1123,7 @@ class AGReportScheduler:
                 report3_unneeded=report3_unneeded,
                 report3_color_targets=colors_tag,
                 report3_color_values=colors_color,
-                report4_user_info=report3_user_info,
+                report4_user_info=report4_user_info,
                 report4_kind=report4_kind,
                 report5_user_info=report5_user_info,
                 report5_needed=report5_needed,

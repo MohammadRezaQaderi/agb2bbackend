@@ -1078,9 +1078,11 @@ def _insert_report2_other_values(
 
 
 _SCL_REPORT3_MARKER_RE = re.compile(
-    r"\b(?:[A-Za-z][A-Za-z0-9_]*(?:statefast|interfast|scorefast|fast|advice[1-4])"
+    r"#[A-Za-z_][A-Za-z0-9_]*|(?<![A-Za-z0-9_])(?:"
+    r"[A-Za-z][A-Za-z0-9_]*(?:statefast|interfast|scorefast|fast|advice[1-4]|_sh|_so)"
     r"|vav|vaav|vaaav|vaaaav|vaaaaav|vaaaaaav|waw|waaw|waaaw|waaaaw|waaaaaw"
-    r"|zaz|zaaz|zaaaz|zaaaaz|zaaaaaz|studentname|Studentname|instname|conname)\b"
+    r"|zaz|zaaz|zaaaz|zaaaaz|zaaaaaz|studentname|Studentname|instname|conname)"
+    r"(?![A-Za-z0-9_])"
 )
 
 
@@ -1094,6 +1096,186 @@ def _report3_template_markers(xml_tree: etree.ElementTree) -> set[str]:
     return markers
 
 
+def _replace_scl_report3_text_tokens(
+        xml_tree: etree.ElementTree,
+        replacements: Mapping[str, str],
+) -> etree.ElementTree:
+    """Replace Report3 tokens across runs, allowing Persian text adjacency."""
+    if xml_tree is None:
+        return xml_tree
+    ordered = sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)
+    for paragraph in (node for node in xml_tree.iter() if get_xml_tag_without_ns(node.tag) == "p"):
+        text_nodes = [node for node in paragraph.iter() if get_xml_tag_without_ns(node.tag) == "t"]
+        original = "".join(node.text or "" for node in text_nodes)
+        matches = []
+        index = 0
+        while index < len(original):
+            found = None
+            for token, replacement in ordered:
+                if not token or not original.startswith(token, index):
+                    continue
+                end = index + len(token)
+                if token.startswith("#"):
+                    if end < len(original) and original[end].isascii() and (
+                        original[end].isalnum() or original[end] == "_"
+                    ):
+                        continue
+                elif token.isascii():
+                    if index and original[index - 1].isascii() and _is_report1_word_char(original[index - 1]):
+                        continue
+                    if end < len(original) and original[end].isascii() and _is_report1_word_char(original[end]):
+                        continue
+                elif _is_report1_word_char(token[0]) and index and _is_report1_word_char(original[index - 1]):
+                    continue
+                elif end < len(original) and _is_report1_word_char(token[-1]) and _is_report1_word_char(original[end]):
+                    continue
+                value = str(replacement).replace("\t", " ").replace("\r", " ").replace("\n", " ")
+                found = (index, end, token, value)
+                break
+            if found is None:
+                index += 1
+            else:
+                matches.append(found)
+                index = found[1]
+        for start, end, _, replacement in reversed(matches):
+            _replace_text_range(text_nodes, start, end, replacement)
+    return xml_tree
+
+
+def _insert_scl_report3_roadmap_images(
+        xml_tree: etree.ElementTree,
+        word_folder: Path,
+        roadmap_images: Mapping[str, Path | str],
+) -> None:
+    """Replace each floating native roadmap group with one flowing inline image."""
+    expected_markers = {
+        "surface": ("addictstatefast", "bodystatefast", "sleepstatefast", "gamestatefast", "futurestatefast", "studystatefast"),
+        "psych": ("anxstatefast", "depstatefast", "ocdstatefast", "motivestatefast", "confstatefast"),
+        "root": ("adhdstatefast", "familystatefast", "interpstatefast", "idealstatefast", "ptsdstatefast"),
+    }
+    if set(roadmap_images) != set(expected_markers):
+        raise ValueError("Report3 requires surface, psych, and root roadmap images")
+
+    word_ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    wp_ns = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+    a_ns = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    pic_ns = "http://schemas.openxmlformats.org/drawingml/2006/picture"
+    rel_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    package_rel_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+    ct_ns = "http://schemas.openxmlformats.org/package/2006/content-types"
+    root = xml_tree.getroot()
+    paragraphs = [node for node in root.iter() if get_xml_tag_without_ns(node.tag) == "p"]
+    selected = {}
+    for layer, markers in expected_markers.items():
+        found = []
+        for paragraph in paragraphs:
+            text = "".join(node.text or "" for node in paragraph.iter() if get_xml_tag_without_ns(node.tag) == "t")
+            if all(marker in text for marker in markers) and paragraph.xpath(".//*[local-name()='anchor']"):
+                found.append((paragraph, text))
+        if len(found) != 1:
+            raise ValueError(f"Expected one Report3 {layer} roadmap paragraph; found {len(found)}")
+        paragraph, text = found[0]
+        missing = [marker for marker in markers if marker not in text]
+        if missing or not paragraph.xpath(".//*[local-name()='anchor']"):
+            raise ValueError(f"Report3 {layer} roadmap structure is incomplete: {missing}")
+        if paragraph.xpath(".//*[local-name()='bookmarkStart' or local-name()='bookmarkEnd' or local-name()='hyperlink']"):
+            raise ValueError(f"Report3 {layer} roadmap contains non-chart bookmarks or links")
+        selected[layer] = paragraph
+
+    rels_path = word_folder / "word" / "_rels" / "document.xml.rels"
+    content_types_path = word_folder / "[Content_Types].xml"
+    rels_tree = load_xml_file(rels_path)
+    rels_root = rels_tree.getroot()
+    existing_ids = {item.get("Id") for item in rels_root}
+    existing_targets = {item.get("Target") for item in rels_root}
+    content_tree = load_xml_file(content_types_path)
+    content_root = content_tree.getroot()
+    if not any(item.get("Extension", "").lower() == "png" for item in content_root):
+        etree.SubElement(content_root, f"{{{ct_ns}}}Default", Extension="png", ContentType="image/png")
+
+    docpr_ids = [int(value) for value in root.xpath(".//*[local-name()='docPr']/@id") if str(value).isdigit()]
+    next_docpr = max(docpr_ids, default=0) + 1
+    media_dir = word_folder / "word" / "media"
+    media_dir.mkdir(parents=True, exist_ok=True)
+    max_width_mm, max_height_mm = 168.0, 183.0
+
+    for offset, (layer, paragraph) in enumerate(selected.items()):
+        source = Path(roadmap_images[layer])
+        if not source.is_file():
+            raise FileNotFoundError(f"Report3 {layer} roadmap image is missing: {source}")
+        with Image.open(source) as image:
+            width_px, height_px = image.size
+        if width_px <= 0 or height_px <= 0:
+            raise ValueError(f"Report3 {layer} roadmap image has invalid dimensions")
+        scale = min(max_width_mm / width_px, max_height_mm / height_px)
+        width_emu = round(width_px * scale * 36000)
+        height_emu = round(height_px * scale * 36000)
+
+        filename = f"scl_r3_roadmap_{layer}.png"
+        target = f"media/{filename}"
+        shutil.copyfile(source, media_dir / filename)
+        relation_id = f"rIdSclR3Roadmap{layer.title()}"
+        while relation_id in existing_ids:
+            relation_id += "X"
+        if target in existing_targets:
+            raise ValueError(f"Duplicate Report3 roadmap media relationship: {target}")
+        existing_ids.add(relation_id)
+        existing_targets.add(target)
+        etree.SubElement(
+            rels_root,
+            f"{{{package_rel_ns}}}Relationship",
+            Id=relation_id,
+            Type=f"{rel_ns}/image",
+            Target=target,
+        )
+
+        for child in list(paragraph):
+            if child.tag != f"{{{word_ns}}}pPr":
+                paragraph.remove(child)
+        ppr = paragraph.find(f"{{{word_ns}}}pPr")
+        if ppr is None:
+            ppr = etree.Element(f"{{{word_ns}}}pPr")
+            paragraph.insert(0, ppr)
+        justification = ppr.find(f"{{{word_ns}}}jc")
+        if justification is None:
+            justification = etree.SubElement(ppr, f"{{{word_ns}}}jc")
+        justification.set(f"{{{word_ns}}}val", "center")
+
+        run = etree.SubElement(paragraph, f"{{{word_ns}}}r")
+        drawing = etree.SubElement(run, f"{{{word_ns}}}drawing")
+        inline = etree.SubElement(drawing, f"{{{wp_ns}}}inline", distT="0", distB="0", distL="0", distR="0")
+        etree.SubElement(inline, f"{{{wp_ns}}}extent", cx=str(width_emu), cy=str(height_emu))
+        etree.SubElement(inline, f"{{{wp_ns}}}effectExtent", l="0", t="0", r="0", b="0")
+        etree.SubElement(
+            inline,
+            f"{{{wp_ns}}}docPr",
+            id=str(next_docpr + offset),
+            name=f"SCL R3 {layer} roadmap",
+            descr=f"R3 {layer} roadmap with student scores",
+        )
+        frame = etree.SubElement(inline, f"{{{wp_ns}}}cNvGraphicFramePr")
+        etree.SubElement(frame, f"{{{a_ns}}}graphicFrameLocks", noChangeAspect="1")
+        graphic = etree.SubElement(inline, f"{{{a_ns}}}graphic")
+        graphic_data = etree.SubElement(graphic, f"{{{a_ns}}}graphicData", uri=pic_ns)
+        picture = etree.SubElement(graphic_data, f"{{{pic_ns}}}pic")
+        nv = etree.SubElement(picture, f"{{{pic_ns}}}nvPicPr")
+        etree.SubElement(nv, f"{{{pic_ns}}}cNvPr", id=str(next_docpr + offset), name=filename)
+        locks = etree.SubElement(etree.SubElement(nv, f"{{{pic_ns}}}cNvPicPr"), f"{{{a_ns}}}picLocks")
+        locks.set("noChangeAspect", "1")
+        fill = etree.SubElement(picture, f"{{{pic_ns}}}blipFill")
+        etree.SubElement(fill, f"{{{a_ns}}}blip", {f"{{{rel_ns}}}embed": relation_id})
+        etree.SubElement(etree.SubElement(fill, f"{{{a_ns}}}stretch"), f"{{{a_ns}}}fillRect")
+        shape = etree.SubElement(picture, f"{{{pic_ns}}}spPr")
+        transform = etree.SubElement(shape, f"{{{a_ns}}}xfrm")
+        etree.SubElement(transform, f"{{{a_ns}}}off", x="0", y="0")
+        etree.SubElement(transform, f"{{{a_ns}}}ext", cx=str(width_emu), cy=str(height_emu))
+        geometry = etree.SubElement(shape, f"{{{a_ns}}}prstGeom", prst="rect")
+        etree.SubElement(geometry, f"{{{a_ns}}}avLst")
+
+    save_xml_to_file(rels_tree, rels_path)
+    save_xml_to_file(content_tree, content_types_path)
+
+
 def generate_third_report_documents(
         user_directory: Path | str,
         user_report_info: dict,
@@ -1104,6 +1286,7 @@ def generate_third_report_documents(
         needed: list[str],
         unneeded: list[str],
         image_replacements: list[Tuple[str, Path | str]] = (),
+        roadmap_images: Mapping[str, Path | str] | None = None,
 ) -> Path:
     """Generate third report docx/pdf with provided data and assets."""
     try:
@@ -1130,10 +1313,10 @@ def generate_third_report_documents(
 
         header_replacements = {
             key: value for key, value in all_replacements.items()
-            if key in {"studentname", "Studentname", "instname", "conname"}
+            if key in {"studentname", "Studentname", "instname", "conname", "#name", "#con_name", "#inst_name"}
         }
         for xml_part in headers:
-            header_tree = replace_texts_across_runs(load_xml_file(xml_part), header_replacements)
+            header_tree = _replace_scl_report3_text_tokens(load_xml_file(xml_part), header_replacements)
             save_xml_to_file(header_tree, xml_part)
 
         # Apply color changes for COLOR_TAGS (if value < 2.0, set to gray)
@@ -1143,12 +1326,15 @@ def generate_third_report_documents(
 
         tree = remove_labeled_texts(tree, unneeded, needed)
 
+        if roadmap_images is not None:
+            _insert_scl_report3_roadmap_images(tree, folder_word, roadmap_images)
+
         # The supplied revision stores layer ranking tokens in document.xml.
         # Replace the full registry there, while retaining legacy embedded-diagram support.
         diagram_tags_skill = ["vav", "vaav", "vaaav", "vaaaav", "vaaaaav", "vaaaaaav"]
         diagram_tags_psycho = ["waw", "waaw", "waaaw", "waaaaw", "waaaaaw"]
         diagram_tags_real = ["zaz", "zaaz", "zaaaz", "zaaaaz", "zaaaaaz"]
-        tree = replace_texts_across_runs(tree, {key: str(value) for key, value in all_replacements.items()})
+        tree = _replace_scl_report3_text_tokens(tree, {key: str(value) for key, value in all_replacements.items()})
         save_xml_to_file(tree, tree_path / "document.xml")
 
         # Replace texts in diagram XML files

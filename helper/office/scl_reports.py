@@ -11,6 +11,7 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
 from helper.diagram import bar
+from helper.diagram.scl_report3.report import render_r3_visuals
 from helper.office.word_helper import (
     generate_fifth_report_documents,
     generate_forth_report_documents,
@@ -133,6 +134,17 @@ SCL_REPORT3_OCD_COUNT_ASSETS = MappingProxyType({
     1: "ocd11.png", 2: "ocd22.png", 3: "ocd33.png", 4: "ocd44.png",
 })
 
+SCL_REPORT3_HIDDEN_MARKER_REPLACEMENTS = MappingProxyType({
+    **{name: "" for name in (
+        "adhd_sh", "anx_sh", "body_sh", "conf_sh", "dep_sh", "drug_sh", "family_sh",
+        "future_sh", "game_sh", "inter_sh", "mot_sh", "ocs_sh", "sleep_sh", "study_sh", "truma_sh",
+    )},
+    **{name: "" for name in (
+        "Addiction_so", "Adhd_so", "Anx_so", "Body_so", "Con_so", "Dep_so", "Family_so", "Future_so",
+        "Ideal_so", "Inter_so", "Mobile_so", "Mot_so", "Ocd_so", "Sleep_so", "Study_so", "Truma_so",
+    )},
+})
+
 
 def select_scl_report3_media(
         factor_scores: Mapping[str, float],
@@ -191,6 +203,7 @@ class SCLReportSpec:
 def _report3_renderer(context: SCLReportContext, output_dir: Path, assets_dir: Path) -> Path:
     import config
 
+    visuals = render_r3_visuals(context, assets_dir)
     media = []
     asset_dir = Path(config.SCL_ASSET_DIR)
     for factor, (target, asset) in context.image_selections.items():
@@ -203,6 +216,7 @@ def _report3_renderer(context: SCLReportContext, output_dir: Path, assets_dir: P
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
         media.append((target, destination))
+    media.append(("image5.png", visuals["image5.png"]))
 
     if context.student.logo_path:
         logo = Path(context.student.logo_path)
@@ -220,6 +234,11 @@ def _report3_renderer(context: SCLReportContext, output_dir: Path, assets_dir: P
         needed=list(context.report3_needed),
         unneeded=list(context.report3_unneeded),
         image_replacements=media,
+        roadmap_images={
+            "surface": visuals["roadmap_surface"],
+            "psych": visuals["roadmap_psych"],
+            "root": visuals["roadmap_root"],
+        },
     )
     return output_dir / "Report3.pdf"
 
