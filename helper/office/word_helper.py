@@ -457,6 +457,32 @@ def _replace_report2_logo(source_folder: Path | str, source_file: Path | str) ->
     canvas.save(target, format="JPEG", quality=95)
 
 
+def _replace_scl_report3_image(source_folder: Path | str, target_name: str, source_file: Path | str) -> None:
+    """Replace Report3 media without distorting the source image's aspect ratio."""
+    target = Path(source_folder) / "word" / "media" / target_name
+    source = Path(source_file)
+    if not target.is_file():
+        raise FileNotFoundError(f"SCL Report3 template media target is missing: {target_name}")
+    if not source.is_file():
+        raise FileNotFoundError(f"SCL Report3 replacement asset is missing: {source}")
+    with Image.open(target) as target_image:
+        target_size = target_image.size
+        target_format = target_image.format or target.suffix.lstrip(".").upper()
+        target_mode = target_image.mode
+    with Image.open(source) as opened:
+        replacement = ImageOps.exif_transpose(opened).convert("RGBA")
+    replacement.thumbnail(target_size, Image.Resampling.LANCZOS)
+    if target_mode == "RGBA":
+        canvas = Image.new("RGBA", target_size, (255, 255, 255, 0))
+        canvas.alpha_composite(replacement, ((target_size[0] - replacement.width) // 2,
+                                             (target_size[1] - replacement.height) // 2))
+    else:
+        canvas = Image.new("RGB", target_size, "white")
+        canvas.paste(replacement, ((target_size[0] - replacement.width) // 2,
+                                   (target_size[1] - replacement.height) // 2), replacement.getchannel("A"))
+    canvas.save(target, format=target_format)
+
+
 def _refresh_ids(row: etree._Element) -> None:
     """Refresh various ids in a table row to keep the document valid."""
     for element in row.iter():
@@ -1051,6 +1077,23 @@ def _insert_report2_other_values(
     return False
 
 
+_SCL_REPORT3_MARKER_RE = re.compile(
+    r"\b(?:[A-Za-z][A-Za-z0-9_]*(?:statefast|interfast|scorefast|fast|advice[1-4])"
+    r"|vav|vaav|vaaav|vaaaav|vaaaaav|vaaaaaav|waw|waaw|waaaw|waaaaw|waaaaaw"
+    r"|zaz|zaaz|zaaaz|zaaaaz|zaaaaaz|studentname|Studentname|instname|conname)\b"
+)
+
+
+def _report3_template_markers(xml_tree: etree.ElementTree) -> set[str]:
+    markers = set()
+    for paragraph in (node for node in xml_tree.iter() if get_xml_tag_without_ns(node.tag) == "p"):
+        text = "".join(
+            node.text or "" for node in paragraph.iter() if get_xml_tag_without_ns(node.tag) == "t"
+        )
+        markers.update(_SCL_REPORT3_MARKER_RE.findall(text))
+    return markers
+
+
 def generate_third_report_documents(
         user_directory: Path | str,
         user_report_info: dict,
@@ -1061,33 +1104,37 @@ def generate_third_report_documents(
         needed: list[str],
         unneeded: list[str],
         image_replacements: list[Tuple[str, Path | str]] = (),
-) -> None:
+) -> Path:
     """Generate third report docx/pdf with provided data and assets."""
     try:
+        if not REPORT3_TEMPLATE.is_file():
+            raise FileNotFoundError(f"SCL Report3 template is missing: {REPORT3_TEMPLATE}")
         folder_word = Path(user_directory) / "Tree3"
         unzip_word_file(REPORT3_TEMPLATE, folder_word)
 
         tree_path = folder_word / "word"
         tree = load_xml_file(tree_path / "document.xml")
 
-        # Handle header replacements (studentname, instname, conname)
-        header_tags = ["studentname", "instname", "conname"]
-        header_values = [
-            user_report_info.get("studentname", ""),
-            user_report_info.get("instname", ""),
-            user_report_info.get("conname", "")
-        ]
+        # Validate the media map before editing the isolated DOCX workspace.
+        for target_name, image_path in image_replacements:
+            _replace_scl_report3_image(folder_word, target_name, image_path)
 
-        # Replace in headers
-        replace_texts_in_headers(
-            folder_word, header_tags, header_values
-        )
+        headers = [*tree_path.glob("header*.xml"), *tree_path.glob("footer*.xml")]
+        all_replacements = {**user_report_info, **report_text_replacements}
+        conditional_tokens = set(needed) | set(unneeded)
+        for xml_part in [tree_path / "document.xml", *headers]:
+            check_tree = tree if xml_part.name == "document.xml" else load_xml_file(xml_part)
+            unknown = _report3_template_markers(check_tree) - set(all_replacements) - conditional_tokens
+            if unknown:
+                raise ValueError(f"Unregistered SCL Report3 placeholders in {xml_part.name}: {sorted(unknown)[:8]}")
 
-        # Replace images if provided
-        if image_replacements:
-            old_image_files = [old_img for old_img, _ in image_replacements]
-            new_image_files = [new_img for _, new_img in image_replacements]
-            replace_images_in_word_folder(folder_word, old_image_files, new_image_files)
+        header_replacements = {
+            key: value for key, value in all_replacements.items()
+            if key in {"studentname", "Studentname", "instname", "conname"}
+        }
+        for xml_part in headers:
+            header_tree = replace_texts_across_runs(load_xml_file(xml_part), header_replacements)
+            save_xml_to_file(header_tree, xml_part)
 
         # Apply color changes for COLOR_TAGS (if value < 2.0, set to gray)
         # COLOR_TAGS are bookmarks, so we pass tag as bookmark parameter (not field)
@@ -1096,24 +1143,12 @@ def generate_third_report_documents(
 
         tree = remove_labeled_texts(tree, unneeded, needed)
 
-        # Prepare tag names and values for text replacement
-        # Merge user_report_info and report_text_replacements
-        all_replacements = {**user_report_info, **report_text_replacements}
-
-        # Separate tags for document.xml and diagram XML files
-        # Diagram tags: skill_tag (data2.xml), psycho_tag (data4.xml), real_tag (data6.xml)
+        # The supplied revision stores layer ranking tokens in document.xml.
+        # Replace the full registry there, while retaining legacy embedded-diagram support.
         diagram_tags_skill = ["vav", "vaav", "vaaav", "vaaaav", "vaaaaav", "vaaaaaav"]
         diagram_tags_psycho = ["waw", "waaw", "waaaw", "waaaaw", "waaaaaw"]
         diagram_tags_real = ["zaz", "zaaz", "zaaaz", "zaaaaz", "zaaaaaz"]
-        all_diagram_tags = set(diagram_tags_skill + diagram_tags_psycho + diagram_tags_real)
-
-        # Filter replacements for document.xml (exclude diagram tags)
-        document_replacements = {k: v for k, v in all_replacements.items() if k not in all_diagram_tags}
-        tag_names = [f"{key}" for key in document_replacements.keys()]
-        tag_values = [str(value) for value in document_replacements.values()]
-
-        # Replace texts in document body
-        tree = replace_texts(tree, tag_names, tag_values)
+        tree = replace_texts_across_runs(tree, {key: str(value) for key, value in all_replacements.items()})
         save_xml_to_file(tree, tree_path / "document.xml")
 
         # Replace texts in diagram XML files
@@ -1183,6 +1218,7 @@ def generate_third_report_documents(
         zip_word_folder(folder_word, destination_docx)
         convert_docx_to_pdf(destination_docx, destination_pdf)
         remove_unneeded_files(user_directory, DONT_REMOVE)
+        return destination_pdf
     except Exception as exc:
         raise RuntimeError(f"Failed to generate third report documents: {exc}") from exc
 

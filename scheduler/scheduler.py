@@ -41,16 +41,18 @@ from quiz_packages.scl.legacy_v1.scoring import bookmark_scl_object
 from helper.office.word_helper import (
     generate_first_report_documents,
     generate_second_report_documents,
-    generate_third_report_documents,
-    generate_forth_report_documents,
-    generate_fifth_report_documents,
     require_libreoffice,
+)
+from helper.office.scl_reports import (
+    make_scl_report_context,
+    render_scl_report_set,
+    select_scl_report3_media,
+    select_scl_score_image_name,
 )
 from config import (
     DEFAULT_REPORT_LOGO_PATH,
     REPORTS_DIR,
     INS_PIC_DIR,
-    PICS_WORD_SCL_DIR,
     REDIS_QUEUE_NAME,
     REDIS_HOST,
     REDIS_PORT,
@@ -152,52 +154,6 @@ BRANCH_COLOR = {
     1: "#E39B00", 2: "#E8505B", 3: "#9DB000", 4: "#1FA463",
     5: "#2F6FD6", 6: "#0FA3C9", 7: "#8456C9"
 }
-
-SCL_PIC_DICT = {"drug_addicion": [("image15.png", "drog4.png"), ("image16.png", "drog3.png"),
-                                  ("image17.png", "drog1.png"), ("image18.png", "drog1.png")],
-                "body_problem": [("image21.png", "physical problems4.png"),
-                                 ("image22.png", "physical problems3.png"),
-                                 ("image23.png", "physical problems2.png"),
-                                 ("image24.png", "physical problems1.png")],
-                "sleep_problem": [("image27.png", "sleep4.png"), ("image28.png", "sleep3.png"),
-                                  ("image29.png", "sleep2.png"), ("image30.png", "sleep1.png")],
-                "game_addiction": [("image33.png", "game4.png"), ("image34.png", "game3.png"),
-                                   ("image35.png", "game2.png"), ("image36.png", "game1.png")],
-                "wage_future": [("image39.png", "lack of foresight4.png"),
-                                ("image40.png", "lack of foresight3.png"),
-                                ("image41.png", "lack of foresight2.png"),
-                                ("image42.png", "lack of foresight1.png")],
-                "study_problem": [("image45.png", "study .weakness4.png"),
-                                  ("image46.png", "study .weakness3.png"),
-                                  ("image47.png", "study .weakness2.png"),
-                                  ("image48.png", "study .weakness1.png")],
-                "anxiety": [("image51.png", "anxiety4.png"), ("image53.png", "anxiety3.png"),
-                            ("image54.png", "anxiety2.png"), ("image55.png", "anxiety1.png")],
-                "depression": [("image61.png", "depression4.png"), ("image62.png", "depression3.png"),
-                               ("image63.png", "depression2.png"), ("image64.png", "depression1.png")],
-                "ocd": [("image69.png", "ocd3.png"), ("image70.png", "ocd4.png"), ("image71.png", "ocd2.png"),
-                        ("image72.png", "ocd1.png")],
-                "motivation": [("image77.png", "unmotivated4.png"), ("image78.png", "unmotivated3.png"),
-                               ("image79.png", "unmotivated2.png"), ("image80.png", "unmotivated1.png")],
-                "self_confident": [("image83.png", "Lack of self-confidence4.png"),
-                                   ("image84.png", "Lack of self-confidence3.png"),
-                                   ("image85.png", "Lack of self-confidence2.png"),
-                                   ("image86.png", "Lack of self-confidence1.png")],
-                "adhd": [("image89.png", "hyperactivity4.png"), ("image90.png", "hyperactivity3.png"),
-                         ("image91.png", "hyperactivity2.png"), ("image93.png", "hyperactivity1.png")],
-                "family_problem": [("image96.png", "family problem4.png"),
-                                   ("image97.png", "family problem3.png"),
-                                   ("image98.png", "family problem2.png"),
-                                   ("image99.png", "family problem1.png")],
-                "interpersonal": [("image102.png", "Interpersonal problems4.png"),
-                                  ("image103.png", "Interpersonal problems3.png"),
-                                  ("image104.png", "Interpersonal problems2.png"),
-                                  ("image105.png", "Interpersonal problems1.png")],
-                "truma": [("image108.png", "war4.png"), ("image109.png", "war3.png"),
-                          ("image110.png", "war2.png"), ("image111.png", "war1.png")],
-                "ideal": [("image125.png", "perfectionism4.png"), ("image125.png", "perfectionism3.png"),
-                          ("image125.png", "perfectionism2.png"), ("image125.png", "perfectionism1.png")],
-                }
 
 
 class AGReportScheduler:
@@ -644,28 +600,15 @@ class AGReportScheduler:
             logging.error(f"Error updating hedayat_fields for user {user_id}: {str(e)}")
             # Don't raise - this is not critical for report generation
 
-    def _update_scl_scores(self, user_id: str, scl_calc_data: Dict[str, float]) -> None:
+    def _update_scl_scores(self, user_id: str, context) -> None:
         """Update or insert scl_scores record with JSON data containing value, name, color, chart_name, and image_name for each key."""
         try:
 
             scl_scores_json = {}
-            for key, value in scl_calc_data.items():
+            for key, value in context.factor_scores.items():
                 if key in CALC_DATA:
                     calc_data_info = CALC_DATA[key]
-
-                    image_name = ""
-                    if key in SCL_PIC_DICT:
-                        if value >= 3:
-                            image_index = 0
-                        elif value >= 2:
-                            image_index = 1
-                        elif value >= 1:
-                            image_index = 2
-                        else:
-                            image_index = 3
-
-                        _, new_image_name = SCL_PIC_DICT[key][image_index]
-                        image_name = new_image_name
+                    image_name = select_scl_score_image_name(key, value)
 
                     scl_scores_json[key] = {
                         "value": value,
@@ -970,8 +913,7 @@ class AGReportScheduler:
                     scoring_version=runtime_provider.scoring_version,
                 )
 
-            # Generate Report 3
-            # Mapping from CALC_DATA keys to advice keys for get_report_text
+            # Prepare one shared presentation context for the complete SCL report set.
             calc_key_to_advice = {
                 "drug_addicion": "addictionadvice",
                 "body_problem": "bodyadvice",
@@ -988,52 +930,8 @@ class AGReportScheduler:
                 "adhd": "Adhdadvice",
                 "family_problem": "Familyadvice",
                 "interpersonal": "Interadvice",
+                "ideal": "Idealadvice",
             }
-            gray_color = "CCCCCC"  # Gray color for values under 2.0
-            colors_tag = []
-            colors_color = []
-
-            def calculate_color_from_value(value: float) -> str:
-                """
-                Map value to 4 discrete darker pastel colors:
-                0–1  -> darker pastel green
-                1–2  -> darker pastel yellow
-                2–3  -> darker pastel orange
-                3+   -> darker pastel red
-                """
-                # Clamp to non‑negative
-                if value < 0:
-                    value = 0.0
-
-                if value < 1.0:
-                    # Darker pastel green (#33CC33)
-                    return "33CC33"
-                if value < 2.0:
-                    # Darker pastel yellow (#FFFF66)
-                    return "FFFF66"
-                if value < 3.0:
-                    # Darker pastel orange (#FF9900)
-                    return "FF9900"
-
-                # 3 and above -> darker pastel red (#FF0000)
-                return "FF0000"
-
-            for color_tag_key in COLOR_TAGS.keys():
-                calc_data_key = color_tag_key.replace("_so", "")
-                if calc_data_key in scl_calc_data:
-                    value = scl_calc_data[calc_data_key]
-                    color_tag_info = COLOR_TAGS[color_tag_key]
-
-                    if value < 2.0:
-                        tag_tri = color_tag_info["tag_triangle"]
-                        color_tri = gray_color
-                        colors_tag.append(tag_tri)
-                        colors_color.append(color_tri)
-                    tag_cir = color_tag_info["tag_circle"]
-                    color_cir = calculate_color_from_value(value)
-                    colors_tag.append(tag_cir)
-                    colors_color.append(color_cir)
-
             calc_key_to_prefix = {
                 "drug_addicion": "addict",
                 "body_problem": "body",
@@ -1052,60 +950,68 @@ class AGReportScheduler:
                 "interpersonal": "interp",
                 "ideal": "ideal",
             }
+            gray_color = "CCCCCC"
+            colors_tag = []
+            colors_color = []
+
+            def calculate_color_from_value(value: float) -> str:
+                if value < 0:
+                    value = 0.0
+                if value < 1.0:
+                    return "33CC33"
+                if value < 2.0:
+                    return "FFFF66"
+                if value < 3.0:
+                    return "FF9900"
+                return "FF0000"
+
+            for color_tag_key, color_tag_info in COLOR_TAGS.items():
+                calc_data_key = color_tag_key.replace("_so", "")
+                if calc_data_key not in scl_calc_data:
+                    continue
+                value = scl_calc_data[calc_data_key]
+                if value < 2.0:
+                    colors_tag.append(color_tag_info["tag_triangle"])
+                    colors_color.append(gray_color)
+                colors_tag.append(color_tag_info["tag_circle"])
+                colors_color.append(calculate_color_from_value(value))
 
             def round_to_quarter(value: float) -> float:
-                """Round value to nearest quarter (x.0, x.25, x.5, x.75)."""
                 return round(value * 4) / 4
 
-            # Define tags and labels for 3 categories
-            # Note: These tags are in diagram XML files (data2.xml, data4.xml, data6.xml), not document.xml
-            # The generate_third_report_documents function handles replacement in both document.xml and diagram files
-            skill_tag = ["vav", "vaav", "vaaav", "vaaaav", "vaaaaav", "vaaaaaav"]
-            skill_label = ["body_problem", "game_addiction", "wage_future", "drug_addicion", "sleep_problem",
-                           "study_problem"]
+            skill_tags = ["vav", "vaav", "vaaav", "vaaaav", "vaaaaav", "vaaaaaav"]
+            skill_keys = ["body_problem", "game_addiction", "wage_future", "drug_addicion",
+                          "sleep_problem", "study_problem"]
+            psycho_tags = ["waw", "waaw", "waaaw", "waaaaw", "waaaaaw"]
+            psycho_keys = ["ocd", "depression", "motivation", "self_confident", "anxiety"]
+            real_tags = ["zaz", "zaaz", "zaaaz", "zaaaaz", "zaaaaaz"]
+            real_keys = ["family_problem", "truma", "adhd", "interpersonal", "ideal"]
 
-            psycho_tag = ["waw", "waaw", "waaaw", "waaaaw", "waaaaaw"]
-            psycho_label = ["ocd", "depression", "motivation", "self_confident", "anxiety"]
-
-            real_tag = ["zaz", "zaaz", "zaaaz", "zaaaaz", "zaaaaaz"]
-            real_label = ["family_problem", "truma", "adhd", "interpersonal", "ideal"]
-
-            report_text_replacements = {}
-            needed = []
-            unneeded = []
-            for key in CALC_DATA.keys():
+            report3_text_replacements = {}
+            report3_needed = []
+            report3_unneeded = []
+            severity_states = {}
+            priorities = {}
+            selected_advice = {}
+            for key in CALC_DATA:
                 if key not in scl_calc_data:
                     continue
-
                 prefix = calc_key_to_prefix.get(key)
                 if not prefix:
-                    continue  # Skip if no prefix mapping found
-
+                    continue
                 value = scl_calc_data[key]
-
-                # Generate 4 tags for each key
-                report_text_replacements[f"{prefix}statefast"] = get_statefast_value(value)
-                report_text_replacements[f"{prefix}interfast"] = get_interfast_value(value)
-
-                # Score: value * 2.5 rounded to quarters
-                score_value = round_to_quarter(value * 2.5)
-                report_text_replacements[f"{prefix}scorefast"] = str(score_value)
-
-                # Fast: get text from get_report_text
-                fast_label = f"{prefix}fast"
-                report_text_replacements[f"{prefix}fast"] = get_report_text(fast_label, value)
-
-                # Add advice text for each key
+                state = get_statefast_value(value)
+                priority = get_interfast_value(value)
+                severity_states[key] = state
+                priorities[key] = priority
+                report3_text_replacements[f"{prefix}statefast"] = state
+                report3_text_replacements[f"{prefix}interfast"] = priority
+                report3_text_replacements[f"{prefix}scorefast"] = str(round_to_quarter(value * 2.5))
+                report3_text_replacements[f"{prefix}fast"] = get_report_text(f"{prefix}fast", value)
 
                 advice_key = calc_key_to_advice.get(key)
                 if advice_key:
-                    labels = [
-                        f"{advice_key}1",
-                        f"{advice_key}2",
-                        f"{advice_key}3",
-                        f"{advice_key}4",
-                    ]
-
+                    advice_labels = [f"{advice_key}{index}" for index in range(1, 5)]
                     if 0 <= value < 1:
                         keep_index = 0
                     elif 1 <= value < 2:
@@ -1114,203 +1020,34 @@ class AGReportScheduler:
                         keep_index = 2
                     else:
                         keep_index = 3
+                    selected_advice[key] = advice_labels[keep_index]
+                    for index, label in enumerate(advice_labels):
+                        (report3_needed if index == keep_index else report3_unneeded).append(label)
 
-                    for i, label in enumerate(labels):
-                        if i == keep_index:
-                            needed.append(label)
-                        else:
-                            unneeded.append(label)
+            def process_layer(keys, tags):
+                available = [(key, scl_calc_data[key]) for key in keys if key in scl_calc_data]
+                available.sort(key=lambda item: item[1], reverse=True)
+                for index, (key, _) in enumerate(available[:len(tags)]):
+                    report3_text_replacements[tags[index]] = CALC_DATA.get(key, {}).get("name", "")
 
-            # Sort labels by scl_calc_data values (ascending) and map to tags
-            # For each category, filter labels that exist in scl_calc_data, sort by value, and map to tags
-            def process_category(labels, tags):
-                """Filter labels that exist in scl_calc_data, sort by value ascending, and map to tags."""
-                # Filter labels that exist in scl_calc_data
-                available_labels = [(label, scl_calc_data[label]) for label in labels if label in scl_calc_data]
-                # Sort by value in ascending order
-                available_labels.sort(key=lambda x: x[1], reverse=True)
-                # Map sorted labels to tags (up to the number of available tags)
-                for i, (label, value) in enumerate(available_labels):
-                    if i < len(tags):
-                        tag = tags[i]
-                        # Get the name from CALC_DATA
-                        calc_data_name = CALC_DATA.get(label, {}).get("name", "")
-                        report_text_replacements[tag] = calc_data_name
+            process_layer(skill_keys, skill_tags)
+            process_layer(psycho_keys, psycho_tags)
+            process_layer(real_keys, real_tags)
 
-            # Process each category
-            process_category(skill_label, skill_tag)
-            process_category(psycho_label, psycho_tag)
-            process_category(real_label, real_tag)
-
-            # Merge text replacements into user_info
-            user_info.update(report_text_replacements)
-
-            # Calculate image replacements based on scl_calc_data values
-            image_replacements = []  # List of (old_image, new_image_path) tuples
-            for key, value in scl_calc_data.items():
-                if key not in SCL_PIC_DICT:
-                    continue
-
-                # Special handling for OCD: use ocd1, ocd2, ocd3, ocd4 from labels
-                if key == "ocd" and "OCD" in labels and isinstance(labels["OCD"], dict):
-                    ocd_data = labels["OCD"]
-                    ocd1_val = ocd_data.get("ocd1", 0) / bookmark_scl_object["ocd1"]["count"]
-                    ocd2_val = ocd_data.get("ocd2", 0) / bookmark_scl_object["ocd2"]["count"]
-                    ocd3_val = ocd_data.get("ocd3", 0) / bookmark_scl_object["ocd3"]["count"]
-                    ocd4_val = ocd_data.get("ocd4", 0) / bookmark_scl_object["ocd4"]["count"]
-
-                    # Map max ocd to image index:
-                    # ocd2 is max -> index 3, ocd1 is max -> index 0, 
-                    # ocd3 is max -> index 1, ocd4 is max -> index 2
-                    if ocd2_val > 2:
-                        image_index = 3
-                        old_image_name, new_image_name = SCL_PIC_DICT[key][image_index]
-                        new_image_path = Path(PICS_WORD_SCL_DIR) / new_image_name
-                        if new_image_path.exists():
-                            image_replacements.append((old_image_name, new_image_path))
-                        else:
-                            logging.warning(f"Image replacement file not found: {new_image_path}")
-                    elif ocd1_val > 2:
-                        image_index = 0
-                        old_image_name, new_image_name = SCL_PIC_DICT[key][image_index]
-                        new_image_path = Path(PICS_WORD_SCL_DIR) / new_image_name
-                        if new_image_path.exists():
-                            image_replacements.append((old_image_name, new_image_path))
-                        else:
-                            logging.warning(f"Image replacement file not found: {new_image_path}")
-                    elif ocd3_val > 2:
-                        image_index = 1
-                        old_image_name, new_image_name = SCL_PIC_DICT[key][image_index]
-                        new_image_path = Path(PICS_WORD_SCL_DIR) / new_image_name
-                        if new_image_path.exists():
-                            image_replacements.append((old_image_name, new_image_path))
-                        else:
-                            logging.warning(f"Image replacement file not found: {new_image_path}")
-                    elif ocd4_val > 2:
-                        image_index = 2
-                        old_image_name, new_image_name = SCL_PIC_DICT[key][image_index]
-                        new_image_path = Path(PICS_WORD_SCL_DIR) / new_image_name
-                        if new_image_path.exists():
-                            image_replacements.append((old_image_name, new_image_path))
-                        else:
-                            logging.warning(f"Image replacement file not found: {new_image_path}")
-                    else:
-                        # Fallback to default if no match (shouldn't happen)
-                        image_index = 3
-                        old_image_name, new_image_name = SCL_PIC_DICT[key][image_index]
-                        new_image_path = Path(PICS_WORD_SCL_DIR) / new_image_name
-                        if new_image_path.exists():
-                            image_replacements.append((old_image_name, new_image_path))
-                        else:
-                            logging.warning(f"Image replacement file not found: {new_image_path}")
-                else:
-                    # Select image index based on value range:
-                    # 3-4: index 0, 2-3: index 1, 1-2: index 2, 0-1: index 3
-                    if value >= 3:
-                        image_index = 0
-                    elif value >= 2:
-                        image_index = 1
-                    elif value >= 1:
-                        image_index = 2
-                    else:
-                        image_index = 3
-
-                    if key != "ideal":
-                        # Get the image tuple (old_image_name, new_image_name)
-                        old_image_name, new_image_name = SCL_PIC_DICT[key][image_index]
-                        new_image_path = Path(PICS_WORD_SCL_DIR) / new_image_name
-
-                        # Only add if the replacement image exists
-                        if new_image_path.exists():
-                            image_replacements.append((old_image_name, new_image_path))
-                        else:
-                            logging.warning(f"Image replacement file not found: {new_image_path}")
-
-            with open(os.path.join(user_directory, f"labels.json"), "w", encoding="utf-8") as f:
-                json.dump(labels, f, ensure_ascii=False, indent=2)
-            with open(os.path.join(user_directory, f"user_info.json"), "w", encoding="utf-8") as f:
-                json.dump(user_info, f, ensure_ascii=False, indent=2)
-            with open(os.path.join(user_directory, f"report_text_replacements.json"), "w",
-                      encoding="utf-8") as f:
-                json.dump(report_text_replacements, f, ensure_ascii=False, indent=2)
-            with open(os.path.join(user_directory, f"scl_calc_data.json"), "w", encoding="utf-8") as f:
-                json.dump(scl_calc_data, f, ensure_ascii=False, indent=2)
-            if logo_path:
-                image_replacements.append(("image4.png", logo_path))
-            generate_third_report_documents(
-                user_directory=user_directory,
-                user_report_info=user_info,
-                colors_tag=colors_tag,
-                colors_color=colors_color,
-                report_text_replacements=report_text_replacements,
-                image_replacements=image_replacements,
-                needed=needed,
-                unneeded=unneeded,
-                phone=phone
-            )
-            logging.info(
-                f"Generated Report3.pdf for user {user_id}"
-            )
-
-            # Determine report type based on max value of anxiety, ocd, depression
-            report_keys = ["anxiety", "ocd", "depression"]
-            report_values = {key: scl_calc_data.get(key, 0.0) for key in report_keys}
-            max_report_key = max(report_values, key=report_values.get)
-            max_report_value = report_values[max_report_key]
-
-            # Generate report 4 if any of the three conditions have a value > 0
-            if max_report_value > 0:
-                # Logo replacement: anxiety and depression use image14.png, OCD uses image17.png
-                report4_image_replacements = []
-                if logo_path:
-                    if max_report_key == "depression":
-                        report4_image_replacements.append(("image12.png", logo_path))
-                    elif max_report_key == "anxiety":
-                        report4_image_replacements.append(("image14.png", logo_path))
-                    elif max_report_key == "ocd":
-                        report4_image_replacements.append(("image17.png", logo_path))
-                generate_forth_report_documents(
-                    user_directory=user_directory,
-                    user_report_info=user_info,  # Pass as dict with USER_TAGS_INFO keys
-                    report_name=max_report_key,  # "anxiety", "ocd", or "depression"
-                    phone=phone,
-                    image_replacements=report4_image_replacements
-                )
-                logging.info(
-                    f"Generated Report4.pdf for user {user_id} with report type: {max_report_key} (value: {max_report_value:.2f})"
-                )
-
-            # Generate text replacements for all CALC_DATA keys
-            report_text_replacements = {}
-            needed = []
-            unneeded = []
-            for key in CALC_DATA.keys():
+            report5_text_replacements = {}
+            report5_needed = []
+            report5_unneeded = []
+            for key in CALC_DATA:
                 if key not in scl_calc_data:
                     continue
-
                 prefix = calc_key_to_prefix.get(key)
                 if not prefix:
-                    continue  # Skip if no prefix mapping found
-
+                    continue
                 value = scl_calc_data[key]
-
-                # Generate 4 tags for each key
-                report_text_replacements[f"{prefix}statefast"] = get_statefast_value(value)
-                report_text_replacements[f"{prefix}interfast"] = get_interfast_value(value)
-
-                # Score: value * 2.5 rounded to quarters
-                score_value = round_to_quarter(value * 2.5)
-                report_text_replacements[f"{prefix}scorefast"] = str(score_value)
-
-                # Fast: get text from get_report_text
-                fast_label = f"{prefix}fast"
-                labels = [
-                    f"{fast_label}1",
-                    f"{fast_label}2",
-                    f"{fast_label}3",
-                    f"{fast_label}4",
-                ]
-
+                report5_text_replacements[f"{prefix}statefast"] = get_statefast_value(value)
+                report5_text_replacements[f"{prefix}interfast"] = get_interfast_value(value)
+                report5_text_replacements[f"{prefix}scorefast"] = str(round_to_quarter(value * 2.5))
+                fast_labels = [f"{prefix}fast{index}" for index in range(1, 5)]
                 if 0 <= value < 1:
                     keep_index = 0
                 elif 1 <= value < 2:
@@ -1319,65 +1056,76 @@ class AGReportScheduler:
                     keep_index = 2
                 else:
                     keep_index = 3
+                for index, label in enumerate(fast_labels):
+                    (report5_needed if index == keep_index else report5_unneeded).append(label)
 
-                for i, label in enumerate(labels):
-                    if i == keep_index:
-                        needed.append(label)
-                    else:
-                        unneeded.append(label)
-                # report_text_replacements[f"{prefix}fast"] = get_report_text(fast_label, value)
-
-            # Merge text replacements into user_info
-            user_info.update(report_text_replacements)
-
-            # Prepare data for bar chart: categories (Persian names) and values
-            categories = []
-            values = []
-            colors = []
-            # Scale values from 0-3 range to 0-100 range and round to 2 decimal places
-            # Mapping: 0 -> 0.00, 1 -> 33.33, 2 -> 66.66, 3 -> 100.00
-            # Formula: value / 3 * 100
-            for key in CALC_DATA.keys():
+            report5_categories = []
+            report5_values = []
+            report5_colors = []
+            for key in CALC_DATA:
                 if key in scl_calc_data:
-                    categories.append(CALC_DATA[key]["chart_name"])
-                    # Scale from 0-3 to 0-100: value / 3 * 100
-                    scaled_value = round(scl_calc_data[key] / 4 * 100, 2)
-                    values.append(scaled_value)
-                    # colors.append(CALC_DATA.get(key, "#95A5A6"))  # Default gray if color not found
-                    colors.append(CALC_DATA[key]["color"])
-            # Create bar chart
-            if categories and values:
-                bar_chart_path = bar.create_bar_chart(
-                    categories=categories,
-                    title="ﯽﺘﺧﺎﻨﺸﻧﺍﻭﺭ ﻞﻣﺍﻮﻋ ﯼﻪﺴﯾﺎﻘﻣ ﺭﺍﺩﻮﻤﻧ",
-                    values=values,
-                    colors=colors,
-                    rotation=45,
-                    size=8,
-                    path=user_directory,
-                    filename="image1"
-                )
-                # Logo replacement for report 5: replace image18.png with logo if available
-                report5_image_replacements = []
-                if logo_path:
-                    report5_image_replacements.append(("image21.png", logo_path))
-                # Generate Report 5
-                generate_fifth_report_documents(
-                    user_directory=user_directory,
-                    user_report_info=user_info,
-                    image_names=["image4.png"],
-                    user_report_pictures=[f"{bar_chart_path}.png"],
-                    phone=phone,
-                    image_replacements=report5_image_replacements,
-                    needed=needed,
-                    unneeded=unneeded
-                )
-                logging.info(
-                    f"Generated Report5.pdf for user {user_id} with bar chart"
-                )
+                    report5_categories.append(CALC_DATA[key]["chart_name"])
+                    report5_values.append(round(scl_calc_data[key] / 4 * 100, 2))
+                    report5_colors.append(CALC_DATA[key]["color"])
+
+            report3_user_info = {**user_info, **report3_text_replacements}
+            report4_values = {key: scl_calc_data.get(key, 0.0)
+                              for key in ("anxiety", "ocd", "depression")}
+            report4_kind = max(report4_values, key=report4_values.get)
+            if report4_values[report4_kind] <= 0:
+                report4_kind = None
+
+            image_selections, active_ocd_subtypes, active_ocd_count_asset = select_scl_report3_media(
+                scl_calc_data, labels
+            )
+            report5_user_info = {**report3_user_info, **report5_text_replacements}
+
+            with open(os.path.join(user_directory, "labels.json"), "w", encoding="utf-8") as f:
+                json.dump(labels, f, ensure_ascii=False, indent=2)
+            with open(os.path.join(user_directory, "user_info.json"), "w", encoding="utf-8") as f:
+                json.dump(report3_user_info, f, ensure_ascii=False, indent=2)
+            with open(os.path.join(user_directory, "report_text_replacements.json"), "w", encoding="utf-8") as f:
+                json.dump(report3_text_replacements, f, ensure_ascii=False, indent=2)
+            with open(os.path.join(user_directory, "scl_calc_data.json"), "w", encoding="utf-8") as f:
+                json.dump(scl_calc_data, f, ensure_ascii=False, indent=2)
+
+            context = make_scl_report_context(
+                student={
+                    "user_id": str(user_id),
+                    "name": student_name,
+                    "phone": phone,
+                    "institute_name": institute_name,
+                    "consultant_name": consultant_name,
+                    "logo_path": str(logo_path) if logo_path else None,
+                },
+                labels=labels,
+                factor_scores=scl_calc_data,
+                severity_states=severity_states,
+                priorities=priorities,
+                selected_advice=selected_advice,
+                report3_user_info=report3_user_info,
+                report3_text_replacements=report3_text_replacements,
+                report3_needed=report3_needed,
+                report3_unneeded=report3_unneeded,
+                report3_color_targets=colors_tag,
+                report3_color_values=colors_color,
+                report4_user_info=report3_user_info,
+                report4_kind=report4_kind,
+                report5_user_info=report5_user_info,
+                report5_needed=report5_needed,
+                report5_unneeded=report5_unneeded,
+                report5_categories=report5_categories,
+                report5_values=report5_values,
+                report5_colors=report5_colors,
+                image_selections=image_selections,
+                active_ocd_subtypes=active_ocd_subtypes,
+                active_ocd_count_asset=active_ocd_count_asset,
+            )
+            published_reports = render_scl_report_set(context, user_directory)
+            logging.info("Generated SCL reports for user %s: %s", user_id, ", ".join(published_reports))
 
             # Update or insert scl_scores record
-            self._update_scl_scores(user_id, scl_calc_data)
+            self._update_scl_scores(user_id, context)
 
             with session_scope() as session:
                 update_redis_log_status(

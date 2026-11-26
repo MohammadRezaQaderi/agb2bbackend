@@ -62,9 +62,13 @@ DEFAULT_REPORT_LOGO_PATH = Path(_env("AG_DEFAULT_REPORT_LOGO_PATH", "")) if _env
 REPORT2_TEMPLATE_PATH = Path(
     _env("AG_REPORT2_TEMPLATE_PATH", str(PROJECT_DIR / "report_templates" / "ag" / "Report2.docx"))
 )
-REPORT3_TEMPLATE_PATH = Path(
-    _env("AG_REPORT3_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report3.docx"))
+SCL_TEMPLATE_DIR = Path(_env("AG_SCL_TEMPLATE_DIR", str(PROJECT_DIR / "report_templates" / "scl")))
+SCL_REPORT3_TEMPLATE_PATH = Path(
+    _env("AG_REPORT3_TEMPLATE_PATH", str(SCL_TEMPLATE_DIR / "Report3.docx"))
 )
+SCL_ASSET_DIR = Path(_env("AG_SCL_ASSET_DIR", PICS_WORD_SCL_DIR))
+# Keep the legacy exported name and AG_REPORT3_TEMPLATE_PATH override intact.
+REPORT3_TEMPLATE_PATH = SCL_REPORT3_TEMPLATE_PATH
 REPORT5_TEMPLATE_PATH = Path(
     _env("AG_REPORT5_TEMPLATE_PATH", str(Path(BASE_PATH) / "FileAG" / "Report5.docx"))
 )
