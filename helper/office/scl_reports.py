@@ -52,6 +52,7 @@ class SCLReportContext:
     selected_advice: Mapping[str, str]
     report3_user_info: Mapping[str, Any]
     report3_text_replacements: Mapping[str, Any]
+    report3_layer_order: Mapping[str, tuple[str, ...]]
     report3_needed: tuple[str, ...]
     report3_unneeded: tuple[str, ...]
     report3_color_targets: tuple[str, ...]
@@ -74,7 +75,7 @@ def make_scl_report_context(**values: Any) -> SCLReportContext:
     for name in (
         "labels", "factor_scores", "severity_states", "priorities", "selected_advice",
         "report3_user_info", "report3_text_replacements", "report4_user_info",
-        "report5_user_info", "image_selections",
+        "report5_user_info", "image_selections", "report3_layer_order",
     ):
         values[name] = _freeze(values[name])
     for name in (
@@ -130,6 +131,9 @@ SCL_REPORT3_IMAGE_MAP: Mapping[str, tuple[tuple[str, str], ...]] = MappingProxyT
               ("image149.png", "perfectionism2.png"), ("image148.png", "perfectionism1.png")),
 })
 
+# These count-specific assets are deliberately kept separate: the current DOCX has
+# subtype media at image91–94 and an overall severity scale at image95–98, with no
+# dedicated count-art target verified in its relationships.
 SCL_REPORT3_OCD_COUNT_ASSETS = MappingProxyType({
     1: "ocd11.png", 2: "ocd22.png", 3: "ocd33.png", 4: "ocd44.png",
 })
@@ -204,11 +208,17 @@ def _report3_renderer(context: SCLReportContext, output_dir: Path, assets_dir: P
     import config
 
     visuals = render_r3_visuals(context, assets_dir)
+    if set(context.image_selections) != set(SCL_REPORT3_IMAGE_MAP):
+        raise ValueError("SCL Report3 requires one selected status illustration for all 16 factors")
+    selected_targets = [target for target, _ in context.image_selections.values()]
+    if len(selected_targets) != len(set(selected_targets)):
+        raise ValueError("SCL Report3 status illustrations resolve to duplicate DOCX media targets")
+    required_visuals = {"image5.png", "roadmap_surface", "roadmap_psych", "roadmap_root"}
+    if set(visuals) != required_visuals:
+        raise RuntimeError(f"SCL Report3 renderer returned an incomplete chart set: {sorted(required_visuals - set(visuals))}")
     media = []
     asset_dir = Path(config.SCL_ASSET_DIR)
     for factor, (target, asset) in context.image_selections.items():
-        if factor == "ideal":
-            continue
         source = asset_dir / asset
         if not source.is_file():
             raise FileNotFoundError(f"Required SCL Report3 asset is missing: {source}")

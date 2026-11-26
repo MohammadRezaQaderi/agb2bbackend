@@ -1199,6 +1199,8 @@ def _insert_scl_report3_roadmap_images(
     media_dir.mkdir(parents=True, exist_ok=True)
     max_width_mm, max_height_mm = 168.0, 183.0
 
+    inserted_layers = set()
+    inserted_relationships = {}
     for offset, (layer, paragraph) in enumerate(selected.items()):
         source = Path(roadmap_images[layer])
         if not source.is_file():
@@ -1214,6 +1216,9 @@ def _insert_scl_report3_roadmap_images(
         filename = f"scl_r3_roadmap_{layer}.png"
         target = f"media/{filename}"
         shutil.copyfile(source, media_dir / filename)
+        embedded_media = media_dir / filename
+        if not embedded_media.is_file() or embedded_media.stat().st_size == 0:
+            raise RuntimeError(f"Report3 {layer} roadmap media was not copied into the DOCX")
         relation_id = f"rIdSclR3Roadmap{layer.title()}"
         while relation_id in existing_ids:
             relation_id += "X"
@@ -1228,6 +1233,7 @@ def _insert_scl_report3_roadmap_images(
             Type=f"{rel_ns}/image",
             Target=target,
         )
+        inserted_relationships[layer] = (relation_id, target)
 
         for child in list(paragraph):
             if child.tag != f"{{{word_ns}}}pPr":
@@ -1263,7 +1269,7 @@ def _insert_scl_report3_roadmap_images(
         locks = etree.SubElement(etree.SubElement(nv, f"{{{pic_ns}}}cNvPicPr"), f"{{{a_ns}}}picLocks")
         locks.set("noChangeAspect", "1")
         fill = etree.SubElement(picture, f"{{{pic_ns}}}blipFill")
-        etree.SubElement(fill, f"{{{a_ns}}}blip", {f"{{{rel_ns}}}embed": relation_id})
+        blip = etree.SubElement(fill, f"{{{a_ns}}}blip", {f"{{{rel_ns}}}embed": relation_id})
         etree.SubElement(etree.SubElement(fill, f"{{{a_ns}}}stretch"), f"{{{a_ns}}}fillRect")
         shape = etree.SubElement(picture, f"{{{pic_ns}}}spPr")
         transform = etree.SubElement(shape, f"{{{a_ns}}}xfrm")
@@ -1271,6 +1277,26 @@ def _insert_scl_report3_roadmap_images(
         etree.SubElement(transform, f"{{{a_ns}}}ext", cx=str(width_emu), cy=str(height_emu))
         geometry = etree.SubElement(shape, f"{{{a_ns}}}prstGeom", prst="rect")
         etree.SubElement(geometry, f"{{{a_ns}}}avLst")
+        if (
+            blip.get(f"{{{rel_ns}}}embed") != relation_id
+            or paragraph.find(f"{{{word_ns}}}r") is None
+            or not paragraph.xpath(
+                ".//*[local-name()='docPr' and @name=$name]",
+                name=f"SCL R3 {layer} roadmap",
+            )
+        ):
+            raise RuntimeError(f"Report3 {layer} roadmap image was not inserted into its DOCX paragraph")
+        inserted_layers.add(layer)
+
+    if inserted_layers != set(expected_markers) or "psych" not in inserted_layers:
+        raise RuntimeError("The mandatory Report3 psychological roadmap was not inserted")
+    for layer, (relation_id, target) in inserted_relationships.items():
+        relationship = next((item for item in rels_root if item.get("Id") == relation_id), None)
+        if relationship is None or relationship.get("Target") != target:
+            raise RuntimeError(f"Report3 {layer} roadmap relationship is missing or incorrect")
+    _, psych_target = inserted_relationships["psych"]
+    if not (media_dir / Path(psych_target).name).is_file():
+        raise RuntimeError("The mandatory Report3 psychological roadmap media target is missing")
 
     save_xml_to_file(rels_tree, rels_path)
     save_xml_to_file(content_tree, content_types_path)
@@ -1326,8 +1352,9 @@ def generate_third_report_documents(
 
         tree = remove_labeled_texts(tree, unneeded, needed)
 
-        if roadmap_images is not None:
-            _insert_scl_report3_roadmap_images(tree, folder_word, roadmap_images)
+        if roadmap_images is None:
+            raise ValueError("SCL Report3 requires generated surface, psych, and root roadmaps")
+        _insert_scl_report3_roadmap_images(tree, folder_word, roadmap_images)
 
         # The supplied revision stores layer ranking tokens in document.xml.
         # Replace the full registry there, while retaining legacy embedded-diagram support.

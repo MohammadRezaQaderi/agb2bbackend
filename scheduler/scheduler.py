@@ -50,6 +50,7 @@ from helper.office.scl_reports import (
     select_scl_report3_media,
     select_scl_score_image_name,
 )
+from helper.diagram.scl_report3.report import order_r3_layer_factor_ids
 from config import (
     DEFAULT_REPORT_LOGO_PATH,
     REPORTS_DIR,
@@ -1026,14 +1027,16 @@ class AGReportScheduler:
                         (report3_needed if index == keep_index else report3_unneeded).append(label)
 
             def process_layer(keys, tags):
-                available = [(key, scl_calc_data[key]) for key in keys if key in scl_calc_data]
-                available.sort(key=lambda item: item[1], reverse=True)
-                for index, (key, _) in enumerate(available[:len(tags)]):
+                ordered_keys = order_r3_layer_factor_ids(keys, scl_calc_data)[:len(tags)]
+                for index, key in enumerate(ordered_keys):
                     report3_text_replacements[tags[index]] = CALC_DATA.get(key, {}).get("name", "")
+                return ordered_keys
 
-            process_layer(skill_keys, skill_tags)
-            process_layer(psycho_keys, psycho_tags)
-            process_layer(real_keys, real_tags)
+            report3_layer_order = {
+                "surface": process_layer(skill_keys, skill_tags),
+                "psych": process_layer(psycho_keys, psycho_tags),
+                "root": process_layer(real_keys, real_tags),
+            }
 
             report3_text_replacements.update(SCL_REPORT3_HIDDEN_MARKER_REPLACEMENTS)
 
@@ -1119,6 +1122,7 @@ class AGReportScheduler:
                 selected_advice=selected_advice,
                 report3_user_info=report3_user_info,
                 report3_text_replacements=report3_text_replacements,
+                report3_layer_order=report3_layer_order,
                 report3_needed=report3_needed,
                 report3_unneeded=report3_unneeded,
                 report3_color_targets=colors_tag,

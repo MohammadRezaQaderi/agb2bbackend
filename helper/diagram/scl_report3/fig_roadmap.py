@@ -33,8 +33,10 @@ def layout(n):
 def road_x(y):
     return ROAD_X + 7 * math.sin(y / 18.0)
 
-def roadmap(cat):
-    keys = STATIONS[cat]
+def roadmap(cat, station_order=None):
+    keys = tuple(station_order or STATIONS[cat])
+    if len(keys) != len(STATIONS[cat]) or set(keys) != set(STATIONS[cat]):
+        raise ValueError(f"Invalid station ordering for R3 {cat} roadmap")
     cards = layout(len(keys))
     c, cl, cd = P[cat], P[cat + "_l"], P[cat + "_d"]
     body = f'<rect x="0" y="0" width="{W}" height="{H}" rx="6" fill="{cl}"/>'

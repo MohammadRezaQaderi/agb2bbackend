@@ -78,7 +78,8 @@ def chart(data=None, vmax=100, thresholds=None):
                 # نام سطح و نمره به‌صورت دو متن جدا (بدون ترکیب عدد و حروف در یک خط) تا در همه نمایشگرها درست چیده شود
                 b += text(BADGE_X + BADGE_W * 0.66, cy + 1.1, LEVELS[lv-1][0], size=3, fill="#fff", weight="bold", anchor="middle")
                 b += f'<line x1="{BADGE_X + BADGE_W*0.36}" y1="{cy-1.8}" x2="{BADGE_X + BADGE_W*0.36}" y2="{cy+1.8}" stroke="#fff" stroke-width="0.35" opacity="0.8"/>'
-                b += text(BADGE_X + BADGE_W * 0.18, cy + 1.1, fa(int(math.floor(sc + 0.5))), size=3, fill="#fff", weight="bold", anchor="middle")
+                score_label = f"{sc:.1f}".rstrip("0").rstrip(".").replace(".", "٫")
+                b += text(BADGE_X + BADGE_W * 0.18, cy + 1.1, fa(score_label), size=3, fill="#fff", weight="bold", anchor="middle")
             else:
                 b += f'<rect x="{BADGE_X}" y="{cy-2.8}" width="{BADGE_W}" height="5.6" rx="2.8" fill="none" stroke="#D1D5DB" stroke-width="0.4"/>'
             y += ROW
