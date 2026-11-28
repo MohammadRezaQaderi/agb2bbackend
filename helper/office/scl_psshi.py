@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import logging
 import posixpath
 import re
 import shutil
@@ -221,17 +222,20 @@ def _filter_psshi_blocks(tree: etree._ElementTree, levels: Mapping[str, int], se
         raise ValueError(f"PSSHI conditional markers remain after selection: {remaining[:8]}")
 
 
-def _resolve_logo(identity_logo: str | None) -> Path:
+def _resolve_logo(identity_logo: str | None) -> Path | None:
     candidates = [Path(identity_logo)] if identity_logo else []
     if config.DEFAULT_REPORT_LOGO_PATH:
         candidates.append(Path(config.DEFAULT_REPORT_LOGO_PATH))
     for candidate in candidates:
         if candidate.is_file():
             return candidate
-    raise FileNotFoundError("No usable organization logo is available for the PSSHI header")
+    logging.warning("No usable organization logo is available; leaving the PSSHI header logo cell empty")
+    return None
 
 
-def _add_header_logo(folder: Path, logo_path: Path) -> None:
+def _add_header_logo(folder: Path, logo_path: Path | None) -> None:
+    if logo_path is None:
+        return
     header_path = folder / "word" / "header1.xml"
     if not header_path.is_file():
         raise FileNotFoundError("PSSHI template is missing word/header1.xml")
