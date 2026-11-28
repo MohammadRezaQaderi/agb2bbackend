@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -149,6 +150,21 @@ SCL_REPORT3_OCD_COUNT_ASSETS = MappingProxyType({
 SCL_REPORT3_OCD_COUNT_TARGETS = MappingProxyType({
     1: "image95.png", 2: "image96.png", 3: "image97.png", 4: "image98.png",
 })
+_REPORT3_SCORE_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?\Z")
+_PERSIAN_SCORE_TRANSLATION = str.maketrans("0123456789.", "۰۱۲۳۴۵۶۷۸۹٫")
+
+
+def _format_report3_dynamic_scores(replacements: Mapping[str, Any]) -> dict[str, Any]:
+    """Localize only numeric score tokens at the Report3 document boundary."""
+    formatted = dict(replacements)
+    for key, value in replacements.items():
+        if not key.endswith("scorefast"):
+            continue
+        score = str(value)
+        if not _REPORT3_SCORE_NUMBER_RE.fullmatch(score):
+            raise ValueError(f"Invalid dynamic Report3 score for {key}: {value!r}")
+        formatted[key] = score.translate(_PERSIAN_SCORE_TRANSLATION)
+    return formatted
 
 
 def report3_ocd_media_for_active_subtypes(
@@ -303,7 +319,7 @@ def _report3_renderer(context: SCLReportContext, output_dir: Path, assets_dir: P
         phone=context.student.phone,
         colors_tag=list(context.report3_color_targets),
         colors_color=list(context.report3_color_values),
-        report_text_replacements=dict(context.report3_text_replacements),
+        report_text_replacements=_format_report3_dynamic_scores(context.report3_text_replacements),
         needed=list(context.report3_needed),
         unneeded=list(context.report3_unneeded),
         image_replacements=media,
