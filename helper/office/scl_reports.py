@@ -18,10 +18,6 @@ from helper.office.word_helper import (
     generate_forth_report_documents,
     generate_third_report_documents,
 )
-from helper.office.scl_psshi import (
-    PSSHI_OUTPUT_NAME,
-    generate_study_skills_report_documents,
-)
 from quiz_packages.scl.legacy_v1.scoring import bookmark_scl_object
 
 
@@ -62,8 +58,6 @@ class SCLReportContext:
     report3_unneeded: tuple[str, ...]
     report3_color_targets: tuple[str, ...]
     report3_color_values: tuple[str, ...]
-    report4_user_info: Mapping[str, Any]
-    report4_kind: str | None
     report5_user_info: Mapping[str, Any]
     report5_needed: tuple[str, ...]
     report5_unneeded: tuple[str, ...]
@@ -79,8 +73,8 @@ def make_scl_report_context(**values: Any) -> SCLReportContext:
     """Freeze mutable scheduler values at the scoring/rendering boundary."""
     for name in (
         "labels", "factor_scores", "severity_states", "priorities", "selected_advice",
-        "report3_user_info", "report3_text_replacements", "report4_user_info",
-        "report5_user_info", "image_selections", "report3_layer_order",
+        "report3_user_info", "report3_text_replacements", "report5_user_info",
+        "image_selections", "report3_layer_order",
     ):
         values[name] = _freeze(values[name])
     for name in (
@@ -338,39 +332,24 @@ def _report3_renderer(context: SCLReportContext, output_dir: Path, assets_dir: P
 
 def _report4_renderer(context: SCLReportContext, output_dir: Path, assets_dir: Path) -> Path:
     del assets_dir
-    if context.report4_kind not in {"anxiety", "ocd", "depression"}:
-        raise ValueError("Report4 renderer requires an anxiety/OCD/depression selection")
-    logo_targets = {"anxiety": "image14.png", "ocd": "image17.png", "depression": "image12.png"}
-    images = []
-    if context.student.logo_path:
-        images.append((logo_targets[context.report4_kind], context.student.logo_path))
+    user_report_info = {
+        "#name": context.student.name,
+        "#con_name": context.student.consultant_name,
+        "#inst_name": context.student.institute_name,
+        "studentname": context.student.name,
+        "conname": context.student.consultant_name,
+        "instname": context.student.institute_name,
+    }
     generate_forth_report_documents(
         user_directory=output_dir,
-        user_report_info=dict(context.report4_user_info),
-        report_name=context.report4_kind,
+        user_report_info=user_report_info,
         phone=context.student.phone,
-        image_replacements=images,
+        psshi_labels=context.labels,
+        psychological_order=tuple(context.report3_layer_order.get("psych", ())),
+        psychological_scores=context.factor_scores,
+        logo_path=context.student.logo_path,
     )
     return output_dir / "Report4.pdf"
-
-
-def _study_skills_renderer(context: SCLReportContext, output_dir: Path, assets_dir: Path) -> Path:
-    del assets_dir
-    import config
-
-    psychological_order = tuple(context.report3_layer_order.get("psych", ()))
-    return generate_study_skills_report_documents(
-        template_path=config.SCL_PSSHI_TEMPLATE_PATH,
-        user_directory=output_dir,
-        student_name=context.student.name,
-        consultant_name=context.student.consultant_name,
-        institute_name=context.student.institute_name,
-        phone=context.student.phone,
-        logo_path=context.student.logo_path,
-        labels=context.labels,
-        psychological_order=psychological_order,
-        psychological_scores=context.factor_scores,
-    )
 
 
 def _report5_renderer(context: SCLReportContext, output_dir: Path, assets_dir: Path) -> Path:
@@ -412,7 +391,6 @@ SCL_REPORT_REGISTRY: Mapping[str, SCLReportSpec] = MappingProxyType({
     "report3": SCLReportSpec("report3", "Report3.pdf", True, _report3_renderer),
     "report4": SCLReportSpec("report4", "Report4.pdf", True, _report4_renderer),
     "report5": SCLReportSpec("report5", "Report5.pdf", True, _report5_renderer),
-    "study_skills": SCLReportSpec("study_skills", PSSHI_OUTPUT_NAME, True, _study_skills_renderer),
 })
 
 
@@ -424,7 +402,11 @@ def _validate_pdf(path: Path) -> None:
             raise RuntimeError(f"SCL report renderer produced an invalid PDF: {path.name}")
 
 
-def _publish_reports_atomically(staged: list[tuple[Path, Path]], backup_dir: Path) -> None:
+def _publish_reports_atomically(
+    staged: list[tuple[Path, Path]],
+    backup_dir: Path,
+    obsolete_targets: tuple[Path, ...] = (),
+) -> None:
     moved: list[tuple[Path, Path | None, bool]] = []
     backup_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -436,6 +418,13 @@ def _publish_reports_atomically(staged: list[tuple[Path, Path]], backup_dir: Pat
             moved.append((target, backup, False))
             os.replace(source, target)
             moved[-1] = (target, backup, True)
+        staged_targets = {target.resolve() for _, target in staged}
+        for index, target in enumerate(obsolete_targets):
+            if target.resolve() in staged_targets or not target.exists():
+                continue
+            backup = backup_dir / f"obsolete-{index}-{target.name}"
+            os.replace(target, backup)
+            moved.append((target, backup, False))
     except Exception:
         for target, backup, published in reversed(moved):
             if published and target.exists():
@@ -454,13 +443,11 @@ def render_scl_report_set(context: SCLReportContext, output_dir: Path | str) -> 
     if not config.SCL_REPORT3_TEMPLATE_PATH.is_file():
         raise FileNotFoundError(f"SCL Report3 template is missing: {config.SCL_REPORT3_TEMPLATE_PATH}")
     if not config.SCL_PSSHI_TEMPLATE_PATH.is_file():
-        raise FileNotFoundError(f"SCL PSSHI study-skills template is missing: {config.SCL_PSSHI_TEMPLATE_PATH}")
+        raise FileNotFoundError(f"SCL Report4 PSSHI study-skills template is missing: {config.SCL_PSSHI_TEMPLATE_PATH}")
     if not config.SCL_ASSET_DIR.is_dir():
         raise FileNotFoundError(f"SCL image asset directory is missing: {config.SCL_ASSET_DIR}")
 
-    active_specs = [SCL_REPORT_REGISTRY["report3"], SCL_REPORT_REGISTRY["study_skills"]]
-    if context.report4_kind is not None:
-        active_specs.append(SCL_REPORT_REGISTRY["report4"])
+    active_specs = [SCL_REPORT_REGISTRY["report3"], SCL_REPORT_REGISTRY["report4"]]
     if context.report5_categories and context.report5_values:
         active_specs.append(SCL_REPORT_REGISTRY["report5"])
 
@@ -479,6 +466,19 @@ def render_scl_report_set(context: SCLReportContext, output_dir: Path | str) -> 
             rendered_pdf = spec.renderer(context, report_dir, assets_dir)
             _validate_pdf(rendered_pdf)
             staged_outputs.append((rendered_pdf, output_dir / spec.output_filename))
+            if spec.key == "report4":
+                report4_docx = report_dir / f"Report4{context.student.phone}.docx"
+                if not report4_docx.is_file() or report4_docx.stat().st_size == 0:
+                    raise RuntimeError("SCL Report4 renderer did not produce its required DOCX")
+                staged_outputs.append((report4_docx, output_dir / report4_docx.name))
 
-        _publish_reports_atomically(staged_outputs, stage_root / "backups")
+        obsolete_psshi_outputs = (
+            output_dir / "StudySkillsReport.pdf",
+            output_dir / f"StudySkillsReport{context.student.phone}.docx",
+        )
+        _publish_reports_atomically(
+            staged_outputs,
+            stage_root / "backups",
+            obsolete_targets=obsolete_psshi_outputs,
+        )
     return tuple(target.name for _, target in staged_outputs)

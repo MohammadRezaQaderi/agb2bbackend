@@ -48,7 +48,6 @@ PSYCH_FACTOR_TO_CHALLENGE = {
 }
 PSSHI_RADAR_TARGET = "image4.png"
 PSSHI_RADAR_RELATIONSHIP_TARGET = "media/image4.png"
-PSSHI_OUTPUT_NAME = "StudySkillsReport.pdf"
 _MARKER_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_])(?:timePSSHI[1-4]|placePSSHI[1-4]|readingPSSHI[1-4]|"
     r"writtingPSSHI[1-4]|memoryPSSHI[1-4]|motivationPSSHI[1-4]|examPSSHI[1-4]|"
@@ -220,6 +219,37 @@ def _filter_psshi_blocks(tree: etree._ElementTree, levels: Mapping[str, int], se
             remaining.append(content)
     if remaining:
         raise ValueError(f"PSSHI conditional markers remain after selection: {remaining[:8]}")
+
+
+def _relax_orphan_skill_page_breaks(tree: etree._ElementTree) -> None:
+    """Let the next section follow the short advice blocks on the known orphan pages."""
+    body = tree.getroot().find(f"{{{WORD_NS}}}body")
+    if body is None:
+        raise ValueError("PSSHI document.xml has no Word body")
+    targets = ("۳. مهارت مطالعه", "۷. مهارت امتحان دادن")
+    removed = set()
+    children = list(body)
+    for title in targets:
+        matching_tables = [
+            child for child in children
+            if child.tag == f"{{{WORD_NS}}}tbl" and title in "".join(child.itertext())
+        ]
+        if len(matching_tables) != 1:
+            raise ValueError(f"Expected one PSSHI section table titled {title!r}; found {len(matching_tables)}")
+        index = children.index(matching_tables[0]) + 1
+        if index >= len(children):
+            raise ValueError(f"PSSHI section {title!r} has no following page-break paragraph")
+        following = children[index]
+        page_break = (
+            following.tag == f"{{{WORD_NS}}}p"
+            and bool(following.xpath('.//w:br[@w:type="page"]', namespaces=NS))
+        )
+        if not page_break:
+            raise ValueError(f"PSSHI page-break layout changed after section {title!r}")
+        body.remove(following)
+        removed.add(title)
+    if removed != set(targets):
+        raise ValueError("PSSHI orphan-page layout adjustment did not match its expected sections")
 
 
 def _resolve_logo(identity_logo: str | None) -> Path | None:
@@ -395,8 +425,10 @@ def generate_study_skills_report_documents(
     labels: Mapping[str, object],
     psychological_order,
     psychological_scores: Mapping[str, object],
+    output_docx_name: str,
+    output_pdf_name: str,
 ) -> Path:
-    """Build the distinct PSSHI PDF using one immutable SCL context snapshot."""
+    """Build the PSSHI-backed official Report4 from one SCL context snapshot."""
     template_path = Path(template_path)
     if not template_path.is_file():
         raise FileNotFoundError(f"SCL PSSHI template is missing: {template_path}")
@@ -411,6 +443,7 @@ def generate_study_skills_report_documents(
     document_path = folder / "word" / "document.xml"
     document_tree = etree.parse(str(document_path), etree.XMLParser(remove_blank_text=False))
     _filter_psshi_blocks(document_tree, levels, selected_challenge)
+    _relax_orphan_skill_page_breaks(document_tree)
     replacements = {
         "#name": student_name,
         "#con_name": consultant_name,
@@ -446,8 +479,8 @@ def generate_study_skills_report_documents(
         if identity_tokens:
             raise ValueError(f"Unresolved PSSHI identity placeholders in {part.name}: {identity_tokens}")
 
-    destination_docx = output_dir / f"StudySkillsReport{phone}.docx"
-    destination_pdf = output_dir / PSSHI_OUTPUT_NAME
+    destination_docx = output_dir / output_docx_name
+    destination_pdf = output_dir / output_pdf_name
     zip_word_folder(folder, destination_docx, remove_folder=False)
     convert_docx_to_pdf(destination_docx, destination_pdf)
     return destination_pdf

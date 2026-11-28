@@ -14,17 +14,13 @@ from typing import Iterable, List, Mapping, Sequence, Tuple
 import config
 from lxml import etree
 from PIL import Image, ImageOps
-from config import REPORT1_TEMPLATE_PATH, REPORT2_TEMPLATE_PATH, REPORT3_TEMPLATE_PATH, REPORT5_TEMPLATE_PATH, \
-    OCD_TEMPLATE_PATH, ANX_TEMPLATE_PATH, DEP_TEMPLATE_PATH
+from config import REPORT1_TEMPLATE_PATH, REPORT2_TEMPLATE_PATH, REPORT3_TEMPLATE_PATH, REPORT5_TEMPLATE_PATH
 
 # Template locations (config-driven)
 REPORT1_TEMPLATE = Path(REPORT1_TEMPLATE_PATH)
 REPORT2_TEMPLATE = Path(REPORT2_TEMPLATE_PATH)
 REPORT3_TEMPLATE = Path(REPORT3_TEMPLATE_PATH)
 REPORT5_TEMPLATE = Path(REPORT5_TEMPLATE_PATH)
-OCD_TEMPLATE = Path(OCD_TEMPLATE_PATH)
-ANX_TEMPLATE = Path(ANX_TEMPLATE_PATH)
-DEP_TEMPLATE = Path(DEP_TEMPLATE_PATH)
 DONT_REMOVE = ["Report1.pdf", "Report2.pdf", "Report3.pdf", "Report4.pdf", "Report5.pdf", "labels.json",
                "user_info.json", "report_text_replacements.json", "scl_calc_data.json"]
 FIRST_REPORT_GRAPHIC_EFFECTS = (
@@ -1468,65 +1464,42 @@ def generate_third_report_documents(
 def generate_forth_report_documents(
         user_directory: Path | str,
         user_report_info: dict,
-        report_name: str,
         phone: str,
-        image_replacements: list[Tuple[str, Path | str]] = (),
-) -> None:
-    """Generate fourth report docx/pdf (anxiety/ocd/depression) with provided data."""
+        *,
+        psshi_labels: Mapping[str, object],
+        psychological_order: Sequence[str],
+        psychological_scores: Mapping[str, object],
+        logo_path: str | None = None,
+        template_path: Path | str | None = None,
+) -> Path:
+    """Generate official SCL Report4: the PSSHI study-skills DOCX and PDF."""
     try:
-        # Select template based on report_name
-        if report_name == "anxiety":
-            template = ANX_TEMPLATE
-        elif report_name == "ocd":
-            template = OCD_TEMPLATE
-        elif report_name == "depression":
-            template = DEP_TEMPLATE
-        else:
-            raise ValueError(f"Unknown report_name: {report_name}. Expected 'anxiety', 'ocd', or 'depression'")
+        # Import locally because the focused PSSHI adapter reuses these Word helpers.
+        from helper.office.scl_psshi import generate_study_skills_report_documents
 
-        folder_word = Path(user_directory) / "Tree4"
-        unzip_word_file(template, folder_word)
+        import config
 
-        tree_path = folder_word / "word"
-        tree = load_xml_file(tree_path / "document.xml")
-
-        # Replace images if provided
-        if image_replacements:
-            old_image_files = [old_img for old_img, _ in image_replacements]
-            new_image_files = [new_img for _, new_img in image_replacements]
-            replace_images_in_word_folder(folder_word, old_image_files, new_image_files)
-
-        # Prepare tag names and values for text replacement
-        # Convert user_report_info dict to tag_names (with # prefix) and values lists
-        # tag_names = [f"#{key}" for key in user_report_info.keys()]
-        tag_names = [f"{key}" for key in user_report_info.keys()]
-        tag_values = [str(value) for value in user_report_info.values()]
-
-        # Handle header replacements (studentname, instname, conname)
-        header_tags = ["studentname", "instname", "conname"]
-        header_values = [
-            user_report_info.get("studentname", ""),
-            user_report_info.get("instname", ""),
-            user_report_info.get("conname", "")
-        ]
-
-        # Replace in headers
-        replace_texts_in_headers(
-            folder_word, header_tags, header_values
+        identity = {
+            "#name": user_report_info.get("#name", user_report_info.get("studentname", "")),
+            "#con_name": user_report_info.get("#con_name", user_report_info.get("conname", "")),
+            "#inst_name": user_report_info.get("#inst_name", user_report_info.get("instname", "")),
+        }
+        return generate_study_skills_report_documents(
+            template_path=template_path or config.SCL_PSSHI_TEMPLATE_PATH,
+            user_directory=user_directory,
+            student_name=str(identity["#name"]),
+            consultant_name=str(identity["#con_name"]),
+            institute_name=str(identity["#inst_name"]),
+            phone=str(phone),
+            logo_path=logo_path,
+            labels=psshi_labels,
+            psychological_order=psychological_order,
+            psychological_scores=psychological_scores,
+            output_docx_name=f"Report4{phone}.docx",
+            output_pdf_name="Report4.pdf",
         )
-
-        # Replace texts in document body
-        tree = replace_texts(tree, tag_names, tag_values)
-
-        save_xml_to_file(tree, tree_path / "document.xml")
-
-        destination_docx = Path(user_directory) / f"Report4{phone}.docx"
-        destination_pdf = Path(user_directory) / "Report4.pdf"
-        zip_word_folder(folder_word, destination_docx)
-        convert_docx_to_pdf(destination_docx, destination_pdf)
-        remove_unneeded_files(user_directory, DONT_REMOVE)
     except Exception as exc:
-        raise RuntimeError(f"Failed to generate fourth report documents: {exc}") from exc
+        raise RuntimeError(f"Failed to generate SCL Report4 study-skills documents: {exc}") from exc
 
 
 def generate_fifth_report_documents(
