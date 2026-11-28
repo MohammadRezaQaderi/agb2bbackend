@@ -18,6 +18,10 @@ from helper.office.word_helper import (
     generate_forth_report_documents,
     generate_third_report_documents,
 )
+from helper.office.scl_psshi import (
+    PSSHI_OUTPUT_NAME,
+    generate_study_skills_report_documents,
+)
 from quiz_packages.scl.legacy_v1.scoring import bookmark_scl_object
 
 
@@ -350,6 +354,25 @@ def _report4_renderer(context: SCLReportContext, output_dir: Path, assets_dir: P
     return output_dir / "Report4.pdf"
 
 
+def _study_skills_renderer(context: SCLReportContext, output_dir: Path, assets_dir: Path) -> Path:
+    del assets_dir
+    import config
+
+    psychological_order = tuple(context.report3_layer_order.get("psych", ()))
+    return generate_study_skills_report_documents(
+        template_path=config.SCL_PSSHI_TEMPLATE_PATH,
+        user_directory=output_dir,
+        student_name=context.student.name,
+        consultant_name=context.student.consultant_name,
+        institute_name=context.student.institute_name,
+        phone=context.student.phone,
+        logo_path=context.student.logo_path,
+        labels=context.labels,
+        psychological_order=psychological_order,
+        psychological_scores=context.factor_scores,
+    )
+
+
 def _report5_renderer(context: SCLReportContext, output_dir: Path, assets_dir: Path) -> Path:
     if not context.report5_categories or not context.report5_values:
         raise ValueError("Report5 renderer requires chart categories and values")
@@ -389,7 +412,7 @@ SCL_REPORT_REGISTRY: Mapping[str, SCLReportSpec] = MappingProxyType({
     "report3": SCLReportSpec("report3", "Report3.pdf", True, _report3_renderer),
     "report4": SCLReportSpec("report4", "Report4.pdf", True, _report4_renderer),
     "report5": SCLReportSpec("report5", "Report5.pdf", True, _report5_renderer),
-    "pending_fourth": SCLReportSpec("pending_fourth", None, True, None, True),
+    "study_skills": SCLReportSpec("study_skills", PSSHI_OUTPUT_NAME, True, _study_skills_renderer),
 })
 
 
@@ -430,10 +453,12 @@ def render_scl_report_set(context: SCLReportContext, output_dir: Path | str) -> 
     output_dir.mkdir(parents=True, exist_ok=True)
     if not config.SCL_REPORT3_TEMPLATE_PATH.is_file():
         raise FileNotFoundError(f"SCL Report3 template is missing: {config.SCL_REPORT3_TEMPLATE_PATH}")
+    if not config.SCL_PSSHI_TEMPLATE_PATH.is_file():
+        raise FileNotFoundError(f"SCL PSSHI study-skills template is missing: {config.SCL_PSSHI_TEMPLATE_PATH}")
     if not config.SCL_ASSET_DIR.is_dir():
         raise FileNotFoundError(f"SCL image asset directory is missing: {config.SCL_ASSET_DIR}")
 
-    active_specs = [SCL_REPORT_REGISTRY["report3"]]
+    active_specs = [SCL_REPORT_REGISTRY["report3"], SCL_REPORT_REGISTRY["study_skills"]]
     if context.report4_kind is not None:
         active_specs.append(SCL_REPORT_REGISTRY["report4"])
     if context.report5_categories and context.report5_values:
